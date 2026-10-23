@@ -169,6 +169,34 @@ body.drawer-open .drawer-backdrop { display: block; }
 textarea.input { resize: vertical; line-height: 1.5; }
 .pill.doing { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 
+/* ===== Board, buckets & labels ===== */
+.toolbar { margin-bottom: 12px; }
+.toolbar .input { padding: 6px 10px; font-size: 14px; }
+.board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; align-items: flex-start; }
+.board-col { flex: 0 0 272px; background: var(--panel-2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 2px solid transparent; }
+.board-col.over { border-color: var(--accent); }
+.board-head { display: flex; align-items: center; gap: 6px; }
+.board-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-tools .icon-btn { padding: 2px 5px; }
+.board-cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.task-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; }
+.task-card .body { flex: 1; min-width: 0; }
+.task-card .title { overflow-wrap: anywhere; }
+.task-card.done .title { text-decoration: line-through; color: var(--muted); }
+.task-card.dragging { opacity: .5; }
+.board-add .input { width: 100%; padding: 7px 10px; font-size: 14px; }
+.empty.small { padding: 8px; font-size: 13px; }
+.label-pill {
+  display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--lc) 18%, transparent); color: color-mix(in srgb, var(--lc) 80%, var(--text));
+}
+button.label-pill { border: 1px solid transparent; cursor: pointer; opacity: .5; }
+button.label-pill.on { opacity: 1; border-color: var(--lc); }
+.label-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.manage-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.manage-row .name { flex: 1; min-width: 0; }
+.manage-row .input { padding: 4px 8px; font-size: 13px; }
+
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
@@ -203,6 +231,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   .toasts { bottom: 80px; }
   .drawer { width: 100vw; }
   .field-grid { grid-template-columns: 1fr; }
+  .board-col { flex-basis: 82vw; }
 }
 </style>
 </head>
@@ -823,19 +852,187 @@ const TASK_TABS = {
   done: { label: 'Done', test: (t) => t.done },
 };
 
+const bucketOf = (t) => DB.buckets.find((b) => b.id === t.bucket) || null; // a deleted bucket counts as none
+function matchesFilters(t) {
+  const b = state.taskBucket;
+  if (b === '-' ? !!bucketOf(t) : b && t.bucket !== b) return false;
+  if (state.taskLabel && !t.labels.includes(state.taskLabel)) return false;
+  return true;
+}
+
 function renderTasks() {
   const f = TASK_TABS[state.taskFilter] ? state.taskFilter : 'active';
-  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t)));
+  if (state.taskBucket && state.taskBucket !== '-' && !DB.buckets.some((b) => b.id === state.taskBucket)) state.taskBucket = '';
+  if (state.taskLabel && !DB.labels.some((l) => l.id === state.taskLabel)) state.taskLabel = '';
+  const layout = device.get('taskLayout', 'list');
+  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t)));
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
   return `
     <div class="page-head">
       <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done).length} open</p></div>
       <div class="tabs">${Object.entries(TASK_TABS).map(([k, v]) => tab(k, v.label)).join('')}</div>
     </div>
-    <div class="card">
+    <div class="row toolbar">
+      <select class="input" data-input="task-bucket" aria-label="Filter by bucket">
+        ${opt('', 'All buckets', state.taskBucket)}${opt('-', 'No bucket', state.taskBucket)}${sortedBuckets().map((b) => opt(b.id, '▦ ' + b.name, state.taskBucket)).join('')}
+      </select>
+      ${DB.labels.length ? `<select class="input" data-input="task-label" aria-label="Filter by label">
+        ${opt('', 'All labels', state.taskLabel)}${DB.labels.map((l) => opt(l.id, l.name, state.taskLabel)).join('')}
+      </select>` : ''}
+      <span style="flex:1"></span>
+      <div class="tabs">
+        <button class="tab ${layout === 'list' ? 'active' : ''}" data-action="layout" data-layout="list">☰ List</button>
+        <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">▦ Board</button>
+      </div>
+    </div>
+    ${layout === 'board' ? renderBoard(list) : `<div class="card">
       ${taskForm()}
       <ul class="list" style="margin-top:8px">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
       ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
+    </div>`}`;
+}
+
+// One column per bucket (plus "No bucket" when it has tasks). Cards drag between columns on a computer.
+function renderBoard(list) {
+  const cols = [{ id: '', name: 'No bucket' }, ...sortedBuckets()];
+  const columns = cols.map((b) => {
+    const cards = list.filter((t) => (b.id ? t.bucket === b.id : !bucketOf(t)));
+    if (!b.id && !cards.length && DB.buckets.length) return ''; // hide an empty "No bucket" once you have buckets
+    return `
+      <section class="board-col" data-bucket-col="${esc(b.id)}">
+        <header class="board-head">
+          <b title="${esc(b.name)}">${esc(b.name)}</b><span class="meta">${cards.length}</span>
+          ${b.id ? `<span class="board-tools edit-only">
+            <button class="icon-btn" data-action="bucket-left" data-id="${esc(b.id)}" title="Move left">‹</button>
+            <button class="icon-btn" data-action="bucket-right" data-id="${esc(b.id)}" title="Move right">›</button>
+            <button class="icon-btn" data-action="rename-bucket" data-id="${esc(b.id)}" title="Rename">✎</button>
+            <button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete bucket">✕</button>
+          </span>` : ''}
+        </header>
+        <form class="board-add edit-only" data-form="add-task" data-bucket="${esc(b.id)}">
+          <input type="hidden" name="bucket" value="${esc(b.id)}">
+          <input class="input" name="title" placeholder="+ Add a task" autocomplete="off">
+        </form>
+        <div class="board-cards">${cards.map(taskCard).join('') || '<div class="empty small">Nothing here</div>'}</div>
+      </section>`;
+  }).join('');
+  return `
+    <div class="board">${columns}
+      <section class="board-col edit-only">
+        <form class="row" data-form="add-bucket"><input class="input grow" name="title" placeholder="+ New bucket" autocomplete="off" maxlength="40"><button class="btn small primary">Add</button></form>
+        <p class="meta">e.g. Home, Work, Bills, Shopping</p>
+      </section>
+    </div>`;
+}
+
+function taskCard(t) {
+  return `
+    <div class="task-card ${t.done ? 'done' : ''}" draggable="${state.readOnly ? 'false' : 'true'}" data-card="${esc(t.id)}">
+      <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
+      <div class="body clickable" data-action="open-task" data-id="${esc(t.id)}">${taskSummary(t)}</div>
+    </div>`;
+}
+
+// ===================== Buckets & labels =====================
+const LABEL_COLORS = [
+  { name: 'Red', hex: '#ef4444' }, { name: 'Orange', hex: '#f97316' }, { name: 'Green', hex: '#22c55e' },
+  { name: 'Blue', hex: '#3b82f6' }, { name: 'Purple', hex: '#a855f7' }, { name: 'Pink', hex: '#ec4899' }, { name: 'Grey', hex: '#64748b' },
+];
+const colorSelect = (cur, attrs = 'name="color"') =>
+  `<select class="input" ${attrs} aria-label="Colour">${LABEL_COLORS.map((c) => `<option value="${c.hex}" ${c.hex === cur ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
+
+function addBucket(name) {
+  const order = DB.buckets.reduce((m, b) => Math.max(m, b.order), 0) + 1;
+  DB.buckets.push({ id: uid(), name: name.trim(), order });
+  changed('buckets');
+}
+function renameBucket(id) {
+  const b = DB.buckets.find((x) => x.id === id);
+  const name = b && prompt('Rename bucket', b.name);
+  if (!name || !name.trim()) return;
+  b.name = name.trim();
+  changed('buckets');
+}
+function deleteBucket(id) {
+  const b = DB.buckets.find((x) => x.id === id);
+  if (!b) return;
+  const inIt = DB.tasks.filter((t) => t.bucket === id);
+  if (!confirm(`Delete bucket "${b.name}"?${inIt.length ? ` Its ${inIt.length} task(s) move to No bucket.` : ''}`)) return;
+  inIt.forEach((t) => { t.bucket = ''; });
+  DB.buckets = DB.buckets.filter((x) => x.id !== id);
+  changed('buckets', 'tasks');
+}
+function moveBucket(id, dir) {
+  const list = sortedBuckets();
+  const i = list.findIndex((b) => b.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i].order, list[j].order] = [list[j].order, list[i].order];
+  changed('buckets');
+}
+function moveTaskToBucket(taskId, bucketId) {
+  const t = DB.tasks.find((x) => x.id === taskId);
+  if (!t || state.readOnly || t.bucket === bucketId) return;
+  t.bucket = bucketId;
+  changed('tasks');
+  render();
+  renderDrawer();
+}
+
+function addLabel(name, color, task) {
+  const l = { id: uid(), name: name.trim(), color: color || LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex };
+  DB.labels.push(l);
+  if (task) task.labels.push(l.id);
+  changed('labels', 'tasks');
+}
+function renameLabel(id) {
+  const l = DB.labels.find((x) => x.id === id);
+  const name = l && prompt('Rename label', l.name);
+  if (!name || !name.trim()) return;
+  l.name = name.trim();
+  changed('labels');
+}
+function deleteLabel(id) {
+  const l = DB.labels.find((x) => x.id === id);
+  if (!l) return;
+  const used = DB.tasks.filter((t) => t.labels.includes(id));
+  if (!confirm(`Delete label "${l.name}"?${used.length ? ` It comes off ${used.length} task(s).` : ''}`)) return;
+  used.forEach((t) => { t.labels = t.labels.filter((x) => x !== id); });
+  DB.labels = DB.labels.filter((x) => x.id !== id);
+  changed('labels', 'tasks');
+}
+
+function labelBlock(t) {
+  return `
+    <h3>Labels</h3>
+    <div class="label-row">${DB.labels.map((l) => `
+      <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${esc(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
+      || '<span class="meta">No labels yet — add one below.</span>'}
+    </div>
+    <form class="row edit-only" data-form="add-label">
+      <input class="input grow" name="title" placeholder="New label…" autocomplete="off" maxlength="30">
+      ${colorSelect(LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex)}
+      <button class="btn small">Add</button>
+    </form>`;
+}
+
+function manageCard() {
+  const count = (pred) => DB.tasks.filter(pred).length;
+  return `
+    <div class="card">
+      <h2>Buckets</h2>
+      ${sortedBuckets().map((b) => `
+        <div class="manage-row"><span class="name">▦ ${esc(b.name)} <span class="meta">${count((t) => t.bucket === b.id)} tasks</span></span>
+          <span class="edit-only"><button class="icon-btn" data-action="rename-bucket" data-id="${esc(b.id)}" title="Rename">✎</button><button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete">✕</button></span>
+        </div>`).join('') || '<p class="sub">No buckets yet.</p>'}
+      <form class="row edit-only" data-form="add-bucket" style="margin-top:8px"><input class="input grow" name="title" placeholder="New bucket, e.g. Home, Work, Bills" autocomplete="off" maxlength="40"><button class="btn small primary">Add</button></form>
+      <h2 style="margin-top:18px">Labels</h2>
+      ${DB.labels.map((l) => `
+        <div class="manage-row"><span class="name">${labelPill(l)} <span class="meta">${count((t) => t.labels.includes(l.id))} tasks</span></span>
+          <span class="row edit-only">${colorSelect(l.color, `data-label-color="${esc(l.id)}"`)}<button class="icon-btn" data-action="rename-label" data-id="${esc(l.id)}" title="Rename">✎</button><button class="icon-btn" data-action="delete-label" data-id="${esc(l.id)}" title="Delete">✕</button></span>
+        </div>`).join('') || '<p class="sub">No labels yet.</p>'}
+      <form class="row edit-only" data-form="add-label" style="margin-top:8px"><input class="input grow" name="title" placeholder="New label, e.g. Waiting, Call" autocomplete="off" maxlength="30">${colorSelect(LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex)}<button class="btn small primary">Add</button></form>
     </div>`;
 }
 
@@ -891,7 +1088,6 @@ function renderDrawer() {
 // Filled in by later sections (buckets/labels, recurring, attachments).
 function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
 function repeatBlock() { return ''; }
-function labelBlock() { return ''; }
 function attachBlock() { return ''; }
 
 function openTaskDrawer(id) {
@@ -1049,6 +1245,7 @@ function renderSettings() {
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <div class="grid" style="max-width:720px">
       <div class="card" id="df-card">${dataFileCard()}</div>
+      ${manageCard()}
       <div class="card">
         <h2>This device</h2>
         <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
@@ -1191,6 +1388,7 @@ function checkReminders() {
 const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
+  'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -1240,6 +1438,21 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'open-task': openTaskDrawer(id); break;
+    case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
+    case 'toggle-label': {
+      const t = currentTask();
+      const l = btn.dataset.label;
+      if (!t) break;
+      t.labels = t.labels.includes(l) ? t.labels.filter((x) => x !== l) : [...t.labels, l];
+      changed('tasks'); render(); renderDrawer();
+      break;
+    }
+    case 'rename-bucket': renameBucket(id); render(); renderDrawer(); break;
+    case 'delete-bucket': deleteBucket(id); render(); renderDrawer(); break;
+    case 'bucket-left': moveBucket(id, -1); render(); break;
+    case 'bucket-right': moveBucket(id, 1); render(); break;
+    case 'rename-label': renameLabel(id); render(); renderDrawer(); break;
+    case 'delete-label': deleteLabel(id); render(); renderDrawer(); break;
     case 'close-task': closeTaskDrawer(); break;
     case 'toggle-myday': {
       const t = currentTask();
@@ -1330,6 +1543,29 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.openTask) closeTaskDrawer(); });
 
+// Board drag and drop (computer only; phones are read-only).
+document.addEventListener('dragstart', (e) => {
+  const card = e.target.closest?.('[data-card]');
+  if (!card || state.readOnly) return;
+  e.dataTransfer.setData('text/plain', card.dataset.card);
+  e.dataTransfer.effectAllowed = 'move';
+  card.classList.add('dragging');
+});
+document.addEventListener('dragend', () => $$('.dragging, .board-col.over').forEach((x) => x.classList.remove('dragging', 'over')));
+document.addEventListener('dragover', (e) => {
+  const col = e.target.closest?.('[data-bucket-col]');
+  if (!col || state.readOnly) return;
+  e.preventDefault();
+  $$('.board-col.over').forEach((x) => x !== col && x.classList.remove('over'));
+  col.classList.add('over');
+});
+document.addEventListener('drop', (e) => {
+  const col = e.target.closest?.('[data-bucket-col]');
+  if (!col || state.readOnly) return;
+  e.preventDefault();
+  moveTaskToBucket(e.dataTransfer.getData('text/plain'), col.dataset.bucketCol);
+});
+
 let noteTimer;
 document.addEventListener('input', (e) => {
   const kind = e.target.dataset?.input;
@@ -1344,6 +1580,8 @@ document.addEventListener('input', (e) => {
     return;
   }
   if (kind === 'device-name') { device.set('name', e.target.value.trim() || 'Computer'); return; }
+  if (kind === 'task-bucket') { state.taskBucket = e.target.value; render(); return; }
+  if (kind === 'task-label') { state.taskLabel = e.target.value; render(); return; }
   if (state.readOnly) return;
   const n = DB.notes.find((x) => x.id === state.activeNote);
   if (!n || (kind !== 'note-title' && kind !== 'note-body')) return;
@@ -1362,6 +1600,11 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('change', (e) => {
   if (e.target.dataset?.field && e.target.closest('#drawer')) return setTaskField(e.target.dataset.field, e.target.value);
+  if (e.target.dataset?.labelColor && !state.readOnly) {
+    const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
+    if (l) { l.color = e.target.value; changed('labels'); render(); }
+    return;
+  }
   const kind = e.target.dataset?.input;
   const file = e.target.files?.[0];
   if (!file) return;
@@ -1386,7 +1629,7 @@ setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask };
+window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket };
 </script>
 </body>
 </html>
