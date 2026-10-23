@@ -464,6 +464,7 @@ const state = {
   taskLabel: '',           // Tasks filter: '' all, or a label id
   boardAdd: null,          // bucket id whose "+ Add task" card is open on the board ('' = No bucket)
   remCustom: null,         // which custom reminder form is open in the drawer: 'before' | 'dayof' | 'at'
+  remEdit: null,           // id of the reminder being changed in that form (null = adding a new one)
 };
 
 // ===================== Data file (auto-save) =====================
@@ -1048,7 +1049,7 @@ function taskSummary(t) {
   if (bucket && !onBoard) meta.push(`<span>▦ ${esc(bucket.name)}</span>`);
   const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
   return `
-    <div class="title">${esc(t.title)} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
+    <div class="title">${esc(t.title) || '<span class="meta">New task…</span>'} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
 }
 
@@ -1317,6 +1318,7 @@ function renderToday() {
   return `
     <div class="page-head">
       <div><h1>☀ My Day</h1><p class="sub">${greet} — ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">+ New task</button>
     </div>
     <div class="grid grid-2" style="margin-bottom:16px">
       <div class="card"><div class="stat">${dueToday.filter((t) => !t.done).length}</div><div class="stat-label">Tasks for today (added to My Day, due today, overdue)</div></div>
@@ -1373,6 +1375,7 @@ function renderTasks() {
         ${opt('', 'All labels', state.taskLabel)}${DB.labels.map((l) => opt(l.id, l.name, state.taskLabel)).join('')}
       </select>` : ''}
       <span style="flex:1"></span>
+      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">+ New task</button>
       <div class="tabs">
         <button class="tab ${layout === 'list' ? 'active' : ''}" data-action="layout" data-layout="list">☰ List</button>
         <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">▦ Board</button>
@@ -1532,14 +1535,20 @@ function renderDrawer() {
   const el = $('#drawer');
   const t = currentTask();
   document.body.classList.toggle('drawer-open', !!t);
-  if (!t) { state.openTask = null; el.innerHTML = ''; return; }
+  if (!t) { state.openTask = null; el.innerHTML = ''; el.dataset.task = ''; return; }
+  // Rebuilding the panel would jump it back to the top — keep the scroll position for the same task.
+  const oldBody = el.querySelector('.drawer-body');
+  const keepScroll = oldBody && el.dataset.task === t.id ? oldBody.scrollTop : 0;
   const ro = state.readOnly ? 'disabled' : '';
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
   const doneSteps = t.checklist.filter((s) => s.done).length;
+  el.dataset.task = t.id;
+  queueMicrotask(() => { const b = el.querySelector('.drawer-body'); if (b && keepScroll) b.scrollTop = keepScroll; });
   el.innerHTML = `
     <div class="drawer-head">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${ro} aria-label="Mark done">
-      <input class="drawer-title" data-field="title" value="${esc(t.title)}" ${ro} aria-label="Task title">
+      <input class="drawer-title" data-field="title" value="${esc(t.title)}" ${ro} aria-label="Task title" placeholder="Task name">
+
       <button class="icon-btn" data-action="close-task" title="Close (Esc)">✕</button>
     </div>
     <fieldset class="drawer-body" ${ro}>
@@ -1552,7 +1561,7 @@ function renderDrawer() {
         <label>Priority<select class="input" data-field="priority">${opt('low', 'Low', t.priority)}${opt('med', 'Medium', t.priority)}${opt('high', 'High', t.priority)}</select></label>
         <label>Start date<input class="input" type="date" data-field="start" value="${esc(t.start)}"></label>
         <label>Due date<input class="input" type="date" data-field="dueDate" value="${esc(taskDate(t))}"></label>
-        <label>Due time ${taskTime(t) ? '' : '<span class="meta">(any time that day)</span>'}
+        <label>Due time
           <span class="row" style="gap:4px;flex-wrap:nowrap">
             <input class="input" style="flex:1;min-width:0" type="time" data-field="dueTime" value="${esc(taskTime(t))}" ${t.due ? '' : 'disabled'} aria-label="Due time">
             ${taskTime(t) ? '<button type="button" class="icon-btn edit-only" data-action="clear-time" title="No time — any time that day">✕</button>' : ''}
@@ -1591,17 +1600,29 @@ function reminderBlock(t) {
     <li class="attach">
       <span>🔔</span><span style="flex:1;min-width:0">${esc(reminderText(t, r))}</span>
       ${r.fired ? '<span class="meta">done</span>' : ''}
+      <button class="icon-btn edit-only" data-action="edit-reminder" data-rem="${esc(r.id)}" title="Change reminder">✎</button>
       <button class="icon-btn edit-only" data-action="delete-reminder" data-rem="${esc(r.id)}" title="Remove reminder">✕</button>
     </li>`).join('');
   const c = state.remCustom;
+  // Editing fills the form with the reminder's current values; adding starts from sensible ones.
+  const editing = state.remEdit && t.reminders.find((r) => r.id === state.remEdit);
+  const v = { n: 30, unit: 1, days: 1, time: '21:00', at: '' };
+  if (editing) {
+    const m = editing.minutes || 0;
+    if (editing.kind === 'before') Object.assign(v, m && m % 1440 === 0 ? { n: m / 1440, unit: 1440 } : m && m % 60 === 0 ? { n: m / 60, unit: 60 } : { n: m, unit: 1 });
+    if (editing.kind === 'dayof') Object.assign(v, { days: editing.daysBefore || 0, time: editing.time || '09:00' });
+    if (editing.kind === 'at') v.at = editing.at || '';
+  }
+  const unitOpt = (val, label) => `<option value="${val}" ${v.unit === val ? 'selected' : ''}>${label}</option>`;
   const custom = !c ? '' : `
     <form class="row edit-only" data-form="add-reminder" data-kind="${c}">
-      ${c === 'before' ? `<input class="input num" type="number" name="n" min="1" max="999" value="30" aria-label="How many">
-        <select class="input" name="unit" aria-label="Unit"><option value="1">minutes</option><option value="60">hours</option><option value="1440">days</option></select> before`
-        : c === 'dayof' ? `<input class="input num" type="number" name="days" min="0" max="60" value="1" aria-label="Days before"> day(s) before, at
-        <input class="input" type="time" name="time" value="21:00" required aria-label="Time">`
-        : '<input class="input" type="datetime-local" name="at" required aria-label="Date and time">'}
-      <button class="btn small primary">Add</button>
+      ${editing ? '<span class="meta">Change:</span>' : ''}
+      ${c === 'before' ? `<input class="input num" type="number" name="n" min="0" max="999" value="${v.n}" aria-label="How many">
+        <select class="input" name="unit" aria-label="Unit">${unitOpt(1, 'minutes')}${unitOpt(60, 'hours')}${unitOpt(1440, 'days')}</select> before`
+        : c === 'dayof' ? `<input class="input num" type="number" name="days" min="0" max="60" value="${v.days}" aria-label="Days before"> day(s) before, at
+        <input class="input" type="time" name="time" value="${esc(v.time)}" required aria-label="Time">`
+        : `<input class="input" type="datetime-local" name="at" value="${esc(v.at)}" required aria-label="Date and time">`}
+      <button class="btn small primary">${editing ? 'Save' : 'Add'}</button>
       <button type="button" class="icon-btn" data-action="cancel-reminder" title="Cancel">✕</button>
     </form>`;
   return `
@@ -1647,9 +1668,15 @@ function attachBlock(t) {
 // (e.g. each month's bill). Click a title to open that copy; click a file to open it.
 function historyBlock(t) {
   if (!t.seriesId) return '';
-  const others = DB.tasks.filter((x) => x.seriesId === t.seriesId && x.id !== t.id)
-    .sort((a, b) => (b.due || '').localeCompare(a.due || '') || (b.seriesIndex || 0) - (a.seriesIndex || 0));
-  if (!others.length) return '';
+  const series = DB.tasks.filter((x) => x.seriesId === t.seriesId && x.id !== t.id);
+  // History = copies that came before this one and are done. Upcoming/current ones aren't history.
+  const earlier = (x) => ((x.seriesIndex || 1) !== (t.seriesIndex || 1) ? (x.seriesIndex || 1) < (t.seriesIndex || 1) : (x.due || '') < (t.due || ''));
+  const others = series.filter((x) => x.done && earlier(x))
+    .sort((a, b) => (b.seriesIndex || 0) - (a.seriesIndex || 0) || (b.due || '').localeCompare(a.due || ''));
+  // Looking at an old copy: point to the one that's still to do.
+  const current = t.done ? series.find((x) => !x.done) : null;
+  const currentLink = current ? `<p class="meta">Current copy: <button class="link-btn" style="flex:none" data-action="open-history" data-id="${esc(current.id)}">${esc(current.title)} →</button></p>` : '';
+  if (!others.length) return currentLink ? `<h3>History</h3>${currentLink}` : '';
   const row = (x) => `
     <li class="history-item">
       <div class="row" style="gap:8px;flex-wrap:nowrap">
@@ -1663,15 +1690,39 @@ function historyBlock(t) {
     </li>`;
   return `
     <h3>History <span>${others.length}</span></h3>
+    ${currentLink}
     <ul class="history">${others.map(row).join('')}</ul>`;
 }
 
 function openTaskDrawer(id) {
+  if (state.openTask && state.openTask !== id) dropEmptyDraft();
   state.openTask = id;
+  state.remCustom = null;
+  state.remEdit = null;
   renderDrawer();
   if (!state.readOnly && !currentTask()?.title) $('#drawer .drawer-title')?.focus();
 }
-function closeTaskDrawer() { state.openTask = null; state.remCustom = null; renderDrawer(); }
+function closeTaskDrawer() {
+  dropEmptyDraft();
+  state.openTask = null;
+  state.remCustom = null;
+  state.remEdit = null;
+  renderDrawer();
+}
+
+// "+ New task" opens the panel on a blank task; if you leave without giving it a name, it's thrown away.
+function newTaskInPanel() {
+  const t = addTask({ title: '', myDay: state.view === 'today' ? todayISO() : '' });
+  render();
+  openTaskDrawer(t.id);
+}
+function dropEmptyDraft() {
+  const t = currentTask();
+  if (!t || state.readOnly || t.title.trim()) return;
+  DB.tasks = DB.tasks.filter((x) => x !== t);
+  changed('tasks');
+  render();
+}
 
 // A field in the drawer changed (selects, dates, and title/notes when you leave them).
 function setTaskField(field, value) {
@@ -2299,7 +2350,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
-  'rename-attach', 'toggle-keep',
+  'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -2361,7 +2412,18 @@ document.addEventListener('click', (e) => {
       if (t) { t.reminders = t.reminders.filter((r) => r.id !== btn.dataset.rem); changed('tasks'); render(); renderDrawer(); }
       break;
     }
-    case 'cancel-reminder': state.remCustom = null; renderDrawer(); break;
+    case 'cancel-reminder': state.remCustom = null; state.remEdit = null; renderDrawer(); break;
+    case 'new-task': newTaskInPanel(); break;
+    case 'edit-reminder': {
+      const t = currentTask();
+      const r = t && t.reminders.find((x) => x.id === btn.dataset.rem);
+      if (!r) break;
+      state.remEdit = r.id;
+      state.remCustom = r.kind; // 'before' | 'dayof' | 'at' — the matching form, filled in
+      renderDrawer();
+      $('#drawer form[data-form="add-reminder"] input')?.focus();
+      break;
+    }
     case 'clear-time': {
       const t = currentTask();
       if (t && t.due) { t.due = `${taskDate(t)}T${ALL_DAY}`; afterTaskEdit(t, 'due'); changed('tasks'); render(); }
@@ -2492,11 +2554,20 @@ document.addEventListener('submit', (e) => {
   if (form.dataset.form === 'add-reminder') {
     const t = currentTask();
     const k = form.dataset.kind;
-    const r = k === 'before' ? { kind: 'before', minutes: Math.max(1, Number(data.n) || 1) * Number(data.unit || 1) }
+    const r = k === 'before' ? { kind: 'before', minutes: Math.max(0, Number(data.n) || 0) * Number(data.unit || 1) }
       : k === 'dayof' ? { kind: 'dayof', daysBefore: Math.max(0, Number(data.days) || 0), time: data.time || '09:00' }
       : { kind: 'at', at: data.at };
     if (k === 'at' && !data.at) return;
-    if (t && addReminder(t, { id: uid(), ...r, fired: false })) { state.remCustom = null; changed('tasks'); render(); }
+    const editing = t && state.remEdit && t.reminders.find((x) => x.id === state.remEdit);
+    if (editing) {
+      // Replace its settings, keep its place in the list; it's ready to go off again.
+      for (const key of ['minutes', 'daysBefore', 'time', 'at']) delete editing[key];
+      Object.assign(editing, r, { fired: false });
+      state.remCustom = null;
+      state.remEdit = null;
+      changed('tasks');
+      render();
+    } else if (t && addReminder(t, { id: uid(), ...r, fired: false })) { state.remCustom = null; changed('tasks'); render(); }
     renderDrawer();
     return;
   }
@@ -2613,7 +2684,7 @@ document.addEventListener('change', (e) => {
     const t = currentTask();
     const v = e.target.value;
     if (!t || !v) return;
-    if (v.startsWith('custom-')) { state.remCustom = v.slice(7); renderDrawer(); return; }
+    if (v.startsWith('custom-')) { state.remCustom = v.slice(7); state.remEdit = null; renderDrawer(); return; }
     if (addReminder(t, presetReminder(v))) { changed('tasks'); render(); }
     renderDrawer();
     return;

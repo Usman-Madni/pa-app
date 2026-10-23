@@ -111,7 +111,20 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   await tick(10);
   check(opened.includes('blob:fake'), "August's bill opens from the history");
   drawer().querySelector(`.history [data-action="open-history"][data-id="${t.id}"]`).click();
-  check(PA.state.openTask === t.id && drawer().querySelector('.history').textContent.includes('Sep elec bill'), 'clicking a history entry opens that copy (whose history shows September)');
+  check(PA.state.openTask === t.id, 'clicking a history entry opens that copy');
+  check(!drawer().querySelector('.history') && drawer().textContent.includes('Current copy: Sep elec bill'), "August's history doesn't list the current September copy, but links to it");
+  drawer().querySelector(`[data-action="open-history"][data-id="${next.id}"]`).click();
+  check(PA.state.openTask === next.id, 'the link opens the current copy');
+  // A third copy: September's done, October is current → October's history: Sep then Aug; Sep's history: only Aug
+  const oct = PA.completeTask(next);
+  PA.state.openTask = oct.id;
+  PA.renderDrawer();
+  const titles = [...drawer().querySelectorAll('.history-item .link-btn')].map((b) => b.textContent);
+  check(titles.join(',') === 'Sep elec bill,Aug elec bill', `history is newest first and only past copies (got ${titles.join(',')})`);
+  PA.state.openTask = next.id;
+  PA.renderDrawer();
+  const sepTitles = [...drawer().querySelectorAll('.history-item .link-btn')].map((b) => b.textContent);
+  check(sepTitles.join(',') === 'Aug elec bill', "September's history has only August — not the later October copy");
 
   // Restart: permission needs a click again
   const storage = {};

@@ -42,7 +42,7 @@ const click = (win, sel) => win.document.querySelector(sel).click();
   setField(win, 'dueDate', '2030-02-05');
   const t = PA.DB.tasks[0];
   check(t.due === '2030-02-05T23:59', 'a due date on its own is "any time that day"');
-  check(doc.querySelector('#drawer').textContent.includes('any time that day'), 'drawer says the task has no time');
+  check(doc.querySelector('#drawer [data-field="dueTime"]').value === '' && !doc.querySelector('#drawer [data-action="clear-time"]'), 'with no time, the time box is empty (and there is no ✕)');
   setField(win, 'dueTime', '10:00');
   check(t.due === '2030-02-05T10:00', 'adding a time keeps the date');
   check(t.priority === 'high' && t.progress === 'doing' && t.start === '2030-02-01', 'drawer fields save to the task');
