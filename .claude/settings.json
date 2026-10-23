@@ -11,7 +11,13 @@
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npm test *)",
+      "Bash(npm run check-private)",
+      "Bash(node tools/check-private.js)",
+      "mcp__terminal__read_terminal",
+      "mcp__Claude_Browser__find",
+      "mcp__ccd_session_mgmt__list_events"
     ]
   }
 }

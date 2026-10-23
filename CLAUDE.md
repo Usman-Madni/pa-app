@@ -12,6 +12,11 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - **Read-only devices** (any phone or tablet, browsers without the File System Access API, or `?readonly`) must never change data. New edit actions go in `EDIT_ACTIONS` and get the `edit-only` class.
 - **New records** get IDs from `uid()`, never `Date.now()` alone.
 
+## Running commands (keeps permission prompts down)
+- Commands already run in the project folder. **Don't start them with `cd "…" &&`**, and don't set shell variables (`F="…"; …`) or chain several steps. Compound commands can't match the allow-list in `.claude/settings.json`, so each one asks for approval.
+- One plain command per call, e.g. `npm test`, `node tools/check-private.js`, `git log --oneline -5`. Use the Read/Grep/Edit tools instead of `sed`/`grep` pipelines where they fit.
+- Use `gh` from PATH (its read-only commands need no approval), not the full `C:\Program Files\GitHub CLI\gh.exe` path.
+
 ## Checking work (minimum bar)
 1. `npm test`, which takes seconds. If the test tools are missing, run `npm run setup` (it installs into `%LOCALAPPDATA%\pa-app-testdeps`). **Never run `npm install` inside the project folder** if it's in a synced folder.
 2. For a new safeguard, do a **sabotage check**: break it on purpose, confirm a test fails, then restore it.
