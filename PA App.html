@@ -234,6 +234,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 13px; }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+.repeat-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 
 /* ===== Attachments ===== */
 .attachments { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -391,6 +392,7 @@ const TASK_DEFAULTS = {
   repeat: null,       // see nextDue()
   seriesId: '',       // shared by all copies of a repeating task
   spawnedNext: '',    // id of the next copy, once created (so ticking twice never makes two)
+  seriesIndex: 1,     // which copy of a repeating task this is (1 = the first) — for "ends after N times"
   attachments: [],    // {id, name, file, size, type, added} — file is the name inside the attachments folder
 };
 function normalizeTask(t) {
@@ -1616,13 +1618,16 @@ function completeTask(t) {
   t.done = true;
   t.completedAt = Date.now();
   if (!t.repeat || t.spawnedNext) return null;
+  const index = t.seriesIndex || 1;
+  if (endModeOf(t.repeat) === 'count' && index >= (t.repeat.count || 1)) return null; // that was the last one
   const due = nextDue(t, new Date());
   if (!due) return null; // the repeat's end date has passed
   const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
   Object.assign(copy, {
     id: uid(), due, done: false, completedAt: 0, progress: 'not', myDay: '',
-    spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id,
+    spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id, seriesIndex: index + 1,
   });
+  if (!t.repeat.keepTitle && t.due) copy.title = rollTitle(t.title, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10)));
   copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
   // Reminders come along; an exact-time one moves by as many days as the due date did.
   const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
@@ -1712,7 +1717,7 @@ function nextDue(t, doneOn = new Date()) {
     default: return null;
   }
   const key = toISO(d);
-  if (r.until && key > r.until) return null;
+  if (r.until && endModeOf(r) === 'date' && key > r.until) return null;
   return key + time;
 }
 
@@ -1745,64 +1750,166 @@ function repeatText(r) {
   }
 }
 
+// How a repeat ends: 'never' | 'date' (until) | 'count' (after N copies in all). Older repeats only had `until`.
+const endModeOf = (r) => r.endMode || (r.until ? 'date' : 'never');
+
+// The repeat section of the drawer. The quick list sets the common ones; "Custom…" (and the box under
+// the list) sets every N days/weeks/months/years, weekdays, monthly by date or weekday, and how it ends.
 function repeatBlock(t) {
   const r = t.repeat;
   const f = r ? r.freq : '';
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
-  const unit = { daily: 'day(s)', weekly: 'week(s)', monthly: 'month(s)', yearly: 'year(s)' }[f];
-  let extra = '';
-  if (f === 'weekly') {
-    extra = `<div class="row weekdays">${WEEKDAYS.map((w, i) => `<button class="day-btn ${r.days.includes(i) ? 'on' : ''}" data-action="repeat-day" data-weekday="${i}" title="${w}" aria-pressed="${r.days.includes(i)}">${w[0]}</button>`).join('')}</div>`;
-  }
-  if (f === 'monthly' && r.anchorDay) {
-    extra = `<select class="input" data-repeat="monthMode">
-      ${opt('date', `On day ${r.anchorDay}${r.anchorDay > 28 ? " (or the month's last day)" : ''}`, r.monthMode)}
-      ${opt('weekday', `On the ${r.nth === -1 ? 'last' : ORDINALS[r.nth]} ${WEEKDAYS[r.weekday]}`, r.monthMode)}
-    </select>`;
-  }
+  const simple = r && (r.interval || 1) === 1 && !(f === 'weekly' && r.days.length > 1);
+  const preset = !r ? '' : simple || f === 'weekdays' || f === 'after' ? f : 'custom';
+  let box = '';
+  if (r && f !== 'weekdays' && f !== 'after') {
+    const end = endModeOf(r);
+    box = `
+      <div class="repeat-box">
+        <div class="row meta">Every
+          <input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval || 1}" aria-label="Every how many">
+          <select class="input" data-repeat="unitFreq" aria-label="Unit">${opt('daily', 'day(s)', f)}${opt('weekly', 'week(s)', f)}${opt('monthly', 'month(s)', f)}${opt('yearly', 'year(s)', f)}</select>
+        </div>
+        ${f === 'weekly' ? `<div class="row weekdays">${WEEKDAYS.map((w, i) => `<button class="day-btn ${r.days.includes(i) ? 'on' : ''}" data-action="repeat-day" data-weekday="${i}" title="${w}" aria-pressed="${r.days.includes(i)}">${w[0]}</button>`).join('')}</div>` : ''}
+        ${f === 'monthly' && r.anchorDay ? `<select class="input" data-repeat="monthMode" aria-label="Which day">
+          ${opt('date', `On day ${r.anchorDay}${r.anchorDay > 28 ? " (or the month's last day)" : ''}`, r.monthMode)}
+          ${opt('weekday', `On the ${r.nth === -1 ? 'last' : ORDINALS[r.nth]} ${WEEKDAYS[r.weekday]}`, r.monthMode)}
+        </select>` : ''}
+      </div>`;
+    box += endBlock(r, end, opt);
+  } else if (r && f === 'after') {
+    box = `<div class="repeat-box"><label class="row meta"><input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval || 1}" aria-label="How many">
+      <select class="input" data-repeat="unit" aria-label="Unit">${opt('days', 'days', r.unit)}${opt('weeks', 'weeks', r.unit)}${opt('months', 'months', r.unit)}</select> after I tick it off</label></div>${endBlock(r, endModeOf(r), opt)}`;
+  } else if (r) box = endBlock(r, endModeOf(r), opt);
   let next = '';
   if (r && !t.done) {
-    if (f === 'after') next = `When you tick this off, the next one is due ${r.interval} ${esc(r.unit)} after that day.`;
+    const index = t.seriesIndex || 1;
+    if (endModeOf(r) === 'count' && index >= (r.count || 1)) next = `This is the last one (${index} of ${r.count}).`;
+    else if (f === 'after') next = `When you tick this off, the next one is due ${r.interval} ${esc(r.unit)} after that day.`;
     else {
       const nd = nextDue(t);
-      next = nd ? `When you tick this off, the next one is due <b>${esc(fmtDay(nd.slice(0, 10)))}</b>.` : 'This is the last one — the end date comes before the next repeat.';
+      next = nd ? `When you tick this off, the next one is due <b>${esc(fmtDay(nd.slice(0, 10)))}</b>${endModeOf(r) === 'count' ? ` (${index + 1} of ${r.count})` : ''}.` : 'This is the last one — the end date comes before the next repeat.';
     }
   }
   return `
     <h3>Repeat</h3>
-    <div class="row">
-      <select class="input" data-repeat="freq" aria-label="Repeat">
-        ${opt('', 'Never', f)}${opt('daily', 'Daily', f)}${opt('weekdays', 'Weekdays (Mon–Fri)', f)}${opt('weekly', 'Weekly', f)}
-        ${opt('monthly', 'Monthly', f)}${opt('yearly', 'Yearly', f)}${opt('after', 'Again after I finish it', f)}
-      </select>
-      ${unit ? `<label class="row meta">every <input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval}"> ${unit}</label>` : ''}
-      ${f === 'after' ? `<label class="row meta"><input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval}">
-        <select class="input" data-repeat="unit">${opt('days', 'days', r.unit)}${opt('weeks', 'weeks', r.unit)}${opt('months', 'months', r.unit)}</select> later</label>` : ''}
-    </div>
-    ${extra}
-    ${r ? `<label class="field">Stop repeating after (optional)<input class="input" type="date" data-repeat="until" value="${esc(r.until || '')}"></label>
+    <select class="input" data-repeat="freq" aria-label="Repeat">
+      ${opt('', 'Never', preset)}${opt('daily', 'Daily', preset)}${opt('weekdays', 'Weekdays (Mon–Fri)', preset)}${opt('weekly', 'Weekly', preset)}
+      ${opt('monthly', 'Monthly', preset)}${opt('yearly', 'Yearly', preset)}${opt('after', 'Again after I finish it', preset)}${opt('custom', 'Custom…', preset)}
+    </select>
+    ${box}
+    ${r ? `<label class="row meta" style="gap:6px"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}> Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</label>
       ${next ? `<p class="meta">↻ ${next}</p>` : ''}` : ''}`;
+}
+
+function endBlock(r, end, opt) {
+  return `
+    <div class="row meta">Ends
+      <select class="input" data-repeat="endMode" aria-label="Ends">${opt('never', 'Never', end)}${opt('date', 'On a date', end)}${opt('count', 'After a number of times', end)}</select>
+      ${end === 'date' ? `<input class="input" type="date" data-repeat="until" value="${esc(r.until || '')}" aria-label="End date">` : ''}
+      ${end === 'count' ? `<input class="input num" type="number" min="1" max="999" data-repeat="count" value="${r.count || 10}" aria-label="How many times"> times` : ''}
+    </div>`;
 }
 
 function setRepeat(key, value) {
   const t = currentTask();
   if (!t || state.readOnly) return;
-  if (key === 'freq') {
+  if (key === 'freq' || key === 'unitFreq') {
     if (!value) t.repeat = null;
     else {
-      if (!t.due) { t.due = `${todayISO()}T09:00`; toast('Repeating tasks need a due date, so it is set to today 9:00 — change it if you like'); }
-      t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...(t.repeat || {}), freq: value };
-      if (value === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
+      const freq = value === 'custom' ? (t.repeat && t.repeat.freq !== 'weekdays' && t.repeat.freq !== 'after' ? t.repeat.freq : 'weekly') : value;
+      if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; toast('Repeating tasks need a due date, so it is set to today — change it if you like'); }
+      t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...(t.repeat || {}), freq };
+      if (key === 'freq' && value !== 'custom') t.repeat.interval = 1; // a quick choice means "every 1"
+      if (freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
+      if (freq === 'weekly' && key === 'freq' && value !== 'custom') t.repeat.days = t.repeat.days.slice(0, 1);
       syncRepeatAnchor(t);
     }
   } else if (t.repeat) {
-    if (key === 'interval') t.repeat.interval = Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
-    else if (['monthMode', 'unit', 'until'].includes(key)) t.repeat[key] = value;
+    const r = t.repeat;
+    if (key === 'interval') r.interval = Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
+    else if (key === 'count') r.count = Math.min(999, Math.max(1, Math.floor(Number(value)) || 1));
+    else if (key === 'endMode') {
+      r.endMode = value;
+      if (value !== 'date') r.until = '';
+      if (value === 'count' && !r.count) r.count = 10;
+    } else if (key === 'rollTitle') r.keepTitle = !value;
+    else if (['monthMode', 'unit', 'until'].includes(key)) r[key] = value;
     else return;
   } else return;
   changed('tasks');
   render();
   renderDrawer();
+}
+
+// ----- Titles that move forward with each repeat -----
+// "Aug elec bill" → "Sep elec bill", "Bill – August 2026" → "September 2026", "Q3" → "Q4",
+// "Week 43" → "Week 44", "due 5th" / "5 Nov" move by the same days, a lone "2026" moves by years.
+// Everything shifts by how far the due date moved, so it works for any repeat.
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+function rollTitle(title, from, to) {
+  const monthDelta = (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth();
+  const dayDelta = Math.round((to - from) / DAY_MS);
+  if (!monthDelta && !dayDelta) return title;
+  const style = (word, sample) => (sample === sample.toUpperCase() && sample.length > 1 ? word.toUpperCase()
+    : sample[0] === sample[0].toLowerCase() ? word.toLowerCase() : word);
+  // "Aug" → short names; "August" → full names. "May" is both, so it counts as a full name ("May" → "June").
+  const isShort = (sample) => sample.replace('.', '').length <= 3 && sample.toLowerCase() !== 'may';
+  const monthWord = (idx, sample) => style(isShort(sample) ? MONTHS_FULL[idx].slice(0, 3) : MONTHS_FULL[idx], sample);
+  const yearText = (y, sample) => (sample.length === 2 ? String(y).slice(2) : String(y));
+  // Replace only outside the parts already changed (they're wrapped in \u0001…\u0002).
+  let s = title;
+  const pass = (re, fn) => {
+    s = s.split(/(\u0001[^\u0002]*\u0002)/).map((part) => (part.startsWith('\u0001') ? part : part.replace(re, (...m) => {
+      const out = fn(...m);
+      return out == null ? m[0] : `\u0001${out}\u0002`;
+    }))).join('');
+  };
+  const M = MONTH_WORD;
+  const isVerbMay = (w, hasMore) => w.toLowerCase() === 'may' && w[0] === 'm' && !hasMore; // "may" the verb
+  // "5 Nov", "5th November 2026"
+  pass(new RegExp(`\\b(\\d{1,2})(st|nd|rd|th)?(\\s+)(${M})(\\.?)(\\s+(\\d{4}))?\\b`, 'gi'), (all, d, suf, sp, mon, dot, ySp, y) => {
+    const mi = monthIndex(mon);
+    if (Number(d) < 1 || Number(d) > 31) return null;
+    const nd = addDays(new Date(y ? Number(y) : from.getFullYear(), mi, Number(d)), dayDelta);
+    return `${suf ? ordinal(nd.getDate()) : nd.getDate()}${sp}${monthWord(nd.getMonth(), mon)}${dot}${y ? ySp.replace(/\d+/, '') + nd.getFullYear() : ''}`;
+  });
+  // "Nov 5", "November 5th, 2026"
+  pass(new RegExp(`\\b(${M})(\\.?)(\\s+)(\\d{1,2})(st|nd|rd|th)?\\b(,?\\s+(\\d{4}))?`, 'gi'), (all, mon, dot, sp, d, suf, ySp, y) => {
+    if (Number(d) < 1 || Number(d) > 31) return null;
+    const nd = addDays(new Date(y ? Number(y) : from.getFullYear(), monthIndex(mon), Number(d)), dayDelta);
+    return `${monthWord(nd.getMonth(), mon)}${dot}${sp}${suf ? ordinal(nd.getDate()) : nd.getDate()}${y ? ySp.replace(/\d+/, '') + nd.getFullYear() : ''}`;
+  });
+  // "Aug", "August 2026", "Aug '26"
+  pass(new RegExp(`\\b(${M})\\b(\\.?)(\\s*['’]?(\\d{4}|\\d{2})\\b)?`, 'gi'), (all, mon, dot, yPart, y) => {
+    if (isVerbMay(mon, !!y)) return null;
+    const base = (y ? (y.length === 2 ? 2000 + Number(y) : Number(y)) : from.getFullYear()) * 12 + monthIndex(mon) + monthDelta;
+    const ny = Math.floor(base / 12);
+    return `${monthWord(base % 12, mon)}${dot}${y ? yPart.replace(y, yearText(ny, y)) : ''}`;
+  });
+  // "Q3", "Q4 2026"
+  pass(/\bQ([1-4])\b(\s+(\d{4}))?/g, (all, q, ySp, y) => {
+    const qDelta = (to.getFullYear() * 4 + Math.floor(to.getMonth() / 3)) - (from.getFullYear() * 4 + Math.floor(from.getMonth() / 3));
+    const base = (y ? Number(y) : from.getFullYear()) * 4 + Number(q) - 1 + qDelta;
+    return `Q${(base % 4) + 1}${y ? ySp.replace(/\d+/, '') + Math.floor(base / 4) : ''}`;
+  });
+  // "Week 43", "Wk 43", "W43"
+  pass(/\b(week|wk)(\s*)(\d{1,2})\b|\bW(\d{1,2})\b/gi, (all, word, sp, n, wn) => {
+    const weeks = Math.round(dayDelta / 7);
+    let v = Number(n || wn) + weeks;
+    while (v > 52) v -= 52;
+    while (v < 1) v += 52;
+    return word ? `${word}${sp}${v}` : `W${v}`;
+  });
+  // "due 5th" (a day of the month on its own)
+  pass(/\b(\d{1,2})(st|nd|rd|th)\b/gi, (all, d) => {
+    if (Number(d) < 1 || Number(d) > 31) return null;
+    return ordinal(addDays(new Date(from.getFullYear(), from.getMonth(), Number(d)), dayDelta).getDate());
+  });
+  // A year on its own: "Tax return 2026"
+  pass(/\b(19|20)(\d{2})\b/g, (all) => String(Number(all) + to.getFullYear() - from.getFullYear()));
+  return s.replace(/[\u0001\u0002]/g, '');
 }
 
 // Upcoming copies of repeating tasks for the calendar — shown, not saved.
@@ -1811,7 +1918,9 @@ function repeatPreviews(fromKey, toKey) {
   for (const t of DB.tasks) {
     if (t.done || !t.repeat || t.repeat.freq === 'after' || !t.due) continue;
     let cur = t;
+    let index = t.seriesIndex || 1;
     for (let i = 0; i < 800; i++) {
+      if (endModeOf(t.repeat) === 'count' && ++index > (t.repeat.count || 1)) break;
       const nd = nextDue(cur);
       if (!nd || nd.slice(0, 10) > toKey) break;
       cur = { ...cur, due: nd };
@@ -2385,7 +2494,7 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('change', (e) => {
   if (e.target.dataset?.field && e.target.closest('#drawer')) return setTaskField(e.target.dataset.field, e.target.value);
-  if (e.target.dataset?.repeat && e.target.closest('#drawer')) return setRepeat(e.target.dataset.repeat, e.target.value);
+  if (e.target.dataset?.repeat && e.target.closest('#drawer')) return setRepeat(e.target.dataset.repeat, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
   if (e.target.matches?.('[data-rem-add]') && !state.readOnly) {
     const t = currentTask();
     const v = e.target.value;
@@ -2426,7 +2535,7 @@ setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText };
+window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle };
 </script>
 </body>
 </html>
