@@ -242,6 +242,11 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .link-btn { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-align: left; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn:disabled { color: var(--text); cursor: default; text-decoration: none; }
+.keep-btn { opacity: .35; filter: grayscale(1); }
+.keep-btn.on { opacity: 1; filter: none; }
+.history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.history-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 4px; }
+.history-note { font-style: italic; }
 
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -778,19 +783,73 @@ const AT = {
     let added = 0;
     for (const f of files) {
       try {
-        const stored = await this.uniqueName(safeFileName(f.name)); // never overwrite an existing file
+        const stored = await this.uniqueName(safeFileName(this.suggestName(task, f.name))); // never overwrite an existing file
         const w = await (await this.dir.getFileHandle(stored, { create: true })).createWritable();
         await w.write(f);
         await w.close();
-        task.attachments.push({ id: uid(), name: f.name, file: stored, size: f.size, type: f.type || '', added: Date.now() });
+        // New attachments belong to this copy only; 📌 makes one carry over to every repeat.
+        task.attachments.push({ id: uid(), name: stored, file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
         added++;
       } catch (e) {
         toast(`Could not attach ${f.name}: ${e.message}`);
       }
     }
-    if (added) { changed('tasks'); toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
+    if (added) { changed('tasks'); toast(`Attached ${added} file${added > 1 ? 's' : ''} — click ✎ to rename`); }
     render();
     renderDrawer();
+  },
+
+  // "Sep elec bill 2026.pdf": the task's title, plus the year when the title doesn't have one.
+  suggestName(task, original) {
+    const dot = original.lastIndexOf('.');
+    const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
+    const year = (task.due ? task.due.slice(0, 4) : String(new Date().getFullYear()));
+    const base = (task.title || 'Attachment').trim();
+    return `${/\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
+  },
+
+  // Rename an attachment and its real file. A 📌 kept file is shared by every repeat, so they all
+  // follow; a this-one-only file changes for this task alone (if an older copy still shares it,
+  // this task gets its own renamed copy and the other keeps the old name).
+  async rename(task, attId, newBase) {
+    const att = task && task.attachments.find((a) => a.id === attId);
+    if (!att || state.readOnly) return;
+    if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
+    const dot = att.file.lastIndexOf('.');
+    const ext = dot > 0 ? att.file.slice(dot) : '';
+    const base = (newBase || '').trim().replace(new RegExp(`${ext.replace('.', '\\.')}$`, 'i'), '');
+    if (!base || `${safeFileName(base)}${ext}` === att.file) return;
+    const users = DB.tasks.filter((t) => t.attachments.some((a) => a.file === att.file));
+    const target = await this.uniqueName(`${safeFileName(base)}${ext}`);
+    try {
+      if (att.keep || users.length <= 1) {
+        await this.moveFile(att.file, target);
+        for (const t of users) for (const a of t.attachments) if (a.file === att.file) { a.file = target; a.name = target; }
+      } else {
+        await this.copyFile(att.file, target);
+        att.file = target;
+        att.name = target;
+      }
+    } catch (e) {
+      return toast(`Could not rename: ${e.message}`);
+    }
+    changed('tasks');
+    toast(`Renamed to "${target}"`);
+    render();
+    renderDrawer();
+  },
+
+  async copyFile(from, to) {
+    const file = await (await this.dir.getFileHandle(from)).getFile();
+    const w = await (await this.dir.getFileHandle(to, { create: true })).createWritable();
+    await w.write(file);
+    await w.close();
+  },
+  async moveFile(from, to) {
+    const h = await this.dir.getFileHandle(from);
+    if (typeof h.move === 'function') { await h.move(to); return; } // Chrome/Edge can rename in place
+    await this.copyFile(from, to);
+    await this.dir.removeEntry(from);
   },
 
   async open(att) {
@@ -1515,6 +1574,7 @@ function renderDrawer() {
       <h3>Notes</h3>
       <textarea class="input" data-field="notes" rows="6" placeholder="Details, links, phone numbers…">${esc(t.notes)}</textarea>
       ${attachBlock(t)}
+      ${historyBlock(t)}
     </fieldset>
     <div class="drawer-foot">
       <span class="meta">${t.created ? 'Created ' + esc(fmtStamp(t.created)) : ''}${t.done && t.completedAt ? ' · Done ' + esc(fmtStamp(t.completedAt)) : ''}</span>
@@ -1558,11 +1618,15 @@ function reminderBlock(t) {
 }
 
 function attachBlock(t) {
+  const repeating = !!(t.repeat || t.seriesId);
   const list = t.attachments.map((a) => `
     <li class="attach">
       <span>${fileIcon(a)}</span>
       <button class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</button>
       <span class="meta">${fmtSize(a.size)}</span>
+      ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
+        title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}">📌</button>` : ''}
+      <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
       <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>
     </li>`).join('');
   let action = '';
@@ -1574,8 +1638,32 @@ function attachBlock(t) {
   return `
     <h3>Attachments <span>${t.attachments.length || ''}</span></h3>
     ${list ? `<ul class="attachments">${list}</ul>` : '<p class="meta">No attachments.</p>'}
+    ${repeating && t.attachments.length ? '<p class="meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
     ${state.readOnly && t.attachments.length ? '<p class="meta">Attached files open on your computer only, for now.</p>' : ''}
     ${action}`;
+}
+
+// Every other copy of a repeating task, newest first: when it was due and done, its notes and its own files
+// (e.g. each month's bill). Click a title to open that copy; click a file to open it.
+function historyBlock(t) {
+  if (!t.seriesId) return '';
+  const others = DB.tasks.filter((x) => x.seriesId === t.seriesId && x.id !== t.id)
+    .sort((a, b) => (b.due || '').localeCompare(a.due || '') || (b.seriesIndex || 0) - (a.seriesIndex || 0));
+  if (!others.length) return '';
+  const row = (x) => `
+    <li class="history-item">
+      <div class="row" style="gap:8px;flex-wrap:nowrap">
+        <span>${x.done ? '✓' : '○'}</span>
+        <button class="link-btn" data-action="open-history" data-id="${esc(x.id)}" title="Open this copy">${esc(x.title)}</button>
+      </div>
+      <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? ` · done ${esc(fmtStamp(x.completedAt))}` : x.done ? '' : ' · not done yet'}</div>
+      ${x.notes.trim() ? `<div class="meta history-note">${esc(x.notes.trim().split('\n')[0].slice(0, 120))}</div>` : ''}
+      ${x.attachments.length ? `<div class="label-row">${x.attachments.map((a) => `
+        <button class="btn small" data-action="open-attach" data-task="${esc(x.id)}" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${fileIcon(a)} ${esc(a.name)}</button>`).join('')}</div>` : ''}
+    </li>`;
+  return `
+    <h3>History <span>${others.length}</span></h3>
+    <ul class="history">${others.map(row).join('')}</ul>`;
 }
 
 function openTaskDrawer(id) {
@@ -1635,7 +1723,8 @@ function completeTask(t) {
     ...r, id: uid(), fired: false,
     ...(r.kind === 'at' && r.at ? { at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : {}),
   }));
-  copy.attachments = copy.attachments.map((a) => ({ ...a, id: uid() })); // same files, shared
+  // Only 📌 kept attachments carry over (same file, shared); this-one-only files stay with this copy.
+  copy.attachments = copy.attachments.filter((a) => a.keep).map((a) => ({ ...a, id: uid() }));
   if (t.start && t.due) {
     // Keep the same gap between start and due.
     const gap = Math.round((parseISO(t.due.slice(0, 10)) - parseISO(t.start)) / DAY_MS);
@@ -2210,6 +2299,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
+  'rename-attach', 'toggle-keep',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -2291,7 +2381,31 @@ document.addEventListener('click', (e) => {
     }
     case 'at-folder': AT.pickFolder(); break;
     case 'at-reconnect': AT.reconnect(); break;
-    case 'open-attach': { const t = currentTask(); const a = t && t.attachments.find((x) => x.id === btn.dataset.att); if (a) AT.open(a); break; }
+    case 'open-attach': {
+      const t = btn.dataset.task ? DB.tasks.find((x) => x.id === btn.dataset.task) : currentTask(); // history rows name their task
+      const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
+      if (a) AT.open(a);
+      break;
+    }
+    case 'rename-attach': {
+      const t = currentTask();
+      const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
+      if (!a) break;
+      const dot = a.name.lastIndexOf('.');
+      const name = prompt(`Rename attachment${a.keep ? ' (kept on every repeat — renames it for all of them)' : ''}`, dot > 0 ? a.name.slice(0, dot) : a.name);
+      if (name != null) AT.rename(t, a.id, name);
+      break;
+    }
+    case 'toggle-keep': {
+      const t = currentTask();
+      const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
+      if (!a) break;
+      a.keep = !a.keep;
+      toast(a.keep ? `"${a.name}" will be kept on every repeat` : `"${a.name}" stays with this one only`);
+      changed('tasks'); render(); renderDrawer();
+      break;
+    }
+    case 'open-history': openTaskDrawer(id); break;
     case 'remove-attach': AT.remove(currentTask(), btn.dataset.att); break;
     case 'repeat-day': {
       const t = currentTask();
