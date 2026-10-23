@@ -82,18 +82,29 @@ const click = (win, sel) => win.document.querySelector(sel).click();
   // My Day
   click(win, '#drawer [data-action="toggle-myday"]');
   check(t.myDay === today, 'added to My Day');
-  win.document.querySelector('[data-filter="myday"]').click();
-  check(doc.querySelectorAll('#main .item').length === 1, 'My Day tab shows it');
+  click(win, '#drawer [data-action="close-task"]');
+  win.document.querySelector('[data-view="today"]').click();
+  check(doc.querySelector('#main h1').textContent.includes('My Day') && doc.querySelector('.nav-btn[data-view="today"]').textContent.includes('My Day'), 'the first screen is called My Day');
+  check(doc.querySelector('#main').textContent.includes('Renamed task'), 'a task added to My Day shows on the My Day screen');
   t.myDay = yesterday;
   PA.render();
-  check(doc.querySelectorAll('#main .item').length === 0, 'My Day empties the next day');
+  check(!doc.querySelector('#main').textContent.includes('Renamed task'), 'My Day empties the next day');
 
-  // Planned / Overdue tabs
+  // Tabs: All / Open / Overdue / Done (no My Day or Planned tabs)
+  win.document.querySelector('[data-view="tasks"]').click();
+  check([...doc.querySelectorAll('[data-filter]')].map((b) => b.textContent).join('|') === 'All|Open|Overdue|Done', 'tabs are All, Open, Overdue, Done');
   PA.addTask({ title: 'Late one', due: '2020-01-01T09:00' });
+  const finished = PA.addTask({ title: 'Finished one' });
+  PA.completeTask(finished);
   win.document.querySelector('[data-filter="overdue"]').click();
   check(doc.querySelector('#main').textContent.includes('Late one') && !doc.querySelector('#main').textContent.includes('Renamed task'), 'Overdue tab shows only overdue');
-  win.document.querySelector('[data-filter="planned"]').click();
-  check(doc.querySelector('#main').textContent.includes('Renamed task') && doc.querySelector('#main').textContent.includes('Late one'), 'Planned tab shows tasks with due dates');
+  win.document.querySelector('[data-filter="active"]').click();
+  check(!doc.querySelector('#main').textContent.includes('Finished one'), 'Open hides done tasks');
+  win.document.querySelector('[data-filter="all"]').click();
+  check(doc.querySelector('#main').textContent.includes('Finished one') && doc.querySelector('#main').textContent.includes('Late one'), 'All shows everything, done included');
+  // An overdue task shows on My Day too
+  win.document.querySelector('[data-view="today"]').click();
+  check(doc.querySelector('#main').textContent.includes('Late one'), 'overdue tasks show on My Day');
 
   // Today page quick add goes to My Day
   win.document.querySelector('[data-view="today"]').click();

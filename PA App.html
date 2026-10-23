@@ -287,7 +287,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 <div class="app">
   <nav class="sidebar">
     <div class="brand"><span class="logo">✓</span><span>PA App</span></div>
-    <button class="nav-btn" data-view="today"><span class="ico">☀</span><span>Today</span></button>
+    <button class="nav-btn" data-view="today"><span class="ico">☀</span><span>My Day</span></button>
     <button class="nav-btn" data-view="tasks"><span class="ico">☑</span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar"><span class="ico">▦</span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes"><span class="ico">✎</span><span>Notes</span></button>
@@ -963,8 +963,7 @@ function dayItem(i) {
 // what was understood, with a link to keep the words as typed. The small buttons on the right
 // (bucket, due date, reminder, repeat) set the same things by clicking.
 function quickAddBar(ctx) {
-  const tab = state.view === 'tasks' ? state.taskFilter : '';
-  const where = ctx === 'today' || tab === 'myday' ? 'Add a task to My Day' : tab === 'planned' ? 'Add a planned task (due today unless you say when)' : 'Add a task';
+  const where = ctx === 'today' ? 'Add a task to My Day' : 'Add a task';
   const bucket = state.view === 'tasks' && state.taskBucket && state.taskBucket !== '-' ? state.taskBucket : '';
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
   return `
@@ -1163,9 +1162,7 @@ function quickAdd(form) {
   const p = form.dataset.raw === '1' ? { title: text.trim(), date: '', time: '', labels: [] } : parseQuickAdd(text);
   if (!p.title) return null;
   const ctx = form.dataset.ctx;
-  const tab = state.view === 'tasks' ? state.taskFilter : '';
-  let date = (f.dueDate && f.dueDate.value) || p.date;
-  if (!date && tab === 'planned') date = todayISO();
+  const date = (f.dueDate && f.dueDate.value) || p.date;
   const due = date ? `${date}T${p.time || ALL_DAY}` : '';
   const pickedBucket = f.bucket && f.bucket.value;
   const t = addTask({
@@ -1174,7 +1171,7 @@ function quickAdd(form) {
     priority: p.priority || 'low',
     remind: f.remind && f.remind.value !== '' ? Number(f.remind.value) : due && p.time ? 0 : -1,
     bucket: pickedBucket || p.bucket || (ctx === 'board' ? form.dataset.bucket : undefined),
-    myDay: ctx === 'today' || tab === 'myday' ? todayISO() : '',
+    myDay: ctx === 'today' ? todayISO() : '',
   });
   if (p.bucket && !pickedBucket) t.bucket = p.bucket;
   for (const name of p.labels) {
@@ -1202,15 +1199,15 @@ function renderToday() {
   const schedule = itemsForDay(tk).filter((i) => i.kind !== 'task');
   return `
     <div class="page-head">
-      <div><h1>${greet}</h1><p class="sub">${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+      <div><h1>☀ My Day</h1><p class="sub">${greet} — ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
     </div>
     <div class="grid grid-2" style="margin-bottom:16px">
-      <div class="card"><div class="stat">${dueToday.filter((t) => !t.done).length}</div><div class="stat-label">Tasks for today (My Day, due, overdue)</div></div>
+      <div class="card"><div class="stat">${dueToday.filter((t) => !t.done).length}</div><div class="stat-label">Tasks for today (added to My Day, due today, overdue)</div></div>
       <div class="card"><div class="stat">${schedule.length}</div><div class="stat-label">Events today</div></div>
     </div>
     <div class="grid grid-main">
       <div class="card">
-        <h2>☀ My Day</h2>
+        <h2>Today's tasks</h2>
         ${quickAddBar('today')}
         <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing for today 🎉</li>'}</ul>
         ${noDate.length ? `<h2 style="margin-top:16px">Anytime</h2><ul class="list">${noDate.map(taskItem).join('')}</ul>` : ''}
@@ -1222,11 +1219,10 @@ function renderToday() {
     </div>`;
 }
 
-// The Tasks tabs ("smart views").
+// The Tasks tabs. My Day has its own screen (the first in the sidebar), so it isn't a tab.
 const TASK_TABS = {
-  active: { label: 'All open', test: (t) => !t.done },
-  myday: { label: '☀ My Day', test: (t) => inMyDay(t) },
-  planned: { label: 'Planned', test: (t) => !t.done && !!t.due },
+  all: { label: 'All', test: () => true },
+  active: { label: 'Open', test: (t) => !t.done },
   overdue: { label: 'Overdue', test: (t) => isOverdue(t) },
   done: { label: 'Done', test: (t) => t.done },
 };

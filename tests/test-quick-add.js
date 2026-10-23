@@ -101,14 +101,13 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   check(!PA.DB.tasks.filter((x) => x.title === 'Buy milk').some((x) => doc.querySelector('#main').textContent.includes('Overdue · Today')), 'an all-day task due today is not overdue');
   void today;
 
-  // Tab context: Planned gives a due date, My Day puts it in My Day
-  doc.querySelector('[data-filter="planned"]').click();
+  // Adding on the My Day screen puts it in My Day; adding on Tasks doesn't
   submitForm(win, 'quick-add', { title: 'Sort the garage' });
   t = PA.DB.tasks.find((x) => x.title === 'Sort the garage');
-  check(t.due === `${realToday}T23:59`, 'added in Planned → due today');
-  doc.querySelector('[data-filter="myday"]').click();
+  check(t.due === '' && t.myDay === '', 'added on Tasks: no date, not in My Day');
+  doc.querySelector('[data-view="today"]').click();
   submitForm(win, 'quick-add', { title: 'Reply to emails' });
-  check(PA.DB.tasks.find((x) => x.title === 'Reply to emails').myDay === realToday, 'added in My Day → in My Day');
+  check(PA.DB.tasks.find((x) => x.title === 'Reply to emails').myDay === realToday, 'added on My Day → in My Day');
   app.close();
 
   // Phone can't add
