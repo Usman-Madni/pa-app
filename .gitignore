@@ -1,0 +1,5 @@
+node_modules/
+*.log
+# Real data and backups stay out of git (they live wherever you pick them)
+pa-app-data*.json
+PA App Backup *.json
