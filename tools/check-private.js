@@ -4,14 +4,20 @@
 //   - words/phrases listed in private-terms.txt (git-ignored, so the list itself never goes public)
 //   - any email address except GitHub noreply ones and the Claude co-author line
 //   - personal folder paths (C:\Users\<name>, /c/Users/<name>)
-//   - files that must never be committed (CLAUDE.local.md, the terms list, data files, backups)
+//   - files that must never be committed (CLAUDE.local.md, the terms list, data files, backups,
+//     attachments, and any photo/scan/document such as a PDF or JPG)
 //   - commit author/committer emails that aren't GitHub noreply
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const ALLOWED_EMAIL_DOMAINS = ['users.noreply.github.com', 'anthropic.com', 'example.com'];
-const FORBIDDEN_FILES = [/(^|\/)CLAUDE\.local\.md$/i, /(^|\/)private-terms\.txt$/i, /(^|\/)pa-app-data[^/]*\.json$/i, /(^|\/)PA App Backup [^/]*\.json$/i];
+const FORBIDDEN_FILES = [
+  /(^|\/)CLAUDE\.local\.md$/i, /(^|\/)private-terms\.txt$/i, /(^|\/)pa-app-data[^/]*\.json$/i, /(^|\/)PA App Backup [^/]*\.json$/i,
+  /(^|\/)attachments\//i,
+  // Photos, scans and documents (bills, IDs…) never belong in this repo — the app is code only.
+  /\.(pdf|jpe?g|png|gif|webp|heic|heif|bmp|tiff?|docx?|xlsx?|pptx?|odt|ods|zip|rar|7z)$/i,
+];
 const BUILT_IN = [
   { label: 'email address', re: /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g, allow: (m) => ALLOWED_EMAIL_DOMAINS.some((d) => m.toLowerCase().endsWith('@' + d) || m.toLowerCase().endsWith('.' + d)) },
   { label: 'personal folder path', re: /[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}[A-Za-z0-9._-]+|\/c\/Users\/[A-Za-z0-9._-]+/gi, allow: () => false },
@@ -43,12 +49,17 @@ function scan({ root, terms, rev = 'HEAD' }) {
 
   // 1. Every file version reachable from rev
   const objects = git(root, ['rev-list', '--objects', rev]).toString('utf8').split('\n').filter(Boolean);
-  const pathOf = new Map();
+  const pathOf = new Map(); // object id → one path (for reporting where a hit was)
   for (const line of objects) {
     const sp = line.indexOf(' ');
     if (sp > 0) pathOf.set(line.slice(0, sp), line.slice(sp + 1));
   }
-  for (const p of new Set(pathOf.values())) {
+  // rev-list lists identical file contents only once (under one name), so take every name that any
+  // commit ever added or changed from the log instead — otherwise a copy of an allowed file under a
+  // forbidden name would slip through.
+  const allPaths = new Set(git(root, ['-c', 'core.quotepath=false', 'log', '--name-only', '--format=', '--no-renames', '-m', rev])
+    .toString('utf8').split('\n').filter(Boolean));
+  for (const p of allPaths) {
     if (FORBIDDEN_FILES.some((re) => re.test(p))) findings.push(`${p}: this file must never be committed`);
   }
   const shas = [...pathOf.keys()];

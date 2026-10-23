@@ -5,3 +5,5 @@ pa-app-data*.json
 PA App Backup *.json
 CLAUDE.local.md
 private-terms.txt
+# Attached files (if the attachments folder is put inside the project)
+attachments/

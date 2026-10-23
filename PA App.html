@@ -204,6 +204,13 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
 
+/* ===== Attachments ===== */
+.attachments { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.attach { display: flex; align-items: center; gap: 8px; }
+.link-btn { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-align: left; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-btn:hover { text-decoration: underline; }
+.link-btn:disabled { color: var(--text); cursor: default; text-decoration: none; }
+
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
@@ -440,6 +447,7 @@ const DF = {
     try {
       if ((await this.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given — data is only saving in this browser');
       if (this.backupDir) await this.backupDir.requestPermission({ mode: 'readwrite' }).catch(() => {});
+      if (AT.status === 'reconnect') await AT.reconnect(); // one click brings the attachments folder back too
       await this.check();
     } catch (e) { this.fail(e); }
   },
@@ -672,6 +680,114 @@ const RO = {
     }
   },
 };
+
+// ===================== Attachments folder =====================
+// Attached files are copied into a folder the user picks once (handle kept in IndexedDB, like the data file).
+// The data file stores only {name, file, size, type} — never the file contents — so it stays small and fast.
+const safeFileName = (n) => (String(n).replace(/[\\/:*?"<>|]/g, '_').slice(-120) || 'file');
+const AT = {
+  dir: null,
+  status: 'none', // none | reconnect | ok
+
+  async init() {
+    if (state.readOnly) return;
+    this.dir = (await idb.get('attachments')) || this.dir || null;
+    if (this.dir) this.status = (await this.dir.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ok' : 'reconnect';
+    renderDrawer();
+  },
+
+  async pickFolder() {
+    const inUse = DB.tasks.some((t) => t.attachments.length);
+    if (this.dir && inUse && !confirm('Files already attached stay in the current folder — move them into the new folder yourself, or they will show as missing. Change folder?')) return;
+    try {
+      this.dir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'pa-attachments' });
+      await idb.set('attachments', this.dir);
+      this.status = 'ok';
+      toast(`Attachments will be saved in the "${this.dir.name}" folder`);
+    } catch (e) {
+      if (e.name !== 'AbortError') toast('Could not use that folder: ' + e.message);
+    }
+    render();
+    renderDrawer();
+  },
+
+  // After a browser restart; must run from a click.
+  async reconnect() {
+    if (!this.dir) return this.pickFolder();
+    try { this.status = (await this.dir.requestPermission({ mode: 'readwrite' })) === 'granted' ? 'ok' : 'reconnect'; } catch { this.status = 'reconnect'; }
+    renderDrawer();
+  },
+
+  async uniqueName(name) {
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    for (let i = 1; i < 500; i++) {
+      const candidate = i === 1 ? name : `${base} (${i})${ext}`;
+      try { await this.dir.getFileHandle(candidate); } catch { return candidate; } // not there yet = free
+    }
+    return `${base} ${uid()}${ext}`;
+  },
+
+  async add(task, files) {
+    if (state.readOnly || !task) return;
+    if (this.status !== 'ok') return toast('Choose or reconnect the attachments folder first');
+    let added = 0;
+    for (const f of files) {
+      try {
+        const stored = await this.uniqueName(safeFileName(f.name)); // never overwrite an existing file
+        const w = await (await this.dir.getFileHandle(stored, { create: true })).createWritable();
+        await w.write(f);
+        await w.close();
+        task.attachments.push({ id: uid(), name: f.name, file: stored, size: f.size, type: f.type || '', added: Date.now() });
+        added++;
+      } catch (e) {
+        toast(`Could not attach ${f.name}: ${e.message}`);
+      }
+    }
+    if (added) { changed('tasks'); toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
+    render();
+    renderDrawer();
+  },
+
+  async open(att) {
+    if (state.readOnly) return toast('Attached files open on your computer only, for now');
+    if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
+    let file;
+    try { file = await (await this.dir.getFileHandle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
+    const url = URL.createObjectURL(file);
+    if (/^(image\/|application\/pdf|text\/)/.test(att.type)) window.open(url, '_blank'); // the browser can show these
+    else { const a = document.createElement('a'); a.href = url; a.download = att.name; a.click(); } // e.g. Word files: save a copy
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+
+  async remove(task, attId) {
+    const att = task && task.attachments.find((a) => a.id === attId);
+    if (!att || state.readOnly) return;
+    if (!confirm(`Remove "${att.name}" from this task?`)) return;
+    task.attachments = task.attachments.filter((a) => a !== att);
+    changed('tasks');
+    // Delete the file only when no other task (e.g. another copy of a repeating task) still uses it.
+    const stillUsed = DB.tasks.some((t) => t.attachments.some((a) => a.file === att.file));
+    if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
+    render();
+    renderDrawer();
+  },
+};
+
+function attachCard() {
+  return `
+    <div class="card edit-only">
+      <h2>Attachments folder</h2>
+      <p class="sub">${AT.dir
+        ? `Files you attach to tasks are copied into the <b>${esc(AT.dir.name)}</b> folder. Keep it in your synced folder next to the data file so every computer sees them.`
+        : 'Pick a folder once and files you attach to tasks are copied there. Keep it next to your data file.'}</p>
+      <div class="row">
+        ${AT.status === 'reconnect' ? '<button class="btn primary" data-action="at-reconnect">Reconnect</button>' : ''}
+        <button class="btn" data-action="at-folder">${AT.dir ? 'Change folder' : 'Choose folder'}</button>
+      </div>
+    </div>`;
+}
 
 // ===================== Derived data =====================
 const taskDate = (t) => (t.due ? t.due.slice(0, 10) : '');
@@ -1094,7 +1210,29 @@ function renderDrawer() {
 }
 // Filled in by later sections (buckets/labels, recurring, attachments).
 function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
-function attachBlock() { return ''; }
+const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b || 0} B`);
+const fileIcon = (a) => (/^image\//.test(a.type) ? '🖼' : /pdf/.test(a.type) || /\.pdf$/i.test(a.name) ? '📄' : '📎');
+
+function attachBlock(t) {
+  const list = t.attachments.map((a) => `
+    <li class="attach">
+      <span>${fileIcon(a)}</span>
+      <button class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</button>
+      <span class="meta">${fmtSize(a.size)}</span>
+      <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>
+    </li>`).join('');
+  let action = '';
+  if (!state.readOnly) {
+    if (AT.status === 'ok') action = '<label class="btn small">📎 Attach files<input type="file" multiple data-input="attach" hidden></label>';
+    else if (AT.status === 'reconnect') action = '<button class="btn small primary" data-action="at-reconnect">Reconnect attachments folder</button><p class="meta">Browsers ask again for folder access after a restart.</p>';
+    else action = '<button class="btn small" data-action="at-folder">📁 Choose attachments folder</button><p class="meta">Pick a folder once, for example next to your data file. Files you attach are copied there; the data file only remembers which file belongs to which task.</p>';
+  }
+  return `
+    <h3>Attachments <span>${t.attachments.length || ''}</span></h3>
+    ${list ? `<ul class="attachments">${list}</ul>` : '<p class="meta">No attachments.</p>'}
+    ${state.readOnly && t.attachments.length ? '<p class="meta">Attached files open on your computer only, for now.</p>' : ''}
+    ${action}`;
+}
 
 function openTaskDrawer(id) {
   state.openTask = id;
@@ -1454,6 +1592,7 @@ function renderSettings() {
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <div class="grid" style="max-width:720px">
       <div class="card" id="df-card">${dataFileCard()}</div>
+      ${attachCard()}
       ${manageCard()}
       <div class="card">
         <h2>This device</h2>
@@ -1598,7 +1737,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
-  'repeat-day',
+  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -1649,6 +1788,10 @@ document.addEventListener('click', (e) => {
     }
     case 'open-task': openTaskDrawer(id); break;
     case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
+    case 'at-folder': AT.pickFolder(); break;
+    case 'at-reconnect': AT.reconnect(); break;
+    case 'open-attach': { const t = currentTask(); const a = t && t.attachments.find((x) => x.id === btn.dataset.att); if (a) AT.open(a); break; }
+    case 'remove-attach': AT.remove(currentTask(), btn.dataset.att); break;
     case 'repeat-day': {
       const t = currentTask();
       const day = Number(btn.dataset.weekday);
@@ -1830,6 +1973,7 @@ document.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   if (kind === 'import') importData(file);
+  if (kind === 'attach') AT.add(currentTask(), [...e.target.files]);
   if (kind === 'ro-open') RO.open(file);
   e.target.value = '';
 });
@@ -1844,13 +1988,14 @@ applyTheme();
 if (state.readOnly) RO.boot(); else DB.load();
 render();
 DF.init();
+AT.init();
 checkReminders();
 setInterval(checkReminders, 20000);
 setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText };
+window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText };
 </script>
 </body>
 </html>

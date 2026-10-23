@@ -21,10 +21,18 @@ function fakeFile(name = 'pa-app-data.json', text = '') {
     name,
     text,
     writes: 0,
-    async getFile() { return { name, text: async () => handle.text }; },
+    parts: [],
+    async getFile() { return { name, size: handle.text.length, type: handle.type || '', text: async () => handle.text }; },
     async createWritable() {
-      let buf = '';
-      return { write: async (s) => { buf += s; }, close: async () => { handle.text = buf; handle.writes++; } };
+      const parts = [];
+      return {
+        write: async (p) => { parts.push(p); },
+        close: async () => {
+          handle.parts = parts; // raw pieces (strings or File/Blob objects)
+          handle.text = parts.map((p) => (typeof p === 'string' ? p : `[${p.constructor.name} ${p.name || ''}]`)).join('');
+          handle.writes++;
+        },
+      };
     },
     async queryPermission() { return 'granted'; },
     async requestPermission() { return 'granted'; },
@@ -47,7 +55,12 @@ function fakeFolder(name = 'backups') {
       }
       return files[fname];
     },
-    async queryPermission() { return 'granted'; },
+    async removeEntry(fname) {
+      if (!files[fname]) { const e = new Error('not found'); e.name = 'NotFoundError'; throw e; }
+      delete files[fname];
+    },
+    permission: 'granted',
+    async queryPermission() { return this.permission; },
     async requestPermission() { return 'granted'; },
   };
 }

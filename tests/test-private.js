@@ -69,6 +69,14 @@ check(f.some((x) => x.startsWith('CLAUDE.local.md')), 'CLAUDE.local.md in histor
 check(f.some((x) => x.startsWith('pa-app-data.json')), 'a data file in history is caught');
 r.cleanup();
 
+// Attachments and personal documents/photos
+r = repo();
+r.commit({ 'attachments/notes.txt': 'x', 'scans/id card.jpg': 'fake', 'bills/october.pdf': 'fake', 'docs/plan.docx': 'fake' }, 'Oops');
+f = scan({ root: r.dir, terms });
+check(f.some((x) => x.startsWith('attachments/notes.txt')), 'anything in an attachments folder is caught');
+check(['scans/id card.jpg', 'bills/october.pdf', 'docs/plan.docx'].every((p) => f.some((x) => x.startsWith(p))), 'photos, PDFs and Word files are caught');
+r.cleanup();
+
 // Commit messages and personal commit emails
 r = repo();
 r.commit({ 'a.txt': 'x' }, 'Copied from My Other Project');
