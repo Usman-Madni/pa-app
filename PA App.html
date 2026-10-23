@@ -142,6 +142,33 @@ body.readonly .edit-only { display: none !important; }
 .editor .note-title { font-size: 20px; font-weight: 700; border: 0; background: transparent; padding: 4px 0; outline: none; }
 .editor textarea { flex: 1; min-height: 55vh; resize: vertical; border: 0; background: transparent; outline: none; line-height: 1.6; }
 
+/* ===== Task details drawer ===== */
+.item .body.clickable, .task-card .body.clickable { cursor: pointer; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); background: var(--panel);
+  border-left: 1px solid var(--border); box-shadow: -8px 0 32px rgba(0, 0, 0, .14); z-index: 40;
+  transform: translateX(105%); transition: transform .18s ease-out; display: flex; flex-direction: column;
+}
+body.drawer-open .drawer { transform: none; }
+.drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, .25); z-index: 39; }
+body.drawer-open .drawer-backdrop { display: block; }
+.drawer-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 10px; border-bottom: 1px solid var(--border); }
+.drawer-title { flex: 1; min-width: 0; font-size: 18px; font-weight: 700; border: 0; background: transparent; outline: none; padding: 4px 0; }
+.drawer-body { flex: 1; overflow: auto; padding: 12px 16px 20px; border: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.drawer-body h3 { margin: 10px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field-grid label, .field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.field-grid .input, .field .input { color: var(--text); font-size: 14px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.step { display: flex; align-items: center; gap: 8px; }
+.step .check { width: 17px; height: 17px; }
+.step-text { flex: 1; min-width: 0; border: 0; border-bottom: 1px solid transparent; background: transparent; padding: 5px 0; outline: none; }
+.step-text:focus { border-bottom-color: var(--accent); }
+.step.done .step-text { text-decoration: line-through; color: var(--muted); }
+textarea.input { resize: vertical; line-height: 1.5; }
+.pill.doing { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
@@ -174,6 +201,8 @@ body.readonly .edit-only { display: none !important; }
   .cal-day { min-height: 46px; align-items: center; }
   .cal-day.has-items::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
   .toasts { bottom: 80px; }
+  .drawer { width: 100vw; }
+  .field-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -193,6 +222,8 @@ body.readonly .edit-only { display: none !important; }
   </nav>
   <main class="main"><div id="banner"></div><div id="main"></div></main>
 </div>
+<div class="drawer-backdrop" data-action="close-task"></div>
+<aside id="drawer" class="drawer" aria-label="Task details"></aside>
 <div id="toasts" class="toasts"></div>
 
 <script>
@@ -255,26 +286,61 @@ const device = {
 const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Computer');
 
 // ===================== Shared data =====================
-// tasks:  {id, title, due:'YYYY-MM-DDTHH:mm'|'', priority:'low'|'med'|'high', remind:-1|0|10|60|1440, notified, done, created}
-// notes:  {id, title, body, updated}
-// events: {id, title, date:'YYYY-MM-DD', time:'HH:mm'|''}
+// tasks:   see TASK_DEFAULTS below
+// notes:   {id, title, body, updated}
+// events:  {id, title, date:'YYYY-MM-DD', time:'HH:mm'|''}
+// buckets: {id, name, order}
+// labels:  {id, name, color:'#rrggbb'}
 // Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
-const DATA_KEYS = ['tasks', 'notes', 'events'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels'];
+const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
+
+// Every task field with its default. Old tasks get the missing fields filled in on load.
+const TASK_DEFAULTS = {
+  title: '',
+  due: '',            // 'YYYY-MM-DDTHH:mm' local time, or '' = no due date
+  start: '',          // 'YYYY-MM-DD' or ''
+  priority: 'low',    // 'low' | 'med' | 'high'
+  progress: 'not',    // 'not' | 'doing' (done is the separate `done` flag)
+  remind: -1,         // minutes before due: -1 none, 0, 10, 60, 1440
+  notified: false,
+  done: false,
+  completedAt: 0,     // ms
+  created: 0,         // ms
+  myDay: '',          // 'YYYY-MM-DD' the task was added to My Day; only counts on that day
+  bucket: '',         // bucket id or ''
+  labels: [],         // label ids
+  notes: '',
+  checklist: [],      // {id, text, done}
+  repeat: null,       // see nextDue()
+  seriesId: '',       // shared by all copies of a repeating task
+  spawnedNext: '',    // id of the next copy, once created (so ticking twice never makes two)
+  attachments: [],    // {id, name, file, size, type, added} — file is the name inside the attachments folder
+};
+function normalizeTask(t) {
+  const n = { ...TASK_DEFAULTS, ...t };
+  for (const k of ['labels', 'checklist', 'attachments']) n[k] = Array.isArray(t[k]) ? t[k] : []; // fresh arrays, never shared
+  return n;
+}
+
 const DB = {
-  tasks: [], notes: [], events: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
     }
+    this.tasks = this.tasks.map(normalizeTask);
   },
   persist(k) {
     if (state.readOnly) return;
     try { localStorage.setItem('pa_' + k, JSON.stringify(this[k])); } catch { toast('Could not save in this browser — storage is full or blocked'); }
   },
-  exportAll() { return { tasks: this.tasks, notes: this.notes, events: this.events }; },
+  exportAll() { return Object.fromEntries(DATA_KEYS.map((k) => [k, this[k]])); },
   importAll(data) {
-    if (!data || !DATA_KEYS.every((k) => Array.isArray(data[k]))) throw new Error('This file has no PA App data in it');
-    for (const k of DATA_KEYS) { this[k] = data[k]; this.persist(k); }
+    if (!data || !REQUIRED_KEYS.every((k) => Array.isArray(data[k]))) throw new Error('This file has no PA App data in it');
+    for (const k of DATA_KEYS) this[k] = Array.isArray(data[k]) ? data[k] : [];
+    this.tasks = this.tasks.map(normalizeTask);
+    for (const k of DATA_KEYS) this.persist(k);
   },
   isEmpty() { return DATA_KEYS.every((k) => this[k].length === 0); },
 };
@@ -304,6 +370,9 @@ const state = {
   // second copy), in browsers that can't write files (Safari, Firefox), or with ?readonly in the address.
   readOnly: isPhone() || typeof window.showOpenFilePicker !== 'function' || params.has('readonly'),
   remindedHere: new Set(), // read-only devices remember shown reminders here instead of changing the data
+  openTask: null,          // id of the task shown in the details drawer
+  taskBucket: '',          // Tasks filter: '' all, '-' no bucket, or a bucket id
+  taskLabel: '',           // Tasks filter: '' all, or a label id
 };
 
 // ===================== Data file (auto-save) =====================
@@ -415,6 +484,7 @@ const DF = {
     this.conflict = null;
     this.error = '';
     render();
+    renderDrawer();
   },
 
   markDirty() {
@@ -447,7 +517,7 @@ const DF = {
   async write() {
     const payload = {
       app: 'PA App',
-      version: 1,
+      version: 2,
       saveToken: uid(),
       savedAt: new Date().toISOString(), // instant, not a calendar date
       savedFrom: deviceName(),
@@ -481,7 +551,7 @@ const DF = {
       this.backupDir = await window.showDirectoryPicker({ mode: 'readwrite' });
       await idb.set('backups', this.backupDir);
       device.remove('lastBackupDay');
-      await this.dailyBackup({ app: 'PA App', version: 1, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() });
+      await this.dailyBackup({ app: 'PA App', version: 2, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() });
       render();
     } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
   },
@@ -560,6 +630,7 @@ const RO = {
       device.set('roInfo', this.info);
       toast('Data file opened (read-only)');
       render();
+      renderDrawer();
     } catch (e) {
       toast(e.message.startsWith('That file') ? e.message : 'Could not read that file');
     }
@@ -570,6 +641,8 @@ const RO = {
 const taskDate = (t) => (t.due ? t.due.slice(0, 10) : '');
 const taskTime = (t) => (t.due ? t.due.slice(11, 16) : '');
 const isOverdue = (t) => !t.done && !!t.due && new Date(t.due) < new Date();
+const inMyDay = (t) => t.myDay === todayISO(); // My Day empties itself each morning
+const currentTask = () => DB.tasks.find((t) => t.id === state.openTask) || null;
 
 function sortTasks(list) {
   const prio = { high: 0, med: 1, low: 2 };
@@ -643,26 +716,44 @@ function statusBanner() {
   }
 }
 
-function taskItem(t) {
+const remindText = (m) => (m === 0 ? 'at time' : m >= 1440 ? '1 day before' : m >= 60 ? `${m / 60}h before` : `${m}m before`);
+
+// Title line + the small details under it; shared by list rows and board cards.
+function taskSummary(t) {
   const meta = [];
   if (t.due) {
     const when = `${taskDate(t) === todayISO() ? 'Today' : fmtDay(taskDate(t))}${taskTime(t) ? ' ' + fmtTime(taskTime(t)) : ''}`;
     meta.push(`<span class="${isOverdue(t) ? 'overdue' : ''}">${isOverdue(t) ? 'Overdue · ' : ''}${esc(when)}</span>`);
   }
-  if (t.remind >= 0 && t.due && !t.done) {
-    const r = t.remind === 0 ? 'at time' : t.remind >= 1440 ? '1 day before' : t.remind >= 60 ? `${t.remind / 60}h before` : `${t.remind}m before`;
-    meta.push(`<span>🔔 ${r}</span>`);
-  }
+  if (t.start && t.start > todayISO() && !t.done) meta.push(`<span>Starts ${esc(fmtDay(t.start))}</span>`);
+  if (t.remind >= 0 && t.due && !t.done) meta.push(`<span>🔔 ${remindText(t.remind)}</span>`);
+  if (t.repeat) meta.push(`<span title="Repeats">↻ ${esc(repeatText(t.repeat))}</span>`);
+  if (t.progress === 'doing' && !t.done) meta.push('<span class="pill doing">In progress</span>');
+  if (inMyDay(t)) meta.push('<span>☀ My Day</span>');
+  if (t.checklist.length) meta.push(`<span title="Checklist">☑ ${t.checklist.filter((s) => s.done).length}/${t.checklist.length}</span>`);
+  if (t.notes.trim()) meta.push('<span title="Has notes">📝</span>');
+  if (t.attachments.length) meta.push(`<span title="Attachments">📎 ${t.attachments.length}</span>`);
+  const bucket = DB.buckets.find((b) => b.id === t.bucket);
+  const onBoard = state.view === 'tasks' && device.get('taskLayout', 'list') === 'board'; // the column already says it
+  if (bucket && !onBoard) meta.push(`<span>▦ ${esc(bucket.name)}</span>`);
+  const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
+  return `
+    <div class="title">${esc(t.title)} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
+    ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
+}
+
+function taskItem(t) {
   return `
     <li class="item ${t.done ? 'done' : ''}">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
-      <div class="body">
-        <div class="title">${esc(t.title)} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''}</div>
-        ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
-      </div>
+      <div class="body clickable" data-action="open-task" data-id="${esc(t.id)}">${taskSummary(t)}</div>
       <button class="icon-btn edit-only" data-action="delete-task" data-id="${esc(t.id)}" title="Delete">✕</button>
     </li>`;
 }
+
+const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">${esc(l.name)}</span>`;
+// Filled in by the recurring-tasks code; plain text for the ↻ line.
+function repeatText(r) { return r ? r.freq : ''; }
 
 function dayItem(i) {
   const tag = i.kind === 'task' ? '<span class="pill">Task</span>' : '';
@@ -678,8 +769,8 @@ function dayItem(i) {
 function taskForm(compact = false) {
   return `
     <form class="row edit-only" data-form="add-task">
-      <input class="input grow" name="title" placeholder="Add a task…" required autocomplete="off">
-      ${compact ? '' : `
+      <input class="input grow" name="title" placeholder="${compact ? 'Add a task to My Day…' : 'Add a task…'}" required autocomplete="off">
+      ${compact ? `<input type="hidden" name="myDay" value="${todayISO()}">` : `
       <input class="input" type="datetime-local" name="due" aria-label="Due">
       <select class="input" name="priority" aria-label="Priority">
         <option value="low">Low</option><option value="med">Medium</option><option value="high">High</option>
@@ -698,22 +789,22 @@ function renderToday() {
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const tk = todayISO();
   const open = DB.tasks.filter((t) => !t.done);
-  const dueToday = sortTasks(open.filter((t) => taskDate(t) === tk || isOverdue(t)));
-  const noDate = sortTasks(open.filter((t) => !t.due)).slice(0, 5);
+  const dueToday = sortTasks(DB.tasks.filter((t) => (!t.done && (taskDate(t) === tk || isOverdue(t))) || inMyDay(t)));
+  const noDate = sortTasks(open.filter((t) => !t.due && !inMyDay(t))).slice(0, 5);
   const schedule = itemsForDay(tk).filter((i) => i.kind !== 'task');
   return `
     <div class="page-head">
       <div><h1>${greet}</h1><p class="sub">${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
     </div>
     <div class="grid grid-2" style="margin-bottom:16px">
-      <div class="card"><div class="stat">${dueToday.length}</div><div class="stat-label">Tasks due today / overdue</div></div>
+      <div class="card"><div class="stat">${dueToday.filter((t) => !t.done).length}</div><div class="stat-label">Tasks for today (My Day, due, overdue)</div></div>
       <div class="card"><div class="stat">${schedule.length}</div><div class="stat-label">Events today</div></div>
     </div>
     <div class="grid grid-main">
       <div class="card">
-        <h2>Today's tasks</h2>
+        <h2>☀ My Day</h2>
         ${taskForm(true)}
-        <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing due today 🎉</li>'}</ul>
+        <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing for today 🎉</li>'}</ul>
         ${noDate.length ? `<h2 style="margin-top:16px">Anytime</h2><ul class="list">${noDate.map(taskItem).join('')}</ul>` : ''}
       </div>
       <div class="card">
@@ -723,27 +814,120 @@ function renderToday() {
     </div>`;
 }
 
+// The Tasks tabs ("smart views").
+const TASK_TABS = {
+  active: { label: 'All open', test: (t) => !t.done },
+  myday: { label: '☀ My Day', test: (t) => inMyDay(t) },
+  planned: { label: 'Planned', test: (t) => !t.done && !!t.due },
+  overdue: { label: 'Overdue', test: (t) => isOverdue(t) },
+  done: { label: 'Done', test: (t) => t.done },
+};
+
 function renderTasks() {
-  const f = state.taskFilter;
-  const tk = todayISO();
-  const filters = {
-    active: (t) => !t.done,
-    today: (t) => !t.done && (taskDate(t) === tk || isOverdue(t)),
-    upcoming: (t) => !t.done && !!t.due && taskDate(t) > tk,
-    done: (t) => t.done,
-  };
-  const list = sortTasks(DB.tasks.filter(filters[f]));
+  const f = TASK_TABS[state.taskFilter] ? state.taskFilter : 'active';
+  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t)));
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
   return `
     <div class="page-head">
       <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done).length} open</p></div>
-      <div class="tabs">${tab('active', 'All open')}${tab('today', 'Today')}${tab('upcoming', 'Upcoming')}${tab('done', 'Done')}</div>
+      <div class="tabs">${Object.entries(TASK_TABS).map(([k, v]) => tab(k, v.label)).join('')}</div>
     </div>
     <div class="card">
       ${taskForm()}
       <ul class="list" style="margin-top:8px">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
       ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
     </div>`;
+}
+
+// ===================== Task details drawer =====================
+// Rebuilt only when its structure changes (open, close, checklist, labels…) — never while you type,
+// so the cursor stays put. Typing updates the task in place.
+function renderDrawer() {
+  const el = $('#drawer');
+  const t = currentTask();
+  document.body.classList.toggle('drawer-open', !!t);
+  if (!t) { state.openTask = null; el.innerHTML = ''; return; }
+  const ro = state.readOnly ? 'disabled' : '';
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
+  const doneSteps = t.checklist.filter((s) => s.done).length;
+  el.innerHTML = `
+    <div class="drawer-head">
+      <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${ro} aria-label="Mark done">
+      <input class="drawer-title" data-field="title" value="${esc(t.title)}" ${ro} aria-label="Task title">
+      <button class="icon-btn" data-action="close-task" title="Close (Esc)">✕</button>
+    </div>
+    <fieldset class="drawer-body" ${ro}>
+      <div class="row edit-only">
+        <button class="btn small ${inMyDay(t) ? 'primary' : ''}" data-action="toggle-myday" data-id="${esc(t.id)}">☀ ${inMyDay(t) ? 'In My Day — remove' : 'Add to My Day'}</button>
+      </div>
+      <div class="field-grid">
+        <label>Bucket<select class="input" data-field="bucket">${opt('', 'No bucket', t.bucket)}${sortedBuckets().map((b) => opt(b.id, b.name, t.bucket)).join('')}</select></label>
+        <label>Progress<select class="input" data-field="progress">${opt('not', 'Not started', t.progress)}${opt('doing', 'In progress', t.progress)}</select></label>
+        <label>Priority<select class="input" data-field="priority">${opt('low', 'Low', t.priority)}${opt('med', 'Medium', t.priority)}${opt('high', 'High', t.priority)}</select></label>
+        <label>Reminder<select class="input" data-field="remind">${[[-1, 'No reminder'], [0, 'At due time'], [10, '10 min before'], [60, '1 hour before'], [1440, '1 day before']].map(([v, l]) => opt(v, l, t.remind)).join('')}</select></label>
+        <label>Start date<input class="input" type="date" data-field="start" value="${esc(t.start)}"></label>
+        <label>Due<input class="input" type="datetime-local" data-field="due" value="${esc(t.due)}"></label>
+      </div>
+      ${repeatBlock(t)}
+      ${labelBlock(t)}
+      <h3>Checklist <span>${t.checklist.length ? `${doneSteps}/${t.checklist.length}` : ''}</span></h3>
+      <ul class="steps">${t.checklist.map((s) => `
+        <li class="step ${s.done ? 'done' : ''}">
+          <input type="checkbox" class="check" data-action="toggle-step" data-step="${esc(s.id)}" ${s.done ? 'checked' : ''} aria-label="Step done">
+          <input class="step-text" data-step-text="${esc(s.id)}" value="${esc(s.text)}" aria-label="Step">
+          <button class="icon-btn edit-only" data-action="promote-step" data-step="${esc(s.id)}" title="Turn into its own task">↗</button>
+          <button class="icon-btn edit-only" data-action="delete-step" data-step="${esc(s.id)}" title="Delete step">✕</button>
+        </li>`).join('')}</ul>
+      <form class="row edit-only" data-form="add-step"><input class="input grow" name="title" placeholder="Add a step…" autocomplete="off"><button class="btn small">Add</button></form>
+      <h3>Notes</h3>
+      <textarea class="input" data-field="notes" rows="6" placeholder="Details, links, phone numbers…">${esc(t.notes)}</textarea>
+      ${attachBlock(t)}
+    </fieldset>
+    <div class="drawer-foot">
+      <span class="meta">${t.created ? 'Created ' + esc(fmtStamp(t.created)) : ''}${t.done && t.completedAt ? ' · Done ' + esc(fmtStamp(t.completedAt)) : ''}</span>
+      <button class="btn small danger edit-only" data-action="delete-task" data-id="${esc(t.id)}">Delete task</button>
+    </div>`;
+}
+// Filled in by later sections (buckets/labels, recurring, attachments).
+function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
+function repeatBlock() { return ''; }
+function labelBlock() { return ''; }
+function attachBlock() { return ''; }
+
+function openTaskDrawer(id) {
+  state.openTask = id;
+  renderDrawer();
+  if (!state.readOnly && !currentTask()?.title) $('#drawer .drawer-title')?.focus();
+}
+function closeTaskDrawer() { state.openTask = null; renderDrawer(); }
+
+// A field in the drawer changed (selects, dates, and title/notes when you leave them).
+function setTaskField(field, value) {
+  const t = currentTask();
+  if (!t || state.readOnly) return;
+  if (field === 'title') {
+    if (!value.trim()) { renderDrawer(); return; } // never leave a task without a title
+    t.title = value.trim();
+  } else if (field === 'remind') t.remind = Number(value);
+  else if (field === 'due') { t.due = value; t.notified = false; }
+  else if (['bucket', 'progress', 'priority', 'start', 'notes'].includes(field)) t[field] = value;
+  else return;
+  afterTaskEdit(t, field);
+  changed('tasks');
+  render();
+}
+function afterTaskEdit() { /* recurring tasks hook in here */ }
+
+function completeTask(t) {
+  t.done = true;
+  t.completedAt = Date.now();
+}
+
+function addStep(text) {
+  const t = currentTask();
+  if (!t) return;
+  t.checklist.push({ id: uid(), text: text.trim(), done: false });
+  changed('tasks');
 }
 
 function renderCalendar() {
@@ -899,18 +1083,23 @@ function setView(view) {
 }
 
 function addTask(data) {
-  DB.tasks.push({
+  // A new task lands in the bucket/label you're currently looking at, so it doesn't vanish from view.
+  const filterBucket = state.taskBucket && state.taskBucket !== '-' ? state.taskBucket : '';
+  const t = normalizeTask({
     id: uid(),
     title: data.title.trim(),
     due: data.due || '',
     priority: data.priority || 'low',
     remind: data.remind != null ? Number(data.remind) : -1,
-    notified: false,
-    done: false,
     created: Date.now(),
+    myDay: data.myDay || '',
+    bucket: data.bucket != null ? data.bucket : state.view === 'tasks' ? filterBucket : '',
+    labels: state.view === 'tasks' && state.taskLabel ? [state.taskLabel] : [],
   });
+  DB.tasks.push(t);
   changed('tasks');
   if (data.due && Number(data.remind) >= 0) askNotifications();
+  return t;
 }
 
 function addEvent(data) {
@@ -932,7 +1121,7 @@ function newNote() {
 }
 
 function exportData() {
-  const payload = { app: 'PA App', version: 1, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() };
+  const payload = { app: 'PA App', version: 2, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' }));
   a.download = `PA App Export ${todayISO()}.json`;
@@ -944,7 +1133,7 @@ async function importData(file) {
   try {
     const parsed = JSON.parse(await file.text());
     const data = parsed.app === 'PA App' ? parsed.data : parsed; // older exports were the bare data
-    if (!data || !DATA_KEYS.every((k) => Array.isArray(data[k]))) throw new Error();
+    if (!data || !REQUIRED_KEYS.every((k) => Array.isArray(data[k]))) throw new Error();
     if (!confirm(`Replace everything here with ${data.tasks.length} tasks, ${data.notes.length} notes and ${data.events.length} events?`)) return;
     DB.importAll(data);
     changed(...DATA_KEYS);
@@ -999,7 +1188,10 @@ function checkReminders() {
 }
 
 // ===================== Events =====================
-const EDIT_ACTIONS = new Set(['toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note']);
+const EDIT_ACTIONS = new Set([
+  'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
+  'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
+]);
 
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('[data-view]');
@@ -1029,11 +1221,48 @@ document.addEventListener('click', (e) => {
   switch (action) {
     case 'toggle-task': {
       const t = DB.tasks.find((x) => x.id === id);
-      if (t) { t.done = !t.done; changed('tasks'); }
-      setTimeout(render, 150); // let the tick show before the list re-sorts
+      if (t) {
+        if (t.done) { t.done = false; t.completedAt = 0; } else completeTask(t);
+        changed('tasks');
+      }
+      setTimeout(() => { render(); renderDrawer(); }, 150); // let the tick show before the list re-sorts
       break;
     }
-    case 'delete-task': DB.tasks = DB.tasks.filter((x) => x.id !== id); changed('tasks'); render(); break;
+    case 'delete-task': {
+      const t = DB.tasks.find((x) => x.id === id);
+      if (!t) break;
+      const rich = t.notes.trim() || t.checklist.length || t.attachments.length;
+      if (rich && !confirm(`Delete "${t.title}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`)) break;
+      DB.tasks = DB.tasks.filter((x) => x.id !== id);
+      changed('tasks');
+      if (state.openTask === id) closeTaskDrawer();
+      render();
+      break;
+    }
+    case 'open-task': openTaskDrawer(id); break;
+    case 'close-task': closeTaskDrawer(); break;
+    case 'toggle-myday': {
+      const t = currentTask();
+      if (t) { t.myDay = inMyDay(t) ? '' : todayISO(); changed('tasks'); render(); renderDrawer(); }
+      break;
+    }
+    case 'toggle-step': case 'delete-step': case 'promote-step': {
+      const t = currentTask();
+      const s = t && t.checklist.find((x) => x.id === btn.dataset.step);
+      if (!s) break;
+      if (action === 'toggle-step') s.done = !s.done;
+      else {
+        t.checklist = t.checklist.filter((x) => x !== s);
+        if (action === 'promote-step') {
+          addTask({ title: s.text || 'Untitled step', bucket: t.bucket });
+          toast('Step turned into its own task');
+        }
+      }
+      changed('tasks');
+      render();
+      renderDrawer();
+      break;
+    }
     case 'clear-done': DB.tasks = DB.tasks.filter((x) => !x.done); changed('tasks'); render(); break;
     case 'delete-event': DB.events = DB.events.filter((x) => x.id !== id); changed('events'); render(); break;
     case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
@@ -1070,11 +1299,36 @@ document.addEventListener('submit', (e) => {
   if (state.readOnly) return toast('Read-only on this device');
   const data = Object.fromEntries(new FormData(form));
   if (!data.title || !data.title.trim()) return;
-  if (form.dataset.form === 'add-task') addTask(data);
-  else if (form.dataset.form === 'add-event') addEvent(data);
+  const kind = form.dataset.form;
+  const inDrawer = !!form.closest('#drawer');
+  if (kind === 'add-task') addTask(data);
+  else if (kind === 'add-event') addEvent(data);
+  else if (kind === 'add-step') addStep(data.title);
+  else if (kind === 'add-bucket') addBucket(data.title);
+  else if (kind === 'add-label') addLabel(data.title, data.color, inDrawer ? currentTask() : null);
   render();
-  $(`[data-form="${form.dataset.form}"] [name="title"]`)?.focus();
+  if (inDrawer) { renderDrawer(); $(`#drawer [data-form="${kind}"] [name="title"]`)?.focus(); }
+  else {
+    const where = form.dataset.bucket != null ? `[data-bucket="${CSS.escape(form.dataset.bucket)}"]` : '';
+    $(`#main [data-form="${kind}"]${where} [name="title"]`)?.focus();
+  }
 });
+
+// Typing in the drawer: update the task straight away, save shortly after you pause.
+let taskTimer;
+document.addEventListener('input', (e) => {
+  const t = currentTask();
+  if (!t || state.readOnly || !e.target.closest('#drawer')) return;
+  const field = e.target.dataset.field;
+  const stepId = e.target.dataset.stepText;
+  if (field === 'notes') t.notes = e.target.value;
+  else if (field === 'title') { if (!e.target.value.trim()) return; t.title = e.target.value; }
+  else if (stepId) { const s = t.checklist.find((x) => x.id === stepId); if (!s) return; s.text = e.target.value; }
+  else return;
+  clearTimeout(taskTimer);
+  taskTimer = setTimeout(() => { changed('tasks'); render(); }, 400);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.openTask) closeTaskDrawer(); });
 
 let noteTimer;
 document.addEventListener('input', (e) => {
@@ -1107,6 +1361,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.dataset?.field && e.target.closest('#drawer')) return setTaskField(e.target.dataset.field, e.target.value);
   const kind = e.target.dataset?.input;
   const file = e.target.files?.[0];
   if (!file) return;
@@ -1131,7 +1386,7 @@ setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, state, device, render, checkReminders, uid, toISO };
+window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask };
 </script>
 </body>
 </html>
