@@ -16,7 +16,7 @@ const click = (win, sel) => win.document.querySelector(sel).click();
 (async () => {
   // --- Data from before this feature (no buckets/labels keys, tasks without new fields) ---
   const oldTask = { id: 'old1', title: 'Old style task', due: '', priority: 'low', remind: -1, notified: false, done: false, created: 1 };
-  const app = loadApp({ storage: { pa_tasks: JSON.stringify([oldTask]), pa_notes: '[]', pa_events: '[]' } });
+  const app = loadApp({ storage: { pa_tasks: JSON.stringify([oldTask]), pa_notes: '[]', pa_events: '[]', dev_taskLayout: '"list"' } });
   const { win, doc, PA } = app;
   check(app.errors.length === 0, 'page loads without script errors');
   const t0 = PA.DB.tasks[0];
@@ -97,8 +97,8 @@ const click = (win, sel) => win.document.querySelector(sel).click();
 
   // Today page quick add goes to My Day
   win.document.querySelector('[data-view="today"]').click();
-  submitForm(win, 'add-task', { title: 'Quick today' });
-  const quick = PA.DB.tasks.find((x) => x.title === 'Quick today');
+  submitForm(win, 'quick-add', { title: 'Water the plants' });
+  const quick = PA.DB.tasks.find((x) => x.title === 'Water the plants');
   check(quick && quick.myDay === today, 'quick add on Today puts it in My Day');
 
   // Ticking done from the drawer

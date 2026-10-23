@@ -17,21 +17,31 @@ function pick(win, sel, value, type = 'input') {
   $(win, '[data-view="tasks"]').click();
 
   // --- Board view & buckets ---
+  check($(win, '.board') && $(win, '.main').classList.contains('wide'), 'Board is the default, using the full screen width');
+  $(win, '[data-action="layout"][data-layout="list"]').click();
+  check(win.localStorage.getItem('dev_taskLayout') === '"list"' && !$(win, '.main').classList.contains('wide'), 'list/board choice is remembered on this device');
   $(win, '[data-action="layout"][data-layout="board"]').click();
-  check(win.localStorage.getItem('dev_taskLayout') === '"board"', 'board/list choice is remembered on this device');
   submitForm(win, 'add-bucket', { title: 'Home' });
   submitForm(win, 'add-bucket', { title: 'Bills' });
   check(PA.DB.buckets.map((b) => b.name).join(',') === 'Home,Bills', 'buckets added in order');
   const [home, bills] = PA.DB.buckets;
   check($$(win, '[data-bucket-col]').map((c) => c.dataset.bucketCol).join(',') === `${home.id},${bills.id}`, 'one column per bucket (empty "No bucket" hidden)');
 
-  // Add straight into a column
-  const billsForm = $(win, `form[data-form="add-task"][data-bucket="${bills.id}"]`);
-  billsForm.elements.title.value = 'Electricity bill';
-  billsForm.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  // Add straight into a column, Planner style: "+ Add task" opens a card
+  $(win, `[data-action="board-add"][data-bucket="${bills.id}"]`).click();
+  const addCard = $(win, `form.add-card[data-bucket="${bills.id}"]`);
+  check(addCard && win.document.activeElement === addCard.elements.title, '"+ Add task" opens a card with the cursor in it');
+  addCard.elements.title.value = 'Electricity bill';
+  addCard.elements.dueDate.value = '2030-03-10';
+  addCard.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
   const elec = PA.DB.tasks.find((t) => t.title === 'Electricity bill');
-  check(elec && elec.bucket === bills.id, 'quick add in a column puts the task in that bucket');
+  check(elec && elec.bucket === bills.id, 'adding in a column puts the task in that bucket');
+  check(elec.due === '2030-03-10T23:59', '"Set due date" on the card sets a due date with no time');
   check($(win, `[data-bucket-col="${bills.id}"]`).textContent.includes('Electricity bill'), 'card shows in its column');
+  const again = $(win, `form.add-card[data-bucket="${bills.id}"]`);
+  check(again && win.document.activeElement === again.elements.title, 'the card stays open for the next task');
+  again.elements.title.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  check(!$(win, 'form.add-card'), 'Esc closes the card');
 
   // Move between buckets (what drag-and-drop calls)
   PA.moveTaskToBucket(elec.id, home.id);
@@ -51,7 +61,7 @@ function pick(win, sel, value, type = 'input') {
   PA.addTask({ title: 'No-bucket task', bucket: '' });
   pick(win, '[data-input="task-bucket"]', home.id);
   check($(win, '#main').textContent.includes('Electricity bill') && !$(win, '#main').textContent.includes('No-bucket task'), 'bucket filter shows only that bucket');
-  submitForm(win, 'add-task', { title: 'Added while filtered', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'Added while filtered' });
   check(PA.DB.tasks.find((t) => t.title === 'Added while filtered').bucket === home.id, 'a task added while filtered lands in that bucket');
   pick(win, '[data-input="task-bucket"]', '-');
   check($(win, '#main').textContent.includes('No-bucket task') && !$(win, '#main').textContent.includes('Electricity bill'), '"No bucket" filter works');

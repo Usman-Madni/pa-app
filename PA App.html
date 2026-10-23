@@ -64,6 +64,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-si
 
 /* ===== Main ===== */
 .main { flex: 1; min-width: 0; padding: 28px 32px 60px; max-width: 1100px; }
+.main.wide { max-width: none; } /* the board uses the whole screen */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .page-head h1 { margin: 0; font-size: 26px; }
 .sub { color: var(--muted); margin: 2px 0 0; }
@@ -185,7 +186,36 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .task-card .title { overflow-wrap: anywhere; }
 .task-card.done .title { text-decoration: line-through; color: var(--muted); }
 .task-card.dragging { opacity: .5; }
-.board-add .input { width: 100%; padding: 7px 10px; font-size: 14px; }
+.board-add-btn { width: 100%; text-align: left; border: 0; background: transparent; color: var(--muted); padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.board-add-btn:hover { background: var(--panel); color: var(--text); }
+.add-card { flex-direction: column; align-items: stretch; gap: 8px; border-color: var(--accent); }
+.add-card .input { padding: 7px 10px; font-size: 14px; }
+.add-card .row { flex-wrap: nowrap; }
+.add-card input[type="date"] { flex: 1; min-width: 0; }
+
+/* ===== Quick add bar (To Do style) ===== */
+.quick-add { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; }
+.quick-add:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.qa-main { display: flex; align-items: center; gap: 10px; padding: 4px 8px 4px 14px; flex-wrap: wrap; }
+.qa-circle { width: 20px; height: 20px; border: 2px solid var(--muted); border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); font-size: 16px; line-height: 1; }
+.quick-add:not(:focus-within) .qa-circle::before { content: "+"; }
+.quick-add:not(:focus-within) .qa-circle { border-color: transparent; color: var(--accent); font-size: 22px; }
+.qa-input { flex: 1; min-width: 200px; border: 0; background: transparent; padding: 10px 0; outline: none; font-size: 15px; }
+.qa-tools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.qa-tool { position: relative; }
+.qa-btn, .qa-select {
+  border: 0; background: transparent; color: var(--muted); padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.qa-btn:hover, .qa-select:hover { background: var(--panel-2); color: var(--text); }
+.qa-btn.set, .qa-select.set { color: var(--accent); font-weight: 600; }
+.qa-select option { color: var(--text); background: var(--panel); }
+.qa-native { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; }
+.qa-preview { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 12px 10px 44px; font-size: 13px; }
+.qa-preview:empty { display: none; }
+.qa-chip { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 9px; }
+.qa-chip.off { background: var(--panel-2); color: var(--muted); text-decoration: line-through; }
+.qa-hint { color: var(--muted); }
+.qa-link { border: 0; background: none; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0 4px; }
 .empty.small { padding: 8px; font-size: 13px; }
 .label-pill {
   display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
@@ -247,6 +277,9 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
   .drawer { width: 100vw; }
   .field-grid { grid-template-columns: 1fr; }
   .board-col { flex-basis: 82vw; }
+  .qa-input { min-width: 0; flex-basis: calc(100% - 40px); }
+  .qa-tools { padding-left: 22px; }
+  .qa-preview { padding-left: 14px; }
 }
 </style>
 </head>
@@ -417,6 +450,7 @@ const state = {
   openTask: null,          // id of the task shown in the details drawer
   taskBucket: '',          // Tasks filter: '' all, '-' no bucket, or a bucket id
   taskLabel: '',           // Tasks filter: '' all, or a label id
+  boardAdd: null,          // bucket id whose "+ Add task" card is open on the board ('' = No bucket)
 };
 
 // ===================== Data file (auto-save) =====================
@@ -792,7 +826,10 @@ function attachCard() {
 
 // ===================== Derived data =====================
 const taskDate = (t) => (t.due ? t.due.slice(0, 10) : '');
-const taskTime = (t) => (t.due ? t.due.slice(11, 16) : '');
+// A due date without a time is stored at 23:59 ("any time that day") and shown without a time.
+const ALL_DAY = '23:59';
+const taskTime = (t) => (t.due && t.due.slice(11, 16) !== ALL_DAY ? t.due.slice(11, 16) : '');
+const taskLayout = () => device.get('taskLayout', 'board'); // Board is the default; List is one click away
 const isOverdue = (t) => !t.done && !!t.due && new Date(t.due) < new Date();
 const inMyDay = (t) => t.myDay === todayISO(); // My Day empties itself each morning
 const currentTask = () => DB.tasks.find((t) => t.id === state.openTask) || null;
@@ -821,6 +858,7 @@ function render() {
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, settings: renderSettings };
   $('#main').innerHTML = (views[state.view] || renderToday)();
+  $('.main').classList.toggle('wide', state.view === 'tasks' && taskLayout() === 'board');
   renderStatus();
 }
 
@@ -889,7 +927,7 @@ function taskSummary(t) {
   if (t.notes.trim()) meta.push('<span title="Has notes">📝</span>');
   if (t.attachments.length) meta.push(`<span title="Attachments">📎 ${t.attachments.length}</span>`);
   const bucket = DB.buckets.find((b) => b.id === t.bucket);
-  const onBoard = state.view === 'tasks' && device.get('taskLayout', 'list') === 'board'; // the column already says it
+  const onBoard = state.view === 'tasks' && taskLayout() === 'board'; // the column already says it
   if (bucket && !onBoard) meta.push(`<span>▦ ${esc(bucket.name)}</span>`);
   const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
   return `
@@ -919,21 +957,238 @@ function dayItem(i) {
     </li>`;
 }
 
-function taskForm(compact = false) {
+// ===================== Quick add =====================
+// One box, like Microsoft To Do: type "Pay utilities bill Friday 6pm #bills @home every month !high"
+// and the dates, repeat, labels, bucket and priority are picked out. A preview under the box shows
+// what was understood, with a link to keep the words as typed. The small buttons on the right
+// (bucket, due date, reminder, repeat) set the same things by clicking.
+function quickAddBar(ctx) {
+  const tab = state.view === 'tasks' ? state.taskFilter : '';
+  const where = ctx === 'today' || tab === 'myday' ? 'Add a task to My Day' : tab === 'planned' ? 'Add a planned task (due today unless you say when)' : 'Add a task';
+  const bucket = state.view === 'tasks' && state.taskBucket && state.taskBucket !== '-' ? state.taskBucket : '';
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
   return `
-    <form class="row edit-only" data-form="add-task">
-      <input class="input grow" name="title" placeholder="${compact ? 'Add a task to My Day…' : 'Add a task…'}" required autocomplete="off">
-      ${compact ? `<input type="hidden" name="myDay" value="${todayISO()}">` : `
-      <input class="input" type="datetime-local" name="due" aria-label="Due">
-      <select class="input" name="priority" aria-label="Priority">
-        <option value="low">Low</option><option value="med">Medium</option><option value="high">High</option>
-      </select>
-      <select class="input" name="remind" aria-label="Reminder">
-        <option value="-1">No reminder</option><option value="0" selected>Remind at time</option>
-        <option value="10">10 min before</option><option value="60">1 hour before</option><option value="1440">1 day before</option>
-      </select>`}
-      <button class="btn primary">Add</button>
+    <form class="quick-add edit-only" data-form="quick-add" data-ctx="${ctx}" data-key="bar-${ctx}" autocomplete="off">
+      <div class="qa-main">
+        <span class="qa-circle" aria-hidden="true"></span>
+        <input class="qa-input" name="title" data-qa placeholder="${esc(where)} — try 'Pay utilities bill Friday 6pm'" aria-label="${esc(where)}">
+        <span class="qa-tools">
+          <select class="qa-select ${bucket ? 'set' : ''}" name="bucket" title="Bucket" data-qa-tool>
+            ${opt('', '▦ Bucket', bucket)}${sortedBuckets().map((b) => opt(b.id, '▦ ' + b.name, bucket)).join('')}
+          </select>
+          <span class="qa-tool">
+            <button type="button" class="qa-btn" data-action="qa-pick" title="Due date">📅 <span class="qa-val">Due</span></button>
+            <input class="qa-native" type="date" name="dueDate" tabindex="-1" aria-label="Due date" data-qa-tool>
+          </span>
+          <select class="qa-select" name="remind" title="Reminder" data-qa-tool>
+            ${opt('', '⏰ Remind', '')}${opt('0', '⏰ At due time', '')}${opt('10', '⏰ 10 min before', '')}${opt('60', '⏰ 1 hour before', '')}${opt('1440', '⏰ 1 day before', '')}
+          </select>
+          <select class="qa-select" name="repeat" title="Repeat" data-qa-tool>
+            ${opt('', '↻ Repeat', '')}${opt('daily', '↻ Daily', '')}${opt('weekdays', '↻ Weekdays', '')}${opt('weekly', '↻ Weekly', '')}${opt('monthly', '↻ Monthly', '')}${opt('yearly', '↻ Yearly', '')}
+          </select>
+        </span>
+      </div>
+      <div class="qa-preview"></div>
     </form>`;
+}
+
+// Planner-style: "+ Add task" opens a little card in the column.
+function boardAddCard(bucketId) {
+  return `
+    <form class="task-card add-card" data-form="quick-add" data-ctx="board" data-bucket="${esc(bucketId)}" data-key="col-${esc(bucketId)}" autocomplete="off">
+      <input class="input" name="title" data-qa placeholder="Enter a task name" aria-label="Task name">
+      <div class="qa-preview" style="padding:0"></div>
+      <div class="row">
+        <input class="input" type="date" name="dueDate" aria-label="Set due date" title="Set due date" data-qa-tool>
+        <button class="btn small primary">Add task</button>
+        <button type="button" class="icon-btn" data-action="board-add-cancel" title="Close (Esc)">✕</button>
+      </div>
+    </form>`;
+}
+
+const DOW_NAMES = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const DOW_WORD = 'sunday|sun|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat';
+const MONTH_WORD = 'january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec';
+const monthIndex = (w) => ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(w.slice(0, 3).toLowerCase());
+const dowIndex = (w) => DOW_NAMES[w.slice(0, 3).toLowerCase()];
+const squash = (s) => s.toLowerCase().replace(/[\s_-]+/g, '');
+
+// Reads a quick-add line. Returns {title, date, time, repeat, priority, labels:[names], bucket, parts:[preview text]}.
+function parseQuickAdd(text, now = new Date()) {
+  let s = ` ${text} `;
+  const out = { title: '', date: '', time: '', repeat: null, priority: '', labels: [], bucket: '', parts: [] };
+  const today = parseISO(toISO(now));
+  // Find the first match, let fn accept it (anything but false), then cut it out of the text.
+  const cut = (re, fn) => {
+    const m = s.match(re);
+    if (!m || fn(m) === false) return false;
+    s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
+    return true;
+  };
+  const before = '(?:\\s(?:by|on|due|for|this|next))?'; // little words that belong to the date
+  const end = '(?=[\\s,.;!?])';
+
+  // Repeat: "every day", "every 2 weeks", "every other month", "every Monday", "weekdays", "daily"…
+  cut(new RegExp(`(?:\\srepeats?)?\\s(every\\s+(other\\s+)?(?:(\\d{1,2})\\s+)?(days?|weeks?|months?|years?|weekdays?|${DOW_WORD})|daily|weekly|monthly|yearly|annually|weekdays)${end}`, 'i'), (m) => {
+    const n = m[3] ? Number(m[3]) : m[2] ? 2 : 1;
+    const unit = (m[4] || m[1]).toLowerCase();
+    if (/^(daily|days?)$/.test(unit)) out.repeat = { freq: 'daily', interval: n };
+    else if (/^weekdays?$/.test(unit)) out.repeat = { freq: 'weekdays', interval: 1 };
+    else if (/^(weekly|weeks?)$/.test(unit)) out.repeat = { freq: 'weekly', interval: n, days: [] };
+    else if (/^(monthly|months?)$/.test(unit)) out.repeat = { freq: 'monthly', interval: n };
+    else if (/^(yearly|annually|years?)$/.test(unit)) out.repeat = { freq: 'yearly', interval: n };
+    else out.repeat = { freq: 'weekly', interval: n, days: [dowIndex(unit)] };
+  });
+
+  // Priority: "!" or "!high", "!med", "!low"
+  cut(new RegExp(`\\s!(high|urgent|medium|med|low)?${end}`, 'i'), (m) => {
+    out.priority = !m[1] || /high|urgent/i.test(m[1]) ? 'high' : /low/i.test(m[1]) ? 'low' : 'med';
+  });
+  // Labels: "#bills" (made if new). Bucket: "@home" (must already exist).
+  while (cut(new RegExp(`\\s#([^\\s#@!,]+)${end}`), (m) => { out.labels.push(m[1]); }));
+  cut(new RegExp(`\\s@([^\\s#@!,]+)${end}`), (m) => {
+    const b = DB.buckets.find((x) => squash(x.name) === squash(m[1])) || DB.buckets.find((x) => squash(x.name).startsWith(squash(m[1])));
+    if (!b) return false;
+    out.bucket = b.id;
+  });
+
+  // Time: "6pm", "6:30 pm", "at 18:00", "noon"
+  const setTime = (h, mi, ap) => {
+    h = Number(h); mi = Number(mi || 0);
+    if (ap) {
+      if (h < 1 || h > 12) return false;
+      if (/pm/i.test(ap) && h < 12) h += 12;
+      if (/am/i.test(ap) && h === 12) h = 0;
+    }
+    if (h > 23 || mi > 59) return false;
+    out.time = `${pad(h)}:${pad(mi)}`;
+  };
+  cut(new RegExp(`(?:\\s(?:at|by))?\\s(\\d{1,2})(?::(\\d{2}))?\\s?(am|pm)${end}`, 'i'), (m) => setTime(m[1], m[2], m[3]))
+    || cut(new RegExp(`(?:\\s(?:at|by))?\\s([01]?\\d|2[0-3]):([0-5]\\d)${end}`, 'i'), (m) => setTime(m[1], m[2]))
+    || cut(new RegExp(`(?:\\s(?:at|by))?\\s(noon|midday)${end}`, 'i'), () => { out.time = '12:00'; });
+
+  // Date
+  const setDate = (d) => { out.date = toISO(d); };
+  const dated = (y, mIdx, d) => {
+    if (mIdx < 0 || d < 1 || d > 31) return false;
+    let yy = y ? Number(y) : today.getFullYear();
+    if (yy < 100) yy += 2000;
+    if (d > daysInMonth(yy, mIdx)) return false;
+    let date = new Date(yy, mIdx, d);
+    if (!y && date < today) date = new Date(yy + 1, mIdx, Math.min(d, daysInMonth(yy + 1, mIdx))); // "5 Jan" in December = next year
+    setDate(date);
+  };
+  cut(new RegExp(`${before}\\s(today|tonight)${end}`, 'i'), (m) => { setDate(today); if (/tonight/i.test(m[1]) && !out.time) out.time = '20:00'; })
+    || cut(new RegExp(`${before}\\s(day after tomorrow)${end}`, 'i'), () => setDate(addDays(today, 2)))
+    || cut(new RegExp(`${before}\\s(tomorrow|tmrw|tmr)${end}`, 'i'), () => setDate(addDays(today, 1)))
+    || cut(new RegExp(`\\sin\\s(\\d{1,3})\\s(days?|weeks?|months?)${end}`, 'i'), (m) => {
+      const n = Number(m[1]);
+      setDate(/day/i.test(m[2]) ? addDays(today, n) : /week/i.test(m[2]) ? addDays(today, 7 * n) : addMonthsClamped(today, n));
+    })
+    || cut(new RegExp(`(?:\\s(?:by|on|due|for))?\\snext\\s(week|month)${end}`, 'i'), (m) => {
+      setDate(/week/i.test(m[1]) ? addDays(today, ((8 - today.getDay()) % 7) || 7) : new Date(today.getFullYear(), today.getMonth() + 1, 1));
+    })
+    || cut(new RegExp(`${before}\\s(${DOW_WORD})${end}`, 'i'), (m) => {
+      const diff = (dowIndex(m[1]) - today.getDay() + 7) % 7 || 7; // the coming one, never today
+      setDate(addDays(today, diff));
+    })
+    || cut(new RegExp(`${before}\\s(\\d{1,2})(?:st|nd|rd|th)?\\s(?:of\\s)?(${MONTH_WORD})\\.?(?:,?\\s(\\d{4}))?${end}`, 'i'), (m) => dated(m[3], monthIndex(m[2]), Number(m[1])))
+    || cut(new RegExp(`${before}\\s(${MONTH_WORD})\\.?\\s(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s(\\d{4}))?${end}`, 'i'), (m) => dated(m[3], monthIndex(m[1]), Number(m[2])))
+    // Day/month numbers: only with a year ("28/10/2026") or after by/on/due ("due 28/10"), so "1/2 kg" stays text.
+    || cut(new RegExp(`${before}\\s(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{2,4})${end}`), (m) => dated(m[3], Number(m[2]) - 1, Number(m[1])))
+    || cut(new RegExp(`\\s(?:by|on|due)\\s(\\d{1,2})[/.-](\\d{1,2})${end}`, 'i'), (m) => dated('', Number(m[2]) - 1, Number(m[1])));
+
+  // Fill in what's implied
+  const nowKey = `${toISO(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  if (out.repeat && !out.date) {
+    // "every Monday" starts on the next Monday (today if it is Monday); other repeats start today —
+    // unless the time has already gone today, then at the next repeat.
+    const days = out.repeat.days || [];
+    let d = today;
+    if (days.length) while (!days.includes(d.getDay())) d = addDays(d, 1);
+    if (out.repeat.freq === 'weekdays') while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
+    setDate(d);
+    if (out.time && `${out.date}T${out.time}` <= nowKey) {
+      const next = nextDue({ due: `${out.date}T${out.time}`, repeat: { interval: 1, days: [], ...out.repeat, anchorDay: d.getDate() } }, now);
+      if (next) out.date = next.slice(0, 10);
+    }
+  }
+  if (out.time && !out.date) {
+    // "6pm" alone means today, or tomorrow if 6pm has already gone
+    setDate(`${toISO(today)}T${out.time}` <= nowKey ? addDays(today, 1) : today);
+  }
+
+  let title = s.replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 3; i++) title = title.replace(/[\s,;:-]+(by|on|at|due|for|this|next|every|and)$/i, '').replace(/[\s,;:-]+$/, '');
+  out.title = title || text.trim();
+
+  if (out.date) out.parts.push(`📅 ${out.date === toISO(today) ? 'Today' : fmtDay(out.date)}${out.time ? ' ' + fmtTime(out.time) : ''}`);
+  if (out.repeat) out.parts.push(`↻ ${repeatText({ interval: 1, days: [], ...out.repeat })}`);
+  if (out.priority) out.parts.push(out.priority === 'high' ? '❗ High' : out.priority === 'med' ? 'Medium' : 'Low');
+  if (out.bucket) out.parts.push(`▦ ${DB.buckets.find((b) => b.id === out.bucket).name}`);
+  for (const l of out.labels) out.parts.push(`🏷 ${l}${DB.labels.some((x) => squash(x.name) === squash(l)) ? '' : ' (new)'}`);
+  return out;
+}
+
+// Live preview under the box while typing.
+function updateQuickPreview(form) {
+  const box = form.querySelector('.qa-preview');
+  const text = form.elements.title.value;
+  // Tool buttons show what they're set to
+  const dueDate = form.elements.dueDate;
+  const val = form.querySelector('.qa-val');
+  if (val) { val.textContent = dueDate.value ? fmtDay(dueDate.value) : 'Due'; val.parentElement.classList.toggle('set', !!dueDate.value); }
+  form.querySelectorAll('select.qa-select').forEach((s) => s.classList.toggle('set', !!s.value));
+  if (!text.trim()) { box.innerHTML = ''; return; }
+  if (form.dataset.raw === '1') {
+    box.innerHTML = '<span class="qa-hint">Adding exactly as typed.</span><button type="button" class="qa-link" data-action="qa-raw">Pick out dates again</button>';
+    return;
+  }
+  const p = parseQuickAdd(text);
+  if (!p.parts.length) { box.innerHTML = form.dataset.ctx === 'board' ? '' : '<span class="qa-hint">Tip: dates like "tomorrow 5pm" or "every Monday", #label, @bucket, !high — press Enter to add</span>'; return; }
+  box.innerHTML = `<span class="qa-hint">“${esc(p.title)}”</span>${p.parts.map((x) => `<span class="qa-chip">${esc(x)}</span>`).join('')}<button type="button" class="qa-link" data-action="qa-raw">Keep words as typed</button>`;
+}
+
+function applyRepeat(t, r) {
+  if (!t.due) t.due = `${todayISO()}T${ALL_DAY}`;
+  t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...r };
+  if (t.repeat.freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
+  syncRepeatAnchor(t);
+}
+
+// Add a task from a quick-add box. Clicked choices beat typed ones; typed ones beat where you are.
+function quickAdd(form) {
+  const f = form.elements;
+  const text = f.title.value;
+  const p = form.dataset.raw === '1' ? { title: text.trim(), date: '', time: '', labels: [] } : parseQuickAdd(text);
+  if (!p.title) return null;
+  const ctx = form.dataset.ctx;
+  const tab = state.view === 'tasks' ? state.taskFilter : '';
+  let date = (f.dueDate && f.dueDate.value) || p.date;
+  if (!date && tab === 'planned') date = todayISO();
+  const due = date ? `${date}T${p.time || ALL_DAY}` : '';
+  const pickedBucket = f.bucket && f.bucket.value;
+  const t = addTask({
+    title: p.title,
+    due,
+    priority: p.priority || 'low',
+    remind: f.remind && f.remind.value !== '' ? Number(f.remind.value) : due && p.time ? 0 : -1,
+    bucket: pickedBucket || p.bucket || (ctx === 'board' ? form.dataset.bucket : undefined),
+    myDay: ctx === 'today' || tab === 'myday' ? todayISO() : '',
+  });
+  if (p.bucket && !pickedBucket) t.bucket = p.bucket;
+  for (const name of p.labels) {
+    let l = DB.labels.find((x) => squash(x.name) === squash(name));
+    if (!l) { addLabel(name, '', null); l = DB.labels[DB.labels.length - 1]; }
+    if (!t.labels.includes(l.id)) t.labels.push(l.id);
+  }
+  const repeatPick = f.repeat && f.repeat.value;
+  if (repeatPick) applyRepeat(t, { freq: repeatPick });
+  else if (p.repeat) applyRepeat(t, p.repeat);
+  changed('tasks', 'labels');
+  const bits = [taskDate(t) ? (taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))) + (taskTime(t) ? ' ' + fmtTime(taskTime(t)) : '') : '', t.repeat ? repeatText(t.repeat).toLowerCase() : ''].filter(Boolean);
+  toast(`Added “${t.title}”${bits.length ? ' — ' + bits.join(', ') : ''}`);
+  return t;
 }
 
 function renderToday() {
@@ -956,7 +1211,7 @@ function renderToday() {
     <div class="grid grid-main">
       <div class="card">
         <h2>☀ My Day</h2>
-        ${taskForm(true)}
+        ${quickAddBar('today')}
         <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing for today 🎉</li>'}</ul>
         ${noDate.length ? `<h2 style="margin-top:16px">Anytime</h2><ul class="list">${noDate.map(taskItem).join('')}</ul>` : ''}
       </div>
@@ -988,7 +1243,7 @@ function renderTasks() {
   const f = TASK_TABS[state.taskFilter] ? state.taskFilter : 'active';
   if (state.taskBucket && state.taskBucket !== '-' && !DB.buckets.some((b) => b.id === state.taskBucket)) state.taskBucket = '';
   if (state.taskLabel && !DB.labels.some((l) => l.id === state.taskLabel)) state.taskLabel = '';
-  const layout = device.get('taskLayout', 'list');
+  const layout = taskLayout();
   const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t)));
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
@@ -1010,9 +1265,9 @@ function renderTasks() {
         <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">▦ Board</button>
       </div>
     </div>
+    ${quickAddBar('tasks')}
     ${layout === 'board' ? renderBoard(list) : `<div class="card">
-      ${taskForm()}
-      <ul class="list" style="margin-top:8px">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
+      <ul class="list">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
       ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
     </div>`}`;
 }
@@ -1034,10 +1289,7 @@ function renderBoard(list) {
             <button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete bucket">✕</button>
           </span>` : ''}
         </header>
-        <form class="board-add edit-only" data-form="add-task" data-bucket="${esc(b.id)}">
-          <input type="hidden" name="bucket" value="${esc(b.id)}">
-          <input class="input" name="title" placeholder="+ Add a task" autocomplete="off">
-        </form>
+        ${state.readOnly ? '' : state.boardAdd === b.id ? boardAddCard(b.id) : `<button class="board-add-btn" data-action="board-add" data-bucket="${esc(b.id)}">+ Add task</button>`}
         <div class="board-cards">${cards.map(taskCard).join('') || '<div class="empty small">Nothing here</div>'}</div>
       </section>`;
   }).join('');
@@ -1738,7 +1990,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
-  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach',
+  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -1789,6 +2041,24 @@ document.addEventListener('click', (e) => {
     }
     case 'open-task': openTaskDrawer(id); break;
     case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
+    case 'board-add':
+      state.boardAdd = btn.dataset.bucket;
+      render();
+      $(`#main form[data-key="col-${CSS.escape(state.boardAdd)}"] [name="title"]`)?.focus();
+      break;
+    case 'board-add-cancel': state.boardAdd = null; render(); break;
+    case 'qa-raw': {
+      const form = btn.closest('form');
+      form.dataset.raw = form.dataset.raw === '1' ? '' : '1';
+      updateQuickPreview(form);
+      form.elements.title.focus();
+      break;
+    }
+    case 'qa-pick': {
+      const input = btn.parentElement.querySelector('.qa-native');
+      try { input.showPicker(); } catch { input.focus(); input.click(); }
+      break;
+    }
     case 'at-folder': AT.pickFolder(); break;
     case 'at-reconnect': AT.reconnect(); break;
     case 'open-attach': { const t = currentTask(); const a = t && t.attachments.find((x) => x.id === btn.dataset.att); if (a) AT.open(a); break; }
@@ -1878,6 +2148,14 @@ document.addEventListener('submit', (e) => {
   if (!data.title || !data.title.trim()) return;
   const kind = form.dataset.form;
   const inDrawer = !!form.closest('#drawer');
+  if (kind === 'quick-add') {
+    quickAdd(form);
+    const key = form.dataset.key;
+    render();
+    const again = $(`#main form[data-key="${CSS.escape(key)}"] [name="title"]`);
+    if (again) again.focus(); // ready for the next one
+    return;
+  }
   if (kind === 'add-task') addTask(data);
   else if (kind === 'add-event') addEvent(data);
   else if (kind === 'add-step') addStep(data.title);
@@ -1905,7 +2183,18 @@ document.addEventListener('input', (e) => {
   clearTimeout(taskTimer);
   taskTimer = setTimeout(() => { changed('tasks'); render(); }, 400);
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.openTask) closeTaskDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
+  if (state.openTask) closeTaskDrawer();
+});
+// Quick add: preview what was understood as you type or pick.
+document.addEventListener('input', (e) => {
+  if (e.target.matches?.('[data-qa]')) updateQuickPreview(e.target.form);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('[data-qa-tool]')) updateQuickPreview(e.target.form);
+});
 
 // Board drag and drop (computer only; phones are read-only).
 document.addEventListener('dragstart', (e) => {

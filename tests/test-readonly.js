@@ -11,7 +11,7 @@ const fileText = JSON.stringify({
 });
 
 (async () => {
-  const app = loadApp({ fsa: false });
+  const app = loadApp({ fsa: false, storage: { dev_taskLayout: '"list"' } });
   const { win, doc, PA } = app;
   check(app.errors.length === 0, 'page loads without script errors');
   check(PA.state.readOnly === true, 'browser without file access is read-only');
@@ -30,7 +30,7 @@ const fileText = JSON.stringify({
   check(PA.DB.tasks[0].done === false, 'clicking a task does not change it');
   doc.querySelector('[data-action="delete-task"]').click();
   check(PA.DB.tasks.length === 1, 'delete does nothing');
-  const form = doc.querySelector('[data-form="add-task"]');
+  const form = doc.querySelector('[data-form="quick-add"]');
   form.elements.title.value = 'Sneaky';
   form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
   check(PA.DB.tasks.length === 1, 'adding a task does nothing');

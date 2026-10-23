@@ -17,7 +17,7 @@ function otherDeviceSave(handle, mutate) {
   const app = loadApp({ pickFile: file, pickFolder: folder });
   const { win, PA } = app;
   win.document.querySelector('[data-view="tasks"]').click();
-  submitForm(win, 'add-task', { title: 'First task', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'First task' });
 
   await PA.DF.createNew();
   let content = file.json();
@@ -27,7 +27,7 @@ function otherDeviceSave(handle, mutate) {
   check(win.localStorage.getItem('dev_unsaved') === 'false', 'browser knows it is in step with the file');
 
   // Change -> save
-  submitForm(win, 'add-task', { title: 'Second task', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'Second task' });
   await PA.DF.save();
   check(file.json().data.tasks.length === 2, 'next change saves to the file');
   check(file.json().saveToken !== content.saveToken, 'each save gets a new version token');
@@ -36,7 +36,7 @@ function otherDeviceSave(handle, mutate) {
   await PA.DF.pickBackupFolder();
   const backups = Object.keys(folder.files);
   check(backups.length === 1 && /^PA App Backup \d\d-\d\d-\d\d \d{1,2}-\d\d(am|pm)\.json$/.test(backups[0]), 'choosing a backup folder writes a dated backup');
-  submitForm(win, 'add-task', { title: 'Third task', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'Third task' });
   await PA.DF.save();
   check(Object.keys(folder.files).length === 1, 'only one backup per day');
 
@@ -47,7 +47,7 @@ function otherDeviceSave(handle, mutate) {
   check(PA.DF.status === 'ok', 'status back to ok');
 
   // --- Both changed -> conflict, nothing saved until resolved ---
-  submitForm(win, 'add-task', { title: 'Mine', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'Mine' });
   otherDeviceSave(file, (d) => d.tasks.push({ id: 'x2', title: 'Theirs', due: '', priority: 'low', remind: -1, done: false }));
   const writesBefore = file.writes;
   await PA.DF.save();
@@ -63,7 +63,7 @@ function otherDeviceSave(handle, mutate) {
   check(after.includes('Mine') && !after.includes('Theirs'), "'Keep this device's version' writes mine");
 
   // Use theirs
-  submitForm(win, 'add-task', { title: 'Mine again', due: '', priority: 'low', remind: '-1' });
+  submitForm(win, 'quick-add', { title: 'Mine again' });
   otherDeviceSave(file, (d) => d.tasks.push({ id: 'x3', title: 'Theirs again', due: '', priority: 'low', remind: -1, done: false }));
   await PA.DF.save();
   PA.DF.useTheirs();
@@ -85,7 +85,7 @@ function otherDeviceSave(handle, mutate) {
 
   // --- Linking a file when both sides have data -> ask ---
   const both = loadApp({ pickFile: fakeFile('pa-app-data.json', full.text) });
-  submitForm(both.win, 'add-task', { title: 'Local only' });
+  submitForm(both.win, 'quick-add', { title: 'Local only' });
   await both.PA.DF.openExisting();
   check(both.PA.DF.status === 'conflict', 'linking a file when both have data asks which to keep');
   both.close();
