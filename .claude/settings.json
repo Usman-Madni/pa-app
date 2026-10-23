@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run setup)",
+      "Bash(node tests/run-all.js)",
+      "Bash(node tests/run-all.js --verbose)",
+      "Bash(node tests/test-*.js)",
+      "Bash(node tools/serve.js)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

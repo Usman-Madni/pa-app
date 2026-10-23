@@ -3,3 +3,5 @@ node_modules/
 # Real data and backups stay out of git (they live wherever you pick them)
 pa-app-data*.json
 PA App Backup *.json
+CLAUDE.local.md
+private-terms.txt

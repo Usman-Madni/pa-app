@@ -1,46 +1,38 @@
-# Personal Assistant
+# PA App
 
-A lightweight web app for tasks & reminders, notes, a calendar, and Gmail + Google Calendar sync.
-No build step and no dependencies — just Node.js to serve the files.
+Your personal assistant: tasks with reminders, notes and a calendar, all in one file.
 
-## Run it
+## Use it
+Open **`PA App.html`** in **Chrome or Edge** on your computer. Nothing to install.
 
+**First time:**
+1. Go to **Settings → Data file → Create new data file**. Save it in OneDrive, e.g. `pa-app-data.json`.
+   From then on, every change saves to that file automatically, 2 seconds after you stop typing.
+2. In the same place, choose **Daily backups → Choose backup folder**, for example the `backups` folder here.
+   The first save each day also writes a dated backup copy there.
+
+**After restarting the browser,** click **Reconnect data file** once. Browsers ask again for file access after a restart.
+
+**Using two computers:**
+- Open the same data file on both (**Settings → Open existing data file**).
+- Each computer picks up the other's saves within about 20 seconds.
+- If both changed something in the meantime, the app asks which version to keep.
+- Best used on one computer at a time.
+
+## On your phone (read-only for now)
+- Open **https://usman-madni.github.io/pa-app/PA%20App.html** on your phone. You can add it to your home screen.
+- On a phone the app only shows your data and never changes it. That stops two different copies from appearing.
+- Tap **Open data file** and pick `pa-app-data.json` from OneDrive. To see newer changes, tap **Open newer file** and pick it again.
+- Planned: full editing on the phone through OneDrive.
+
+## Theme
+The **🌓** button in the sidebar switches between Auto (follows Windows), Dark and Light.
+
+## For development
 ```bash
-node server.js
+npm run setup
 ```
-
-Then open http://localhost:5173.
-
-Tasks, notes and events are saved in your browser (localStorage). Use **Settings → Export backup** to move them between devices.
-
-## Features
-
-- **Today** — greeting, tasks due/overdue, today's schedule, unread email count
-- **Tasks** — due date/time, priority, reminders (at time, 10 min, 1 h, 1 day before), filters
-- **Calendar** — month view combining your events, task due dates and Google Calendar; add events (optionally to Google too)
-- **Notes** — searchable notes that autosave as you type
-- **Inbox** — your latest unread Gmail, click to open in Gmail
-- **Reminders** — desktop notifications while the app is open in a tab
-
-## Connect Gmail + Google Calendar (one-time, ~5 minutes)
-
-1. Go to https://console.cloud.google.com/ and create a project (any name).
-2. **APIs & Services → Library**: enable **Gmail API** and **Google Calendar API**.
-3. **APIs & Services → OAuth consent screen**: choose *External*, fill in the app name and your email,
-   and under **Test users** add your own Gmail address.
-4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
-   - Application type: **Web application**
-   - Authorized JavaScript origins: `http://localhost:5173`
-5. Copy the **Client ID** (ends in `.apps.googleusercontent.com`) into `config.js`:
-
-   ```js
-   window.APP_CONFIG = { GOOGLE_CLIENT_ID: '1234-abc.apps.googleusercontent.com' };
-   ```
-
-6. Reload the app, go to **Settings → Connect Google account**.
-
-Google will say the app is "unverified" — that's expected for a personal app in testing mode; click
-**Continue**. Access tokens last about an hour, after which the app asks you to reconnect.
-
-Permissions requested: read Gmail (read-only), read/create Calendar events, and your email address.
-No data is sent anywhere except directly between your browser and Google.
+```bash
+npm test
+```
+`npm run setup` installs the test tools once, outside the project folder. See `CLAUDE.md` and `PA_APP_CONTEXT.md`.

@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PA App</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><path d='M9 16.5l4.5 4.5L23 11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+/* ===== Colours: light by default, dark follows Windows unless the 🌓 switch says otherwise ===== */
+:root {
+  --bg: #f6f7fb;
+  --panel: #ffffff;
+  --panel-2: #f1f3f9;
+  --text: #1c2030;
+  --muted: #6b7185;
+  --border: #e3e6ef;
+  --accent: #4f46e5;
+  --accent-soft: #eceafd;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 4px 16px rgba(20, 24, 40, .05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
+    --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
+  --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+
+.app { display: flex; min-height: 100vh; }
+
+/* ===== Sidebar ===== */
+.sidebar {
+  width: 220px; flex-shrink: 0; padding: 20px 12px; border-right: 1px solid var(--border); background: var(--panel);
+  display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; font-weight: 700; font-size: 17px; }
+.logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.nav-btn {
+  display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 0; border-radius: 9px;
+  background: transparent; cursor: pointer; text-align: left; color: var(--muted);
+}
+.nav-btn:hover { background: var(--panel-2); color: var(--text); }
+.nav-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ico { width: 20px; text-align: center; }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
+.df-badge { font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 8px; background: var(--panel-2); }
+.theme-btn { font-size: 12px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 8px; cursor: pointer; color: var(--muted); }
+
+/* ===== Main ===== */
+.main { flex: 1; min-width: 0; padding: 28px 32px 60px; max-width: 1100px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.page-head h1 { margin: 0; font-size: 26px; }
+.sub { color: var(--muted); margin: 2px 0 0; }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+.card h2 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-main { grid-template-columns: 1.4fr 1fr; }
+.stat { font-size: 30px; font-weight: 700; }
+.stat-label { color: var(--muted); font-size: 13px; }
+
+/* ===== Forms & buttons ===== */
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.input { padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); min-width: 0; }
+.input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.grow { flex: 1; min-width: 160px; }
+.btn { padding: 9px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--panel-2); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.icon-btn { border: 0; background: transparent; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
+.icon-btn:hover { background: var(--panel-2); color: var(--danger); }
+.tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 10px; }
+.tab { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); }
+.tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
+
+/* Read-only devices (phones): editing controls disappear */
+body.readonly .edit-only { display: none !important; }
+
+/* ===== Lists ===== */
+.list { list-style: none; margin: 0; padding: 0; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.item:last-child { border-bottom: 0; }
+.item .body { flex: 1; min-width: 0; }
+.item .title { overflow-wrap: anywhere; }
+.item.done .title { text-decoration: line-through; color: var(--muted); }
+.meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
+.meta .overdue { color: var(--danger); font-weight: 600; }
+.check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.pill.high { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.pill.med { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+.time { font-variant-numeric: tabular-nums; color: var(--muted); width: 54px; flex-shrink: 0; font-size: 13px; }
+
+/* ===== Calendar ===== */
+.cal-layout { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cal-head h2 { margin: 0; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-dow { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0; }
+.cal-day {
+  min-height: 88px; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel);
+  cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 3px; overflow: hidden;
+}
+.cal-day:hover { border-color: var(--accent); }
+.cal-day.other { opacity: .45; }
+.cal-day.today .num { background: var(--accent); color: #fff; }
+.cal-day.selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+.num { font-size: 12px; font-weight: 600; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; }
+.chip { font-size: 11px; padding: 1px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--accent-soft); color: var(--accent); }
+.chip.task { background: var(--panel-2); color: var(--muted); }
+.more { font-size: 11px; color: var(--muted); }
+
+/* ===== Notes ===== */
+.notes-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; min-height: 70vh; }
+.note-list { display: flex; flex-direction: column; gap: 6px; max-height: 75vh; overflow: auto; }
+.note-card { text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); cursor: pointer; }
+.note-card.active { border-color: var(--accent); background: var(--accent-soft); }
+.note-card .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-card .p { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.editor { display: flex; flex-direction: column; gap: 10px; }
+.editor .note-title { font-size: 20px; font-weight: 700; border: 0; background: transparent; padding: 4px 0; outline: none; }
+.editor textarea { flex: 1; min-height: 55vh; resize: vertical; border: 0; background: transparent; outline: none; line-height: 1.6; }
+
+/* ===== Banners & toasts ===== */
+.banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.banner.error { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+.status-dot.on { background: var(--ok); }
+.status-dot.warn { background: var(--warn); }
+.status-dot.bad { background: var(--danger); }
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast { background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.2); max-width: 320px; animation: pop .2s ease-out; }
+@keyframes pop { from { transform: translateY(8px); opacity: 0; } }
+
+/* ===== Phones & narrow screens ===== */
+@media (max-width: 900px) {
+  .grid-2, .grid-main, .cal-layout, .notes-layout { grid-template-columns: 1fr; }
+  .cal-day { min-height: 60px; }
+}
+@media (max-width: 680px) {
+  .app { flex-direction: column; }
+  .sidebar {
+    position: fixed; bottom: 0; top: auto; left: 0; right: 0; height: auto; width: auto; z-index: 20;
+    flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    border-right: 0; border-top: 1px solid var(--border);
+  }
+  .brand, .side-foot { display: none; }
+  .nav-btn { flex-direction: column; gap: 0; font-size: 11px; padding: 6px 4px; flex: 1; align-items: center; }
+  .ico { font-size: 18px; }
+  .main { padding: 20px 16px 90px; }
+  .cal-day .chip, .cal-day .more { display: none; }
+  .cal-day { min-height: 46px; align-items: center; }
+  .cal-day.has-items::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .toasts { bottom: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="brand"><span class="logo">✓</span><span>PA App</span></div>
+    <button class="nav-btn" data-view="today"><span class="ico">☀</span><span>Today</span></button>
+    <button class="nav-btn" data-view="tasks"><span class="ico">☑</span><span>Tasks</span></button>
+    <button class="nav-btn" data-view="calendar"><span class="ico">▦</span><span>Calendar</span></button>
+    <button class="nav-btn" data-view="notes"><span class="ico">✎</span><span>Notes</span></button>
+    <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span>Settings</span></button>
+    <div class="side-foot">
+      <div class="df-badge" id="df-badge"></div>
+      <button class="theme-btn" data-action="cycle-theme" id="theme-btn"></button>
+    </div>
+  </nav>
+  <main class="main"><div id="banner"></div><div id="main"></div></main>
+</div>
+<div id="toasts" class="toasts"></div>
+
+<script>
+'use strict';
+/* PA App — tasks, reminders, notes and a calendar in one file.
+   Data lives in localStorage (pa_* keys) and is mirrored to a JSON data file the user links once
+   (File System Access API, Chrome/Edge desktop). Browsers without that API (phones) are read-only:
+   they open the data file to view it but can never change it, so copies can't drift apart.
+   Read PA_APP_CONTEXT.md before changing the data model or the save logic. */
+
+// ===================== Helpers =====================
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+
+// Dates are always local YYYY-MM-DD. Never use .toISOString() for a date: it converts to UTC and
+// shifts the day in any timezone away from UTC. toISOString is only for exact instants such as savedAt.
+const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const todayISO = () => toISO(new Date());
+const parseISO = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const fmtTime = (hhmm) => {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+const fmtDay = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+
+// Record IDs: time + crypto random + a counter, so two devices (or two clicks in the same millisecond) never collide.
+let idCounter = 0;
+function uid() {
+  const r = new Uint32Array(2);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(r);
+  else { r[0] = Math.random() * 2 ** 32; r[1] = Math.random() * 2 ** 32; }
+  return `${Date.now().toString(36)}-${r[0].toString(36)}${r[1].toString(36)}-${(idCounter++).toString(36)}`;
+}
+
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// ===================== Per-device settings =====================
+// Things that belong to this browser only (theme, open screen, save bookkeeping). They never go
+// into the data file or backups, otherwise one computer's flags would overwrite another's.
+const device = {
+  get(key, fallback) {
+    try { const v = localStorage.getItem('dev_' + key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem('dev_' + key, JSON.stringify(value)); } catch { /* private mode: settings just won't stick */ }
+  },
+  remove(key) { try { localStorage.removeItem('dev_' + key); } catch { /* ignore */ } },
+};
+const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Computer');
+
+// ===================== Shared data =====================
+// tasks:  {id, title, due:'YYYY-MM-DDTHH:mm'|'', priority:'low'|'med'|'high', remind:-1|0|10|60|1440, notified, done, created}
+// notes:  {id, title, body, updated}
+// events: {id, title, date:'YYYY-MM-DD', time:'HH:mm'|''}
+// Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
+const DATA_KEYS = ['tasks', 'notes', 'events'];
+const DB = {
+  tasks: [], notes: [], events: [],
+  load() {
+    for (const k of DATA_KEYS) {
+      try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
+    }
+  },
+  persist(k) {
+    if (state.readOnly) return;
+    try { localStorage.setItem('pa_' + k, JSON.stringify(this[k])); } catch { toast('Could not save in this browser — storage is full or blocked'); }
+  },
+  exportAll() { return { tasks: this.tasks, notes: this.notes, events: this.events }; },
+  importAll(data) {
+    if (!data || !DATA_KEYS.every((k) => Array.isArray(data[k]))) throw new Error('This file has no PA App data in it');
+    for (const k of DATA_KEYS) { this[k] = data[k]; this.persist(k); }
+  },
+  isEmpty() { return DATA_KEYS.every((k) => this[k].length === 0); },
+};
+
+// Every edit goes through here: save in the browser, then queue a save to the data file.
+function changed(...keys) {
+  if (state.readOnly) return;
+  keys.forEach((k) => DB.persist(k));
+  DF.markDirty();
+}
+
+// ===================== Screen state =====================
+const params = new URLSearchParams(location.search);
+function isPhone() {
+  if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
+  return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad asking for the desktop site
+}
+const state = {
+  view: device.get('view', 'today'),
+  taskFilter: 'active',
+  noteQuery: '',
+  activeNote: null,
+  calMonth: monthStart(new Date()),
+  selectedDay: todayISO(),
+  // Read-only on phones/tablets (even ones whose Chrome can write files — the phone must never make a
+  // second copy), in browsers that can't write files (Safari, Firefox), or with ?readonly in the address.
+  readOnly: isPhone() || typeof window.showOpenFilePicker !== 'function' || params.has('readonly'),
+  remindedHere: new Set(), // read-only devices remember shown reminders here instead of changing the data
+};
+
+// ===================== Data file (auto-save) =====================
+const FILE_TYPES = [{ description: 'PA App data', accept: { 'application/json': ['.json'] } }];
+const DF = {
+  DEBOUNCE_MS: 2000,
+  POLL_MS: 20000,
+  handle: null,
+  backupDir: null,
+  status: 'none',      // none | reconnect | ok | conflict | error
+  conflict: null,      // the file's contents while a conflict is open
+  fileInfo: null,      // {savedAt, savedFrom}
+  error: '',
+  saving: false,
+  timer: null,
+
+  async init() {
+    if (state.readOnly) return;
+    const [h, b] = await Promise.all([idb.get('data'), idb.get('backups')]);
+    this.backupDir = b || null;
+    if (!h) { renderStatus(); return; }
+    this.handle = h;
+    if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') await this.check();
+    else { this.status = 'reconnect'; renderStatus(); }
+  },
+
+  // Browsers ask again for file access after a restart; this must run from a click.
+  async reconnect() {
+    try {
+      if ((await this.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given — data is only saving in this browser');
+      if (this.backupDir) await this.backupDir.requestPermission({ mode: 'readwrite' }).catch(() => {});
+      await this.check();
+    } catch (e) { this.fail(e); }
+  },
+
+  async createNew() {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: 'pa-app-data.json', types: FILE_TYPES });
+      await this.attach(h);
+      await this.write();
+      toast('Data file created — changes now save to it automatically');
+    } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
+  },
+
+  async openExisting() {
+    try {
+      const [h] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      if ((await h.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given');
+      await this.attach(h);
+      await this.check();
+    } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
+  },
+
+  async attach(h) {
+    this.handle = h;
+    this.status = 'ok';
+    // A different file means the last-seen version no longer applies.
+    device.remove('seenToken');
+    await idb.set('data', h);
+  },
+
+  async unlink() {
+    this.handle = null;
+    this.status = 'none';
+    this.conflict = null;
+    this.fileInfo = null;
+    device.remove('seenToken');
+    await idb.del('data');
+    render();
+  },
+
+  async readFile() {
+    const text = await (await this.handle.getFile()).text();
+    if (!text.trim()) return null;
+    const file = JSON.parse(text);
+    if (!file || file.app !== 'PA App' || !file.data) throw new Error('That file is not a PA App data file');
+    return file;
+  },
+
+  // Compare the file with this browser and decide: carry on, load the newer file, or ask.
+  async check() {
+    if (!this.handle || this.status === 'conflict') return;
+    try {
+      const file = await this.readFile();
+      if (!file) { this.status = 'ok'; await this.write(); return; } // brand-new empty file
+      this.fileInfo = { savedAt: file.savedAt, savedFrom: file.savedFrom };
+      const seen = device.get('seenToken', null);
+      const unsaved = device.get('unsaved', false);
+      if (file.saveToken === seen) {
+        this.status = 'ok';
+        if (unsaved) this.schedule();
+      } else if (!unsaved || DB.isEmpty()) {
+        // Someone else saved and we have nothing of our own to lose. An empty browser never wins.
+        this.load(file);
+        toast(`Loaded the latest data (saved on ${file.savedFrom || 'another device'})`);
+      } else {
+        this.status = 'conflict';
+        this.conflict = file;
+      }
+    } catch (e) { this.fail(e); } finally { renderStatus(); }
+  },
+
+  load(file) {
+    DB.importAll(file.data);
+    device.set('seenToken', file.saveToken);
+    device.set('unsaved', false);
+    this.fileInfo = { savedAt: file.savedAt, savedFrom: file.savedFrom };
+    this.status = 'ok';
+    this.conflict = null;
+    this.error = '';
+    render();
+  },
+
+  markDirty() {
+    device.set('unsaved', true);
+    this.schedule();
+    renderStatus();
+  },
+
+  schedule() {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.save(), this.DEBOUNCE_MS);
+  },
+
+  async save() {
+    if (!this.handle || this.status !== 'ok') return;
+    if (this.saving) return this.schedule();
+    this.saving = true;
+    try {
+      const file = await this.readFile();
+      // The file moved on since we last read it: stop and ask instead of overwriting someone's work.
+      if (file && file.saveToken !== device.get('seenToken', null)) {
+        this.status = 'conflict';
+        this.conflict = file;
+        return;
+      }
+      await this.write();
+    } catch (e) { this.fail(e); } finally { this.saving = false; renderStatus(); }
+  },
+
+  async write() {
+    const payload = {
+      app: 'PA App',
+      version: 1,
+      saveToken: uid(),
+      savedAt: new Date().toISOString(), // instant, not a calendar date
+      savedFrom: deviceName(),
+      data: DB.exportAll(),
+    };
+    const w = await this.handle.createWritable(); // writes to a temp copy, swapped in on close
+    await w.write(JSON.stringify(payload, null, 1));
+    await w.close();
+    device.set('seenToken', payload.saveToken);
+    device.set('unsaved', false);
+    this.fileInfo = { savedAt: payload.savedAt, savedFrom: payload.savedFrom };
+    this.status = 'ok';
+    this.error = '';
+    await this.dailyBackup(payload);
+  },
+
+  async keepMine() {
+    this.status = 'ok';
+    this.conflict = null;
+    try { await this.write(); toast("Saved this device's version to the file"); } catch (e) { this.fail(e); }
+    renderStatus();
+  },
+
+  useTheirs() {
+    this.load(this.conflict);
+    toast("Loaded the file's version");
+  },
+
+  async pickBackupFolder() {
+    try {
+      this.backupDir = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await idb.set('backups', this.backupDir);
+      device.remove('lastBackupDay');
+      await this.dailyBackup({ app: 'PA App', version: 1, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() });
+      render();
+    } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
+  },
+
+  // First save of each day also drops a dated copy in the backups folder. Never overwrites a backup.
+  async dailyBackup(payload) {
+    if (!this.backupDir) return;
+    const day = todayISO();
+    if (device.get('lastBackupDay', '') === day) return;
+    try {
+      if ((await this.backupDir.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
+      const now = new Date();
+      const h = now.getHours() % 12 || 12;
+      const name = `PA App Backup ${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${String(now.getFullYear()).slice(2)} ${h}-${pad(now.getMinutes())}${now.getHours() < 12 ? 'am' : 'pm'}.json`;
+      let exists = true;
+      try { await this.backupDir.getFileHandle(name); } catch { exists = false; }
+      if (!exists) {
+        const w = await (await this.backupDir.getFileHandle(name, { create: true })).createWritable();
+        await w.write(JSON.stringify(payload, null, 1));
+        await w.close();
+      }
+      device.set('lastBackupDay', day);
+    } catch (e) {
+      toast('Daily backup failed: ' + e.message);
+    }
+  },
+
+  fail(e) {
+    this.status = this.handle ? 'error' : 'none';
+    this.error = e.message || String(e);
+    renderStatus();
+  },
+};
+
+// IndexedDB keeps the file handles so the link survives restarts (localStorage can't hold them).
+const idb = {
+  open() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('no IndexedDB'));
+      const req = indexedDB.open('pa_datafile', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('handles');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async run(mode, fn) {
+    try {
+      const db = await this.open();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', mode);
+        const req = fn(tx.objectStore('handles'));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch { return undefined; }
+  },
+  get(key) { return this.run('readonly', (s) => s.get(key)); },
+  set(key, value) { return this.run('readwrite', (s) => s.put(value, key)); },
+  del(key) { return this.run('readwrite', (s) => s.delete(key)); },
+};
+
+// ===================== Read-only view (phones) =====================
+const RO = {
+  info: device.get('roInfo', null), // {fileName, savedAt, savedFrom, openedAt}
+  boot() {
+    const cached = device.get('roData', null);
+    if (cached) { try { DB.importAll(cached); } catch { /* bad cache: start empty */ } }
+  },
+  async open(file) {
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || parsed.app !== 'PA App' || !parsed.data) throw new Error('That file is not a PA App data file');
+      DB.importAll(parsed.data);
+      this.info = { fileName: file.name, savedAt: parsed.savedAt, savedFrom: parsed.savedFrom, openedAt: new Date().toISOString() };
+      device.set('roData', parsed.data);
+      device.set('roInfo', this.info);
+      toast('Data file opened (read-only)');
+      render();
+    } catch (e) {
+      toast(e.message.startsWith('That file') ? e.message : 'Could not read that file');
+    }
+  },
+};
+
+// ===================== Derived data =====================
+const taskDate = (t) => (t.due ? t.due.slice(0, 10) : '');
+const taskTime = (t) => (t.due ? t.due.slice(11, 16) : '');
+const isOverdue = (t) => !t.done && !!t.due && new Date(t.due) < new Date();
+
+function sortTasks(list) {
+  const prio = { high: 0, med: 1, low: 2 };
+  return [...list].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (!!a.due !== !!b.due) return a.due ? -1 : 1;
+    if (a.due !== b.due) return a.due < b.due ? -1 : 1;
+    return prio[a.priority] - prio[b.priority];
+  });
+}
+
+function itemsForDay(key) {
+  const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task' }));
+  return [...events, ...tasks].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+}
+
+// ===================== Rendering =====================
+function render() {
+  document.body.classList.toggle('readonly', state.readOnly);
+  $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, settings: renderSettings };
+  $('#main').innerHTML = (views[state.view] || renderToday)();
+  renderStatus();
+}
+
+// Status bits only — safe to call while the user is typing (doesn't rebuild the page).
+function renderStatus() {
+  const theme = device.get('theme', 'auto');
+  $('#theme-btn').textContent = `🌓 Theme: ${theme[0].toUpperCase() + theme.slice(1)}`;
+  $('#df-badge').innerHTML = statusBadge();
+  $('#banner').innerHTML = statusBanner();
+  const card = $('#df-card');
+  if (card) card.innerHTML = dataFileCard();
+}
+
+function statusBadge() {
+  if (state.readOnly) return '<span class="status-dot warn"></span>Read-only';
+  const unsaved = device.get('unsaved', false);
+  switch (DF.status) {
+    case 'ok': return unsaved ? '<span class="status-dot warn"></span>Saving…' : '<span class="status-dot on"></span>Saved to file';
+    case 'reconnect': return '<span class="status-dot warn"></span>Reconnect file';
+    case 'conflict': return '<span class="status-dot bad"></span>Needs a decision';
+    case 'error': return '<span class="status-dot bad"></span>Save problem';
+    default: return '<span class="status-dot"></span>Browser only';
+  }
+}
+
+function statusBanner() {
+  if (state.readOnly) {
+    const i = RO.info;
+    return `<div class="banner warn">
+      <span>👁 <b>Read-only view.</b> ${i ? `Showing <b>${esc(i.fileName)}</b>, saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')}.` : 'Open your data file to see your tasks, notes and events.'}</span>
+      <label class="btn small primary">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>
+    </div>`;
+  }
+  switch (DF.status) {
+    case 'reconnect':
+      return `<div class="banner warn"><span>Your data file needs permission again after the restart. Until then changes only save in this browser.</span>
+        <button class="btn small primary" data-action="df-reconnect">Reconnect data file</button></div>`;
+    case 'conflict': {
+      const c = DF.conflict || {};
+      return `<div class="banner error"><span><b>Your data changed here and in the file.</b> The file was saved ${esc(fmtStamp(c.savedAt))} on ${esc(c.savedFrom || 'another device')}. Saving is paused until you choose.</span>
+        <span class="row"><button class="btn small" data-action="df-keep-mine">Keep this device's version</button>
+        <button class="btn small primary" data-action="df-use-theirs">Use the file's version</button></span></div>`;
+    }
+    case 'error':
+      return `<div class="banner error"><span>Couldn't save to the data file: ${esc(DF.error)}</span><button class="btn small" data-action="df-retry">Try again</button></div>`;
+    default:
+      return '';
+  }
+}
+
+function taskItem(t) {
+  const meta = [];
+  if (t.due) {
+    const when = `${taskDate(t) === todayISO() ? 'Today' : fmtDay(taskDate(t))}${taskTime(t) ? ' ' + fmtTime(taskTime(t)) : ''}`;
+    meta.push(`<span class="${isOverdue(t) ? 'overdue' : ''}">${isOverdue(t) ? 'Overdue · ' : ''}${esc(when)}</span>`);
+  }
+  if (t.remind >= 0 && t.due && !t.done) {
+    const r = t.remind === 0 ? 'at time' : t.remind >= 1440 ? '1 day before' : t.remind >= 60 ? `${t.remind / 60}h before` : `${t.remind}m before`;
+    meta.push(`<span>🔔 ${r}</span>`);
+  }
+  return `
+    <li class="item ${t.done ? 'done' : ''}">
+      <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
+      <div class="body">
+        <div class="title">${esc(t.title)} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''}</div>
+        ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
+      </div>
+      <button class="icon-btn edit-only" data-action="delete-task" data-id="${esc(t.id)}" title="Delete">✕</button>
+    </li>`;
+}
+
+function dayItem(i) {
+  const tag = i.kind === 'task' ? '<span class="pill">Task</span>' : '';
+  const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
+  return `
+    <li class="item ${i.done ? 'done' : ''}">
+      <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
+      <div class="body"><div class="title">${esc(i.title)} ${tag}</div></div>
+      ${del}
+    </li>`;
+}
+
+function taskForm(compact = false) {
+  return `
+    <form class="row edit-only" data-form="add-task">
+      <input class="input grow" name="title" placeholder="Add a task…" required autocomplete="off">
+      ${compact ? '' : `
+      <input class="input" type="datetime-local" name="due" aria-label="Due">
+      <select class="input" name="priority" aria-label="Priority">
+        <option value="low">Low</option><option value="med">Medium</option><option value="high">High</option>
+      </select>
+      <select class="input" name="remind" aria-label="Reminder">
+        <option value="-1">No reminder</option><option value="0" selected>Remind at time</option>
+        <option value="10">10 min before</option><option value="60">1 hour before</option><option value="1440">1 day before</option>
+      </select>`}
+      <button class="btn primary">Add</button>
+    </form>`;
+}
+
+function renderToday() {
+  const now = new Date();
+  const hour = now.getHours();
+  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const tk = todayISO();
+  const open = DB.tasks.filter((t) => !t.done);
+  const dueToday = sortTasks(open.filter((t) => taskDate(t) === tk || isOverdue(t)));
+  const noDate = sortTasks(open.filter((t) => !t.due)).slice(0, 5);
+  const schedule = itemsForDay(tk).filter((i) => i.kind !== 'task');
+  return `
+    <div class="page-head">
+      <div><h1>${greet}</h1><p class="sub">${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+    </div>
+    <div class="grid grid-2" style="margin-bottom:16px">
+      <div class="card"><div class="stat">${dueToday.length}</div><div class="stat-label">Tasks due today / overdue</div></div>
+      <div class="card"><div class="stat">${schedule.length}</div><div class="stat-label">Events today</div></div>
+    </div>
+    <div class="grid grid-main">
+      <div class="card">
+        <h2>Today's tasks</h2>
+        ${taskForm(true)}
+        <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing due today 🎉</li>'}</ul>
+        ${noDate.length ? `<h2 style="margin-top:16px">Anytime</h2><ul class="list">${noDate.map(taskItem).join('')}</ul>` : ''}
+      </div>
+      <div class="card">
+        <h2>Schedule <button class="btn small" data-goto="calendar">Open calendar</button></h2>
+        <ul class="list">${schedule.map(dayItem).join('') || '<li class="empty">No events today</li>'}</ul>
+      </div>
+    </div>`;
+}
+
+function renderTasks() {
+  const f = state.taskFilter;
+  const tk = todayISO();
+  const filters = {
+    active: (t) => !t.done,
+    today: (t) => !t.done && (taskDate(t) === tk || isOverdue(t)),
+    upcoming: (t) => !t.done && !!t.due && taskDate(t) > tk,
+    done: (t) => t.done,
+  };
+  const list = sortTasks(DB.tasks.filter(filters[f]));
+  const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
+  return `
+    <div class="page-head">
+      <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done).length} open</p></div>
+      <div class="tabs">${tab('active', 'All open')}${tab('today', 'Today')}${tab('upcoming', 'Upcoming')}${tab('done', 'Done')}</div>
+    </div>
+    <div class="card">
+      ${taskForm()}
+      <ul class="list" style="margin-top:8px">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
+      ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
+    </div>`;
+}
+
+function renderCalendar() {
+  const m = state.calMonth;
+  const start = new Date(m.getFullYear(), m.getMonth(), 1 - m.getDay());
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const k = toISO(d);
+    const items = itemsForDay(k);
+    const chips = items.slice(0, 3).map((it) => `<span class="chip ${it.kind === 'task' ? 'task' : ''}">${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
+    cells.push(`
+      <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
+        <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
+      </button>`);
+    // Drop the 6th row when it would only hold next month's days.
+    if (i === 34 && new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getMonth() !== m.getMonth()) break;
+  }
+  const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => `<div class="cal-dow">${d}</div>`).join('');
+  const sel = state.selectedDay;
+  return `
+    <div class="page-head"><div><h1>Calendar</h1><p class="sub">Events and task due dates</p></div></div>
+    <div class="cal-layout">
+      <div class="card">
+        <div class="cal-head">
+          <button class="btn small" data-action="cal-prev" aria-label="Previous month">‹</button>
+          <h2>${m.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h2>
+          <div class="row"><button class="btn small" data-action="cal-today">Today</button><button class="btn small" data-action="cal-next" aria-label="Next month">›</button></div>
+        </div>
+        <div class="cal-grid">${dows}${cells.join('')}</div>
+      </div>
+      <div class="card">
+        <h2>${fmtDay(sel)}</h2>
+        <ul class="list">${itemsForDay(sel).map(dayItem).join('') || '<li class="empty">Nothing scheduled</li>'}</ul>
+        <form class="edit-only" data-form="add-event" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+          <input class="input" name="title" placeholder="New event…" required autocomplete="off">
+          <div class="row">
+            <input class="input grow" type="date" name="date" value="${sel}" required>
+            <input class="input" type="time" name="time" aria-label="Time">
+          </div>
+          <button class="btn primary">Add event</button>
+        </form>
+      </div>
+    </div>`;
+}
+
+function renderNotes() {
+  const q = state.noteQuery.toLowerCase();
+  const notes = [...DB.notes]
+    .sort((a, b) => b.updated - a.updated)
+    .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q));
+  if (!DB.notes.some((n) => n.id === state.activeNote)) state.activeNote = notes[0]?.id || null;
+  const active = DB.notes.find((n) => n.id === state.activeNote);
+  const ro = state.readOnly ? 'readonly' : '';
+  return `
+    <div class="page-head">
+      <div><h1>Notes</h1><p class="sub">${DB.notes.length} note${DB.notes.length === 1 ? '' : 's'}${state.readOnly ? '' : ' · saved automatically'}</p></div>
+      <button class="btn primary edit-only" data-action="new-note">+ New note</button>
+    </div>
+    <div class="notes-layout">
+      <div>
+        <input class="input" style="width:100%;margin-bottom:10px" placeholder="Search notes…" data-input="note-search" value="${esc(state.noteQuery)}">
+        <div class="note-list">
+          ${notes.map((n) => `
+            <button class="note-card ${n.id === state.activeNote ? 'active' : ''}" data-note="${esc(n.id)}">
+              <div class="t">${esc(n.title || 'Untitled')}</div>
+              <div class="p">${esc(n.body.slice(0, 80) || 'Empty note')}</div>
+            </button>`).join('') || '<div class="empty">No notes yet</div>'}
+        </div>
+      </div>
+      <div class="card editor">
+        ${active ? `
+          <input class="note-title" data-input="note-title" value="${esc(active.title)}" placeholder="Title" ${ro}>
+          <div class="meta"><span>Edited ${esc(fmtStamp(active.updated))}</span></div>
+          <textarea data-input="note-body" placeholder="Start writing…" ${ro}>${esc(active.body)}</textarea>
+          <div class="row edit-only" style="justify-content:flex-end"><button class="btn small danger" data-action="delete-note">Delete note</button></div>
+        ` : `<div class="empty">${state.readOnly ? 'No notes in this file' : 'Create a note to get started'}</div>`}
+      </div>
+    </div>`;
+}
+
+function dataFileCard() {
+  if (state.readOnly) {
+    const i = RO.info;
+    return `
+      <h2>Data file (read-only on this device)</h2>
+      <p class="sub">This browser can't save to files, so it only shows your data — it can never change it. That keeps your copies from drifting apart.</p>
+      ${i ? `<p>Showing <b>${esc(i.fileName)}</b><br><span class="sub">Saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')} · opened ${esc(fmtStamp(i.openedAt))}</span></p>` : ''}
+      <label class="btn primary">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>`;
+  }
+  const unsaved = device.get('unsaved', false);
+  if (!DF.handle) {
+    return `
+      <h2>Data file</h2>
+      <p class="sub">Right now your data only lives in this browser. Link a data file (for example in OneDrive) and every change saves to it automatically — 2 seconds after you stop typing.</p>
+      <div class="row">
+        <button class="btn primary" data-action="df-create">Create new data file</button>
+        <button class="btn" data-action="df-open">Open existing data file</button>
+      </div>`;
+  }
+  const label = { ok: unsaved ? 'Saving…' : 'Saved', reconnect: 'Waiting for permission', conflict: 'Needs a decision (see the banner at the top)', error: 'Save problem' }[DF.status] || DF.status;
+  return `
+    <h2>Data file</h2>
+    <p><span class="status-dot ${DF.status === 'ok' ? 'on' : DF.status === 'reconnect' ? 'warn' : 'bad'}"></span><b>${esc(DF.handle.name)}</b> — ${esc(label)}</p>
+    ${DF.fileInfo ? `<p class="sub">Last saved ${esc(fmtStamp(DF.fileInfo.savedAt))} on ${esc(DF.fileInfo.savedFrom || '?')}</p>` : ''}
+    <div class="row">
+      ${DF.status === 'reconnect' ? '<button class="btn primary" data-action="df-reconnect">Reconnect</button>' : ''}
+      <button class="btn" data-action="df-open">Switch file…</button>
+      <button class="btn danger" data-action="df-unlink">Unlink</button>
+    </div>
+    <h2 style="margin-top:18px">Daily backups</h2>
+    <p class="sub">${DF.backupDir ? `Backing up to the <b>${esc(DF.backupDir.name)}</b> folder — one dated copy on the first save of each day.` : 'Pick a folder and the first save of each day also writes a dated backup there.'}</p>
+    <button class="btn" data-action="df-backup-folder">${DF.backupDir ? 'Change backup folder' : 'Choose backup folder'}</button>`;
+}
+
+function renderSettings() {
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  return `
+    <div class="page-head"><div><h1>Settings</h1></div></div>
+    <div class="grid" style="max-width:720px">
+      <div class="card" id="df-card">${dataFileCard()}</div>
+      <div class="card">
+        <h2>This device</h2>
+        <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
+        <div class="row"><input class="input grow" data-input="device-name" value="${esc(deviceName())}" maxlength="40"></div>
+      </div>
+      <div class="card">
+        <h2>Reminders</h2>
+        <p class="sub">Desktop notifications fire while the app is open in a tab.</p>
+        <p>Status: <b>${perm === 'granted' ? 'Enabled' : perm === 'denied' ? 'Blocked in browser settings' : perm === 'unsupported' ? 'Not supported in this browser' : 'Not enabled yet'}</b></p>
+        <div class="row">
+          ${perm === 'default' ? '<button class="btn primary" data-action="enable-notifications">Enable notifications</button>' : ''}
+          <button class="btn" data-action="test-notification">Send test reminder</button>
+        </div>
+      </div>
+      <div class="card edit-only">
+        <h2>Manual backup</h2>
+        <p class="sub">An extra copy you control. Importing replaces everything in this browser (and then the data file).</p>
+        <div class="row">
+          <button class="btn" data-action="export">⬇ Export backup</button>
+          <label class="btn">⬆ Import backup<input type="file" accept="application/json" data-input="import" hidden></label>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ===================== Actions =====================
+function setView(view) {
+  state.view = view;
+  device.set('view', view);
+  render();
+  try { window.scrollTo(0, 0); } catch { /* not available in tests */ }
+}
+
+function addTask(data) {
+  DB.tasks.push({
+    id: uid(),
+    title: data.title.trim(),
+    due: data.due || '',
+    priority: data.priority || 'low',
+    remind: data.remind != null ? Number(data.remind) : -1,
+    notified: false,
+    done: false,
+    created: Date.now(),
+  });
+  changed('tasks');
+  if (data.due && Number(data.remind) >= 0) askNotifications();
+}
+
+function addEvent(data) {
+  DB.events.push({ id: uid(), title: data.title.trim(), date: data.date, time: data.time || '' });
+  changed('events');
+  state.selectedDay = data.date;
+  const d = parseISO(data.date);
+  if (d.getMonth() !== state.calMonth.getMonth() || d.getFullYear() !== state.calMonth.getFullYear()) state.calMonth = monthStart(d);
+}
+
+function newNote() {
+  const n = { id: uid(), title: '', body: '', updated: Date.now() };
+  DB.notes.push(n);
+  state.activeNote = n.id;
+  state.noteQuery = '';
+  changed('notes');
+  render();
+  $('[data-input="note-title"]')?.focus();
+}
+
+function exportData() {
+  const payload = { app: 'PA App', version: 1, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' }));
+  a.download = `PA App Export ${todayISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importData(file) {
+  try {
+    const parsed = JSON.parse(await file.text());
+    const data = parsed.app === 'PA App' ? parsed.data : parsed; // older exports were the bare data
+    if (!data || !DATA_KEYS.every((k) => Array.isArray(data[k]))) throw new Error();
+    if (!confirm(`Replace everything here with ${data.tasks.length} tasks, ${data.notes.length} notes and ${data.events.length} events?`)) return;
+    DB.importAll(data);
+    changed(...DATA_KEYS);
+    toast('Backup imported');
+    render();
+  } catch {
+    toast('That file is not a valid PA App backup');
+  }
+}
+
+function cycleTheme() {
+  const order = ['auto', 'dark', 'light'];
+  const next = order[(order.indexOf(device.get('theme', 'auto')) + 1) % order.length];
+  device.set('theme', next);
+  applyTheme();
+  renderStatus();
+}
+function applyTheme() {
+  const t = device.get('theme', 'auto');
+  if (t === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+}
+
+// ===================== Reminders =====================
+function askNotifications() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(() => state.view === 'settings' && render());
+  }
+}
+
+function notify(title, body) {
+  toast(`🔔 ${title}${body ? ' — ' + body : ''}`);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification(title, { body, tag: title }); } catch { /* some browsers need a service worker; the toast already showed */ }
+  }
+}
+
+function checkReminders() {
+  const now = Date.now();
+  let changedAny = false;
+  for (const t of DB.tasks) {
+    if (t.done || t.notified || !t.due || t.remind < 0 || state.remindedHere.has(t.id)) continue;
+    if (now < new Date(t.due).getTime() - t.remind * 60000) continue;
+    notify(t.title, t.remind === 0 ? 'Due now' : `Due at ${fmtTime(taskTime(t))}`);
+    if (state.readOnly) state.remindedHere.add(t.id);
+    else { t.notified = true; changedAny = true; }
+  }
+  if (changedAny) {
+    changed('tasks');
+    if (['today', 'tasks'].includes(state.view)) render();
+  }
+}
+
+// ===================== Events =====================
+const EDIT_ACTIONS = new Set(['toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note']);
+
+document.addEventListener('click', (e) => {
+  const nav = e.target.closest('[data-view]');
+  if (nav) return setView(nav.dataset.view);
+  const go = e.target.closest('[data-goto]');
+  if (go) return setView(go.dataset.goto);
+
+  const filter = e.target.closest('[data-filter]');
+  if (filter) { state.taskFilter = filter.dataset.filter; return render(); }
+
+  const day = e.target.closest('[data-day]');
+  if (day) {
+    state.selectedDay = day.dataset.day;
+    const d = parseISO(day.dataset.day);
+    if (d.getMonth() !== state.calMonth.getMonth()) state.calMonth = monthStart(d);
+    return render();
+  }
+
+  const note = e.target.closest('[data-note]');
+  if (note) { state.activeNote = note.dataset.note; return render(); }
+
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+  if (state.readOnly && EDIT_ACTIONS.has(action)) { e.preventDefault(); return toast('Read-only on this device'); }
+  switch (action) {
+    case 'toggle-task': {
+      const t = DB.tasks.find((x) => x.id === id);
+      if (t) { t.done = !t.done; changed('tasks'); }
+      setTimeout(render, 150); // let the tick show before the list re-sorts
+      break;
+    }
+    case 'delete-task': DB.tasks = DB.tasks.filter((x) => x.id !== id); changed('tasks'); render(); break;
+    case 'clear-done': DB.tasks = DB.tasks.filter((x) => !x.done); changed('tasks'); render(); break;
+    case 'delete-event': DB.events = DB.events.filter((x) => x.id !== id); changed('events'); render(); break;
+    case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
+    case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
+    case 'cal-today': state.calMonth = monthStart(new Date()); state.selectedDay = todayISO(); render(); break;
+    case 'new-note': newNote(); break;
+    case 'delete-note':
+      if (confirm('Delete this note?')) {
+        DB.notes = DB.notes.filter((n) => n.id !== state.activeNote);
+        state.activeNote = null;
+        changed('notes');
+        render();
+      }
+      break;
+    case 'df-create': DF.createNew().then(render); break;
+    case 'df-open': DF.openExisting().then(render); break;
+    case 'df-unlink': if (confirm('Stop saving to this data file? The file itself is kept.')) DF.unlink(); break;
+    case 'df-reconnect': DF.reconnect().then(render); break;
+    case 'df-retry': DF.status = 'ok'; DF.save(); break;
+    case 'df-keep-mine': DF.keepMine(); break;
+    case 'df-use-theirs': DF.useTheirs(); break;
+    case 'df-backup-folder': DF.pickBackupFolder(); break;
+    case 'cycle-theme': cycleTheme(); break;
+    case 'enable-notifications': askNotifications(); break;
+    case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
+    case 'export': exportData(); break;
+  }
+});
+
+document.addEventListener('submit', (e) => {
+  const form = e.target.closest('[data-form]');
+  if (!form) return;
+  e.preventDefault();
+  if (state.readOnly) return toast('Read-only on this device');
+  const data = Object.fromEntries(new FormData(form));
+  if (!data.title || !data.title.trim()) return;
+  if (form.dataset.form === 'add-task') addTask(data);
+  else if (form.dataset.form === 'add-event') addEvent(data);
+  render();
+  $(`[data-form="${form.dataset.form}"] [name="title"]`)?.focus();
+});
+
+let noteTimer;
+document.addEventListener('input', (e) => {
+  const kind = e.target.dataset?.input;
+  if (!kind) return;
+  if (kind === 'note-search') {
+    state.noteQuery = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const input = $('[data-input="note-search"]');
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    return;
+  }
+  if (kind === 'device-name') { device.set('name', e.target.value.trim() || 'Computer'); return; }
+  if (state.readOnly) return;
+  const n = DB.notes.find((x) => x.id === state.activeNote);
+  if (!n || (kind !== 'note-title' && kind !== 'note-body')) return;
+  if (kind === 'note-title') n.title = e.target.value;
+  else n.body = e.target.value;
+  n.updated = Date.now();
+  // Update the list preview in place so typing never loses focus.
+  const card = $(`[data-note="${CSS.escape(n.id)}"]`);
+  if (card) {
+    $('.t', card).textContent = n.title || 'Untitled';
+    $('.p', card).textContent = n.body.slice(0, 80) || 'Empty note';
+  }
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => changed('notes'), 300);
+});
+
+document.addEventListener('change', (e) => {
+  const kind = e.target.dataset?.input;
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (kind === 'import') importData(file);
+  if (kind === 'ro-open') RO.open(file);
+  e.target.value = '';
+});
+
+// Before the tab closes, push any typed-but-not-yet-saved note into the browser store.
+window.addEventListener('beforeunload', () => { if (!state.readOnly) DB.persist('notes'); });
+// Coming back to the tab: see if another device saved meanwhile.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && DF.status === 'ok') DF.check(); });
+
+// ===================== Start =====================
+applyTheme();
+if (state.readOnly) RO.boot(); else DB.load();
+render();
+DF.init();
+checkReminders();
+setInterval(checkReminders, 20000);
+setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
+setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
+
+// For tests and debugging in the console.
+window.PA = { DB, DF, RO, state, device, render, checkReminders, uid, toISO };
+</script>
+</body>
+</html>

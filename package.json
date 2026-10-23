@@ -1,0 +1,11 @@
+{
+  "name": "pa-app",
+  "private": true,
+  "description": "PA App — personal assistant in one HTML file. Test tools install outside the project folder (see tools/setup.js).",
+  "scripts": {
+    "setup": "node tools/setup.js",
+    "test": "node tests/run-all.js",
+    "check-private": "node tools/check-private.js",
+    "install-hooks": "node tools/install-hooks.js"
+  }
+}
