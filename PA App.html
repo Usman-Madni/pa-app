@@ -89,8 +89,8 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-si
 .btn.small { padding: 4px 10px; font-size: 13px; }
 .icon-btn { border: 0; background: transparent; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
 .icon-btn:hover { background: var(--panel-2); color: var(--danger); }
-.tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 10px; }
-.tab { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); }
+.tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 10px; max-width: 100%; overflow-x: auto; }
+.tab { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); white-space: nowrap; }
 .tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
 
 /* Read-only devices (phones): editing controls disappear */
@@ -155,6 +155,7 @@ body.drawer-open .drawer-backdrop { display: block; }
 .drawer-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 10px; border-bottom: 1px solid var(--border); }
 .drawer-title { flex: 1; min-width: 0; font-size: 18px; font-weight: 700; border: 0; background: transparent; outline: none; padding: 4px 0; }
 .drawer-body { flex: 1; overflow: auto; padding: 12px 16px 20px; border: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.drawer-body > * { flex-shrink: 0; } /* scroll instead of squashing the notes box */
 .drawer-body h3 { margin: 10px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 .drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
