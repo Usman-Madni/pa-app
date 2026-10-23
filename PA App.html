@@ -299,6 +299,8 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .p-select:focus, .p-input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 .p-select option { color: var(--text); background: var(--panel); }
 .p-input:disabled { opacity: .45; }
+.p-check { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.p-check input { margin-top: 2px; flex-shrink: 0; }
 .p-mini { border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0 2px; }
 .p-sub { padding: 8px 12px 12px 44px; display: flex; flex-direction: column; gap: 8px; }
 .p-sub.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
@@ -2225,7 +2227,7 @@ function repeatBlock(t) {
     </div>
     ${r ? `<div class="p-sub">
       ${box}
-      <label class="row meta" style="gap:6px"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}> Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</label>
+      <label class="p-check meta"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}><span>Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</span></label>
       ${next ? `<p class="meta" style="margin:0">↻ ${next}</p>` : ''}
     </div>` : ''}`;
 }

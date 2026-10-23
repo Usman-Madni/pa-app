@@ -47,7 +47,22 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **Daily backups:** the first save of each day writes `PA App Backup DD-MM-YY H-MMam.json` into the chosen folder. It never overwrites an existing backup.
 
 ## Tasks: drawer, views, board
-- **Drawer:** clicking a task opens the details drawer (`renderDrawer`). It's rebuilt only on structural changes (open, close, checklist, labels, repeat), never while you type, so the cursor stays put. Typing updates the task at once and saves 400 ms after a pause.
+- **Drawer:** clicking a task opens the details drawer (`renderDrawer`).
+  - **Rebuilding:** it's rebuilt only on structural changes (open, close, checklist, labels, repeat), never while you type, so the cursor stays put. Typing updates the task at once and saves 400 ms after a pause. A rebuild keeps the scroll position for the same task.
+  - **Layout,** like Microsoft To Do, in cards (`p-card`) of rows (`p-row`):
+    1. steps and "Add step"
+    2. My Day
+    3. done on (when done), due date + optional time, reminders, repeat
+    4. bucket, priority, progress, start, labels
+    5. files
+    6. the note
+  - History comes after the cards. The footer has ⧉ Duplicate and Delete.
+  - **"+ New task"** opens it on a blank task, which is dropped if left unnamed.
+- **Done on… pop-up:** ticking any task opens it (`openDonePrompt`). Its date and time default to now, "No time" is allowed (`completedAllDay`), and Esc/Cancel leaves the task undone.
+  - A done task's date can be changed in the panel (`setDoneDate`).
+  - For "again after I finish it" repeats, an untouched next copy is made again from the new date.
+- **Unticking a repeat** (`uncompleteTask`) removes the next copy if it's untouched: `spawnSig` is a snapshot taken when it was made, and reminders going off don't count as changes. A changed copy stays.
+- **Duplicate** (`duplicateTask`) makes "title (copy)": no attachments, checklist unticked, reminders re-armed, its own new series.
 - **Tabs:** All (no filter), Open (the default), Overdue, Done (`TASK_TABS`). They can be filtered by bucket (`state.taskBucket`: '' = all, '-' = no bucket) and by label. A task added while filtered lands in that bucket or label. There's no My Day or Planned tab: My Day is its own screen, and Planned was dropped.
 - **My Day screen** (view key `today`, first in the sidebar): tasks added to My Day, plus tasks due today or overdue, plus a few undated ones under "Anytime". Its quick add puts the new task in My Day.
 - **Due date and time:** the drawer has a date field and an optional time field. "✕" removes the time, making the task all-day.
@@ -62,6 +77,12 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **`fired`** is set once a reminder goes off, so it never repeats. Changing the due date re-arms the relative reminders; exact-time ones keep their state.
 - **Phones** show reminders without changing the data (`state.remindedHere`).
 - **Repeat copies** bring their reminders along, re-armed. An exact-time reminder moves by as many days as the due date did.
+- **Sort** (`SORTS`, `sortTasks`, per device `dev_taskSort`): due date (the default), priority, name A–Z, newest added, oldest added, bucket, completion. Done tasks go last, except when sorting by completion. On the Board the cards in each column follow the sort too.
+- **Group** (List only, `groupTasks`, `dev_taskGroup`): none, by due date (Overdue / Today / Tomorrow / Next 7 days / Later / No date / Done), or by bucket.
+- **Sticky top** (`.sticky-top`): tabs, filters and sort stay put on List.
+  - On Board, `.main.fill` makes the page fit the window and only the board scrolls, with column names (`.board-head`) sticky.
+  - The add box scrolls away.
+  - Every screen is full width.
 - **Board (the default):** one column per bucket, with "No bucket" hidden when empty. Cards drag between columns (`moveTaskToBucket`).
   - The board uses the full screen width: `.main.wide` drops the 1100 px limit.
   - List or board is a per-device choice (`dev_taskLayout`; `taskLayout()` defaults to 'board').
@@ -95,9 +116,11 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     - "may" the verb and words like "Marketing" are left alone; "May" counts as a full month name
   - Covered by `test-repeat-custom`.
 - **Anchors:** `anchorDay`, `weekday` and `nth` are taken from the due date when the repeat is set or the due date is edited (`syncRepeatAnchor`), not when a copy is made. That keeps "the 31st" on the 31st after February, and Feb 29 coming back in leap years.
-- **'after':** counts from the day you finish, not from the old due date.
+- **'after':** counts from the day you finish (the done date from the pop-up), not from the old due date. The units are days, weeks, months or years.
+- **Limits:** every repeat number goes up to 999.
 - **History:** a repeating task's drawer lists its other copies, newest first (`historyBlock`). Each shows its title, due and done dates, the first line of its notes, and its files, which you can click to open. Clicking a title opens that copy.
 - **Calendar:** shows upcoming repeats (`repeatPreviews`) as dashed chips. They're only shown, never saved. 'after' repeats can't be predicted, so they aren't shown.
+- **Calendar colours** (`taskStatus`, `chipClass`): overdue red, due today accent, upcoming blue, done green and struck through, events teal, next repeats dashed. A legend sits under the grid. The day list uses the same colours, and clicking a task there opens it.
 
 ## Attachments (`AT`)
 - **Storage:** the user picks an attachments folder once; its handle is kept in IndexedDB as `attachments`.
@@ -144,6 +167,9 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
 | `test-repeat-custom` | title roll-forward (months, years, quarters, weeks, dates, "May", "may" the verb), switch off; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
 | `test-private` | the private-data check catches private terms (including in old versions), emails, personal paths, forbidden files (including identical copies under another name), photos/PDFs/office files, attachments folders, private words in commit messages and personal commit emails; a clean repo passes; this project's history is clean |
+| `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, no time), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), Duplicate, full width |
+| `test-sort-calendar` | every sort order, remembered; group by due date or bucket; Board cards follow the sort; sticky top and column names; calendar colours, legend, day list colours, opening a task from it |
+| `test-panel-extras` | "+ New task" (blank dropped, My Day), editing reminders, no time subtext, scroll position kept after a change |
 | `test-task-details` | old tasks and version 1 files load with defaults; each task gets its own arrays; drawer fields, title can't be blanked, notes typing keeps focus; checklist (add, tick, edit, turn into a task, delete); My Day (empties next day, Today quick add); tabs; Esc; delete asks when the task has notes; phone drawer is locked |
 | `test-buckets-labels` | board columns, quick add per column, moving and reordering, renaming; bucket and label filters; labels in the drawer and Settings; everything reaches the data file (version 2); deleting asks and never deletes tasks; phone can't drag |
 | `test-recurring` | date maths (daily, weekdays, weekly multi-day and every N weeks, monthly by date with month-end, monthly by weekday incl. last, yearly with Feb 29, after-completion, end date); drawer setup; one copy only; what resets; start gap; calendar previews not saved; anchor survives copy after copy |
@@ -177,4 +203,15 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     - Titles move forward with each repeat: months, years, quarters, weeks and dates.
     - Attachments are either 📌 kept on every repeat or this one only (the default). They're named from the task and can be renamed, along with the real file.
     - Repeating tasks show a History of their copies.
+- **24 Oct 2026:**
+  - The whole app is full width.
+  - The task panel is redesigned in Microsoft To Do style cards, with steps first.
+  - Ticking any task asks "Done on…" (time optional), and the next repeat is made from that date.
+  - Unticking a repeat removes its untouched next copy.
+  - Duplicate = "title (copy)" without attachments.
+  - Repeats go up to 999, with years in "after I finish it".
+  - Sort: 7 orders, also on Board. Group by due date or bucket (List).
+  - Sticky top (List: tabs/filters; Board: page fits the window and column names stick).
+  - Calendar colours with a legend.
+  - Labels are kept.
     - Labels, progress and start date are all kept.
