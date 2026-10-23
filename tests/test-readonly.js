@@ -41,9 +41,10 @@ const fileText = JSON.stringify({
   check(title.readOnly, 'note fields are read-only');
 
   // Reminders on a phone don't touch the data
-  PA.DB.tasks[0].due = '2020-01-01T09:00'; PA.DB.tasks[0].remind = 0;
+  PA.DB.tasks[0].due = '2020-01-01T09:00'; PA.DB.tasks[0].reminders = [{ id: 'r', kind: 'before', minutes: 0, fired: false }];
   PA.checkReminders();
-  check(PA.DB.tasks[0].notified !== true, 'a reminder shown on the phone does not change the task');
+  check(doc.querySelector('#toasts').textContent.includes('Pay bills'), 'the phone still shows the reminder');
+  check(PA.DB.tasks[0].reminders[0].fired === false, 'a reminder shown on the phone does not change the task');
 
   // Reopening the app later shows the last opened file
   const storage = {};

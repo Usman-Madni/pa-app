@@ -379,8 +379,7 @@ const TASK_DEFAULTS = {
   start: '',          // 'YYYY-MM-DD' or ''
   priority: 'low',    // 'low' | 'med' | 'high'
   progress: 'not',    // 'not' | 'doing' (done is the separate `done` flag)
-  remind: -1,         // minutes before due: -1 none, 0, 10, 60, 1440
-  notified: false,
+  reminders: [],      // see reminderTime(): {id, kind:'before'|'dayof'|'at', minutes, daysBefore, time, at, fired}
   done: false,
   completedAt: 0,     // ms
   created: 0,         // ms
@@ -397,6 +396,12 @@ const TASK_DEFAULTS = {
 function normalizeTask(t) {
   const n = { ...TASK_DEFAULTS, ...t };
   for (const k of ['labels', 'checklist', 'attachments']) n[k] = Array.isArray(t[k]) ? t[k] : []; // fresh arrays, never shared
+  // Before multiple reminders, a task had one: remind (minutes before due, -1 = none) + notified.
+  if (!Array.isArray(t.reminders)) {
+    n.reminders = t.remind != null && Number(t.remind) >= 0 ? [{ id: uid(), kind: 'before', minutes: Number(t.remind), fired: !!t.notified }] : [];
+  }
+  delete n.remind;
+  delete n.notified;
   return n;
 }
 
@@ -451,6 +456,7 @@ const state = {
   taskBucket: '',          // Tasks filter: '' all, '-' no bucket, or a bucket id
   taskLabel: '',           // Tasks filter: '' all, or a label id
   boardAdd: null,          // bucket id whose "+ Add task" card is open on the board ('' = No bucket)
+  remCustom: null,         // which custom reminder form is open in the drawer: 'before' | 'dayof' | 'at'
 };
 
 // ===================== Data file (auto-save) =====================
@@ -909,7 +915,57 @@ function statusBanner() {
   }
 }
 
-const remindText = (m) => (m === 0 ? 'at time' : m >= 1440 ? '1 day before' : m >= 60 ? `${m / 60}h before` : `${m}m before`);
+// ===================== Reminders =====================
+// A task can have several reminders. Each is one of:
+//   {kind:'before', minutes}           N minutes before the due time (all-day tasks: before 9:00 on the due day)
+//   {kind:'dayof', daysBefore, time}   a time of day, N days before the due date (0 = on the day)
+//   {kind:'at', at:'YYYY-MM-DDTHH:mm'} an exact date and time, whatever the due date
+// `fired` is set once it has gone off; changing the due date resets it.
+const REMINDER_PRESETS = [
+  ['b0', 'At due time', { kind: 'before', minutes: 0 }],
+  ['b10', '10 min before', { kind: 'before', minutes: 10 }],
+  ['b60', '1 hour before', { kind: 'before', minutes: 60 }],
+  ['b1440', '1 day before', { kind: 'before', minutes: 1440 }],
+  ['d0-09:00', '9:00 am on the day', { kind: 'dayof', daysBefore: 0, time: '09:00' }],
+  ['d1-21:00', 'Evening before (9:00 pm)', { kind: 'dayof', daysBefore: 1, time: '21:00' }],
+];
+const presetReminder = (key) => {
+  const p = REMINDER_PRESETS.find(([k]) => k === key);
+  return p ? { id: uid(), ...p[2], fired: false } : null;
+};
+
+function reminderTime(t, r) {
+  if (r.kind === 'at') return r.at ? new Date(r.at).getTime() : null;
+  if (!t.due) return null;
+  if (r.kind === 'dayof') {
+    const d = addDays(parseISO(t.due.slice(0, 10)), -(r.daysBefore || 0));
+    const [h, m] = (r.time || '09:00').split(':').map(Number);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
+  }
+  const base = taskTime(t) ? new Date(t.due) : new Date(`${t.due.slice(0, 10)}T09:00`);
+  return base.getTime() - (r.minutes || 0) * 60000;
+}
+
+function reminderText(t, r) {
+  if (r.kind === 'at') return r.at ? `${fmtDay(r.at.slice(0, 10))} ${fmtTime(r.at.slice(11, 16))}` : 'Exact time';
+  if (r.kind === 'dayof') {
+    const at = fmtTime(r.time || '09:00');
+    if (!r.daysBefore) return `${at} on the day`;
+    if (r.daysBefore === 1) return r.time === '21:00' ? 'Evening before (9:00 pm)' : `${at} the day before`;
+    return `${r.daysBefore} days before, ${at}`;
+  }
+  const m = r.minutes || 0;
+  if (!m) return taskTime(t) ? 'At due time' : '9:00 am on the day';
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'} before`;
+  return m % 1440 === 0 ? plural(m / 1440, 'day') : m % 60 === 0 ? plural(m / 60, 'hour') : `${m} min before`;
+}
+
+function addReminder(t, r) {
+  if (r.kind !== 'at' && !t.due) { toast('Set a due date first — or use "On a date and time"'); return false; }
+  t.reminders.push(r);
+  askNotifications();
+  return true;
+}
 
 // Title line + the small details under it; shared by list rows and board cards.
 function taskSummary(t) {
@@ -919,7 +975,7 @@ function taskSummary(t) {
     meta.push(`<span class="${isOverdue(t) ? 'overdue' : ''}">${isOverdue(t) ? 'Overdue · ' : ''}${esc(when)}</span>`);
   }
   if (t.start && t.start > todayISO() && !t.done) meta.push(`<span>Starts ${esc(fmtDay(t.start))}</span>`);
-  if (t.remind >= 0 && t.due && !t.done) meta.push(`<span>🔔 ${remindText(t.remind)}</span>`);
+  if (t.reminders.length && !t.done) meta.push(`<span>🔔 ${esc(reminderText(t, t.reminders[0]))}${t.reminders.length > 1 ? ` +${t.reminders.length - 1}` : ''}</span>`);
   if (t.repeat) meta.push(`<span title="Repeats">↻ ${esc(repeatText(t.repeat))}</span>`);
   if (t.progress === 'doing' && !t.done) meta.push('<span class="pill doing">In progress</span>');
   if (inMyDay(t)) meta.push('<span>☀ My Day</span>');
@@ -980,7 +1036,7 @@ function quickAddBar(ctx) {
             <input class="qa-native" type="date" name="dueDate" tabindex="-1" aria-label="Due date" data-qa-tool>
           </span>
           <select class="qa-select" name="remind" title="Reminder" data-qa-tool>
-            ${opt('', '⏰ Remind', '')}${opt('0', '⏰ At due time', '')}${opt('10', '⏰ 10 min before', '')}${opt('60', '⏰ 1 hour before', '')}${opt('1440', '⏰ 1 day before', '')}
+            ${opt('', '⏰ Remind', '')}${REMINDER_PRESETS.map(([k, label]) => opt(k, '⏰ ' + label, '')).join('')}
           </select>
           <select class="qa-select" name="repeat" title="Repeat" data-qa-tool>
             ${opt('', '↻ Repeat', '')}${opt('daily', '↻ Daily', '')}${opt('weekdays', '↻ Weekdays', '')}${opt('weekly', '↻ Weekly', '')}${opt('monthly', '↻ Monthly', '')}${opt('yearly', '↻ Yearly', '')}
@@ -1169,7 +1225,7 @@ function quickAdd(form) {
     title: p.title,
     due,
     priority: p.priority || 'low',
-    remind: f.remind && f.remind.value !== '' ? Number(f.remind.value) : due && p.time ? 0 : -1,
+    reminders: f.remind && f.remind.value ? [presetReminder(f.remind.value)] : [], // no reminder unless you pick one
     bucket: pickedBucket || p.bucket || (ctx === 'board' ? form.dataset.bucket : undefined),
     myDay: ctx === 'today' ? todayISO() : '',
   });
@@ -1433,10 +1489,16 @@ function renderDrawer() {
         <label>Bucket<select class="input" data-field="bucket">${opt('', 'No bucket', t.bucket)}${sortedBuckets().map((b) => opt(b.id, b.name, t.bucket)).join('')}</select></label>
         <label>Progress<select class="input" data-field="progress">${opt('not', 'Not started', t.progress)}${opt('doing', 'In progress', t.progress)}</select></label>
         <label>Priority<select class="input" data-field="priority">${opt('low', 'Low', t.priority)}${opt('med', 'Medium', t.priority)}${opt('high', 'High', t.priority)}</select></label>
-        <label>Reminder<select class="input" data-field="remind">${[[-1, 'No reminder'], [0, 'At due time'], [10, '10 min before'], [60, '1 hour before'], [1440, '1 day before']].map(([v, l]) => opt(v, l, t.remind)).join('')}</select></label>
         <label>Start date<input class="input" type="date" data-field="start" value="${esc(t.start)}"></label>
-        <label>Due<input class="input" type="datetime-local" data-field="due" value="${esc(t.due)}"></label>
+        <label>Due date<input class="input" type="date" data-field="dueDate" value="${esc(taskDate(t))}"></label>
+        <label>Due time ${taskTime(t) ? '' : '<span class="meta">(any time that day)</span>'}
+          <span class="row" style="gap:4px;flex-wrap:nowrap">
+            <input class="input" style="flex:1;min-width:0" type="time" data-field="dueTime" value="${esc(taskTime(t))}" ${t.due ? '' : 'disabled'} aria-label="Due time">
+            ${taskTime(t) ? '<button type="button" class="icon-btn edit-only" data-action="clear-time" title="No time — any time that day">✕</button>' : ''}
+          </span>
+        </label>
       </div>
+      ${reminderBlock(t)}
       ${repeatBlock(t)}
       ${labelBlock(t)}
       <h3>Checklist <span>${t.checklist.length ? `${doneSteps}/${t.checklist.length}` : ''}</span></h3>
@@ -1461,6 +1523,37 @@ function renderDrawer() {
 function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
 const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b || 0} B`);
 const fileIcon = (a) => (/^image\//.test(a.type) ? '🖼' : /pdf/.test(a.type) || /\.pdf$/i.test(a.name) ? '📄' : '📎');
+
+function reminderBlock(t) {
+  const list = t.reminders.map((r) => `
+    <li class="attach">
+      <span>🔔</span><span style="flex:1;min-width:0">${esc(reminderText(t, r))}</span>
+      ${r.fired ? '<span class="meta">done</span>' : ''}
+      <button class="icon-btn edit-only" data-action="delete-reminder" data-rem="${esc(r.id)}" title="Remove reminder">✕</button>
+    </li>`).join('');
+  const c = state.remCustom;
+  const custom = !c ? '' : `
+    <form class="row edit-only" data-form="add-reminder" data-kind="${c}">
+      ${c === 'before' ? `<input class="input num" type="number" name="n" min="1" max="999" value="30" aria-label="How many">
+        <select class="input" name="unit" aria-label="Unit"><option value="1">minutes</option><option value="60">hours</option><option value="1440">days</option></select> before`
+        : c === 'dayof' ? `<input class="input num" type="number" name="days" min="0" max="60" value="1" aria-label="Days before"> day(s) before, at
+        <input class="input" type="time" name="time" value="21:00" required aria-label="Time">`
+        : '<input class="input" type="datetime-local" name="at" required aria-label="Date and time">'}
+      <button class="btn small primary">Add</button>
+      <button type="button" class="icon-btn" data-action="cancel-reminder" title="Cancel">✕</button>
+    </form>`;
+  return `
+    <h3>Reminders <span>${t.reminders.length || ''}</span></h3>
+    ${list ? `<ul class="attachments">${list}</ul>` : '<p class="meta">No reminders.</p>'}
+    <select class="input edit-only" data-rem-add aria-label="Add a reminder">
+      <option value="">+ Add a reminder…</option>
+      ${REMINDER_PRESETS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('')}
+      <option value="custom-before">Custom: some time before…</option>
+      <option value="custom-dayof">Custom: days before, at a time…</option>
+      <option value="custom-at">On a date and time…</option>
+    </select>
+    ${custom}`;
+}
 
 function attachBlock(t) {
   const list = t.attachments.map((a) => `
@@ -1488,7 +1581,7 @@ function openTaskDrawer(id) {
   renderDrawer();
   if (!state.readOnly && !currentTask()?.title) $('#drawer .drawer-title')?.focus();
 }
-function closeTaskDrawer() { state.openTask = null; renderDrawer(); }
+function closeTaskDrawer() { state.openTask = null; state.remCustom = null; renderDrawer(); }
 
 // A field in the drawer changed (selects, dates, and title/notes when you leave them).
 function setTaskField(field, value) {
@@ -1497,8 +1590,14 @@ function setTaskField(field, value) {
   if (field === 'title') {
     if (!value.trim()) { renderDrawer(); return; } // never leave a task without a title
     t.title = value.trim();
-  } else if (field === 'remind') t.remind = Number(value);
-  else if (field === 'due') { t.due = value; t.notified = false; }
+  } else if (field === 'dueDate') {
+    t.due = value ? `${value}T${taskTime(t) || ALL_DAY}` : '';
+    field = 'due';
+  } else if (field === 'dueTime') {
+    if (!t.due) return;
+    t.due = `${taskDate(t)}T${value || ALL_DAY}`;
+    field = 'due';
+  }
   else if (['bucket', 'progress', 'priority', 'start', 'notes'].includes(field)) t[field] = value;
   else return;
   afterTaskEdit(t, field);
@@ -1506,7 +1605,10 @@ function setTaskField(field, value) {
   render();
 }
 function afterTaskEdit(t, field) {
-  if (field === 'due') { syncRepeatAnchor(t); renderDrawer(); } // the "next one is due…" line depends on it
+  if (field !== 'due') return;
+  t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); // they count from the new due date
+  syncRepeatAnchor(t);
+  renderDrawer(); // date/time fields and the "next one is due…" line depend on it
 }
 
 // Ticking a repeating task off creates the next copy (once — re-ticking never makes a second).
@@ -1518,10 +1620,16 @@ function completeTask(t) {
   if (!due) return null; // the repeat's end date has passed
   const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
   Object.assign(copy, {
-    id: uid(), due, done: false, completedAt: 0, notified: false, progress: 'not', myDay: '',
+    id: uid(), due, done: false, completedAt: 0, progress: 'not', myDay: '',
     spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id,
   });
   copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
+  // Reminders come along; an exact-time one moves by as many days as the due date did.
+  const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
+  copy.reminders = copy.reminders.map((r) => ({
+    ...r, id: uid(), fired: false,
+    ...(r.kind === 'at' && r.at ? { at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : {}),
+  }));
   copy.attachments = copy.attachments.map((a) => ({ ...a, id: uid() })); // same files, shared
   if (t.start && t.due) {
     // Keep the same gap between start and due.
@@ -1884,7 +1992,7 @@ function addTask(data) {
     title: data.title.trim(),
     due: data.due || '',
     priority: data.priority || 'low',
-    remind: data.remind != null ? Number(data.remind) : -1,
+    reminders: Array.isArray(data.reminders) ? data.reminders : [],
     created: Date.now(),
     myDay: data.myDay || '',
     bucket: data.bucket != null ? data.bucket : state.view === 'tasks' ? filterBucket : '',
@@ -1892,7 +2000,7 @@ function addTask(data) {
   });
   DB.tasks.push(t);
   changed('tasks');
-  if (data.due && Number(data.remind) >= 0) askNotifications();
+  if (t.reminders.length) askNotifications();
   return t;
 }
 
@@ -1969,11 +2077,17 @@ function checkReminders() {
   const now = Date.now();
   let changedAny = false;
   for (const t of DB.tasks) {
-    if (t.done || t.notified || !t.due || t.remind < 0 || state.remindedHere.has(t.id)) continue;
-    if (now < new Date(t.due).getTime() - t.remind * 60000) continue;
-    notify(t.title, t.remind === 0 ? 'Due now' : `Due at ${fmtTime(taskTime(t))}`);
-    if (state.readOnly) state.remindedHere.add(t.id);
-    else { t.notified = true; changedAny = true; }
+    if (t.done) continue;
+    for (const r of t.reminders) {
+      const key = `${t.id}:${r.id}`;
+      if (r.fired || state.remindedHere.has(key)) continue;
+      const at = reminderTime(t, r);
+      if (at == null || now < at) continue;
+      const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
+      notify(t.title, when);
+      if (state.readOnly) state.remindedHere.add(key);
+      else { r.fired = true; changedAny = true; }
+    }
   }
   if (changedAny) {
     changed('tasks');
@@ -1986,7 +2100,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
-  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add',
+  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -2043,6 +2157,17 @@ document.addEventListener('click', (e) => {
       $(`#main form[data-key="col-${CSS.escape(state.boardAdd)}"] [name="title"]`)?.focus();
       break;
     case 'board-add-cancel': state.boardAdd = null; render(); break;
+    case 'delete-reminder': {
+      const t = currentTask();
+      if (t) { t.reminders = t.reminders.filter((r) => r.id !== btn.dataset.rem); changed('tasks'); render(); renderDrawer(); }
+      break;
+    }
+    case 'cancel-reminder': state.remCustom = null; renderDrawer(); break;
+    case 'clear-time': {
+      const t = currentTask();
+      if (t && t.due) { t.due = `${taskDate(t)}T${ALL_DAY}`; afterTaskEdit(t, 'due'); changed('tasks'); render(); }
+      break;
+    }
     case 'qa-raw': {
       const form = btn.closest('form');
       form.dataset.raw = form.dataset.raw === '1' ? '' : '1';
@@ -2141,6 +2266,17 @@ document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (state.readOnly) return toast('Read-only on this device');
   const data = Object.fromEntries(new FormData(form));
+  if (form.dataset.form === 'add-reminder') {
+    const t = currentTask();
+    const k = form.dataset.kind;
+    const r = k === 'before' ? { kind: 'before', minutes: Math.max(1, Number(data.n) || 1) * Number(data.unit || 1) }
+      : k === 'dayof' ? { kind: 'dayof', daysBefore: Math.max(0, Number(data.days) || 0), time: data.time || '09:00' }
+      : { kind: 'at', at: data.at };
+    if (k === 'at' && !data.at) return;
+    if (t && addReminder(t, { id: uid(), ...r, fired: false })) { state.remCustom = null; changed('tasks'); render(); }
+    renderDrawer();
+    return;
+  }
   if (!data.title || !data.title.trim()) return;
   const kind = form.dataset.form;
   const inDrawer = !!form.closest('#drawer');
@@ -2250,6 +2386,15 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.dataset?.field && e.target.closest('#drawer')) return setTaskField(e.target.dataset.field, e.target.value);
   if (e.target.dataset?.repeat && e.target.closest('#drawer')) return setRepeat(e.target.dataset.repeat, e.target.value);
+  if (e.target.matches?.('[data-rem-add]') && !state.readOnly) {
+    const t = currentTask();
+    const v = e.target.value;
+    if (!t || !v) return;
+    if (v.startsWith('custom-')) { state.remCustom = v.slice(7); renderDrawer(); return; }
+    if (addReminder(t, presetReminder(v))) { changed('tasks'); render(); }
+    renderDrawer();
+    return;
+  }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
     if (l) { l.color = e.target.value; changed('labels'); render(); }

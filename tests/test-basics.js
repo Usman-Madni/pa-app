@@ -8,10 +8,10 @@ const { loadApp, submitForm, tick, check, done } = require('./helpers');
   check(!PA.state.readOnly, 'desktop browser with file access is editable');
 
   win.document.querySelector('[data-view="tasks"]').click();
-  submitForm(win, 'quick-add', { title: 'Call the supplier on 5 Jan 2030 9:30am !high', remind: '10' });
+  submitForm(win, 'quick-add', { title: 'Call the supplier on 5 Jan 2030 9:30am !high', remind: 'b10' });
   check(PA.DB.tasks.length === 1, 'task added');
   const saved = JSON.parse(win.localStorage.getItem('pa_tasks'));
-  check(saved[0].title === 'Call the supplier' && saved[0].due === '2030-01-05T09:30' && saved[0].remind === 10, 'task saved in the browser with its fields');
+  check(saved[0].title === 'Call the supplier' && saved[0].due === '2030-01-05T09:30' && saved[0].reminders[0].kind === 'before' && saved[0].reminders[0].minutes === 10, 'task saved in the browser with its fields');
   check(doc.querySelector('#main').textContent.includes('Call the supplier'), 'task shows on screen');
   check(win.localStorage.getItem('dev_unsaved') === 'true', 'edit marks data as not yet in the data file');
 

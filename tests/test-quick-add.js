@@ -72,7 +72,7 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   let t = PA.DB.tasks.find((x) => x.title === 'Pay utilities bill');
   check(t && t.due.endsWith('T18:00') && new Date(t.due).getDay() === 5, 'added with the due date and time');
   check(t.repeat && t.repeat.freq === 'monthly' && t.repeat.anchorDay === new Date(t.due).getDate(), 'repeat set up, anchored to the due date');
-  check(t.remind === 0, 'a task with a time gets a reminder at that time');
+  check(t.reminders.length === 0, 'no reminder unless you pick one (even with a time)');
   const bills = PA.DB.labels.find((l) => l.name === 'bills');
   check(bills && t.labels.includes(bills.id), 'a new #label is created and added');
   check(win.document.activeElement === bar().elements.title && bar().elements.title.value === '', 'box clears and is ready for the next task');
@@ -86,9 +86,9 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   check(t && t.due === '', '"Keep words as typed" adds the text exactly, no date');
 
   // Clicked choices win over typed ones
-  submitForm(win, 'quick-add', { title: 'Call plumber tomorrow', dueDate: '2030-05-01', remind: '60', repeat: 'weekly', bucket: 'bh' });
+  submitForm(win, 'quick-add', { title: 'Call plumber tomorrow', dueDate: '2030-05-01', remind: 'b60', repeat: 'weekly', bucket: 'bh' });
   t = PA.DB.tasks.find((x) => x.title === 'Call plumber');
-  check(t && t.due === '2030-05-01T23:59' && t.remind === 60 && t.repeat.freq === 'weekly' && t.bucket === 'bh', 'picked due date, reminder, repeat and bucket are used');
+  check(t && t.due === '2030-05-01T23:59' && t.reminders[0].minutes === 60 && t.repeat.freq === 'weekly' && t.bucket === 'bh', 'picked due date, reminder, repeat and bucket are used');
 
   // All-day due dates show no time and aren't overdue until the day ends
   const pad = (n) => String(n).padStart(2, '0');
@@ -96,7 +96,7 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   const realToday = PA.toISO(new Date());
   submitForm(win, 'quick-add', { title: 'Buy milk today' });
   t = PA.DB.tasks.find((x) => x.title === 'Buy milk');
-  check(t.due === `${realToday}T23:59` && t.remind === -1, 'a date without a time is "any time that day", no reminder');
+  check(t.due === `${realToday}T23:59` && t.reminders.length === 0, 'a date without a time is "any time that day", no reminder');
   check(!doc.querySelector('#main').textContent.includes('11:59'), 'no "11:59 pm" shown for all-day tasks');
   check(!PA.DB.tasks.filter((x) => x.title === 'Buy milk').some((x) => doc.querySelector('#main').textContent.includes('Overdue · Today')), 'an all-day task due today is not overdue');
   void today;
