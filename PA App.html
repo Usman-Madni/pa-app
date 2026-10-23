@@ -170,6 +170,16 @@ body.drawer-open .drawer-backdrop { display: block; }
 textarea.input { resize: vertical; line-height: 1.5; }
 .pill.doing { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 
+/* ===== Sticky top, board filling the window, group headings ===== */
+.sticky-top { position: sticky; top: 0; z-index: 15; background: var(--bg); margin: -28px -32px 0; padding: 22px 32px 2px; }
+.main.fill { height: 100vh; display: flex; flex-direction: column; padding-bottom: 12px; }
+.main.fill #main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.main.fill .sticky-top { position: static; }
+.main.fill .board { flex: 1; min-height: 0; overflow: auto; }
+.board-head { position: sticky; top: -10px; z-index: 2; background: var(--panel-2); padding: 10px 0 6px; margin-top: -10px; }
+.group-h { margin: 14px 4px 2px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; display: flex; gap: 8px; }
+.group-h:first-child { margin-top: 0; }
+
 /* ===== Board, buckets & labels ===== */
 .toolbar { margin-bottom: 12px; }
 .toolbar .input { padding: 6px 10px; font-size: 14px; }
@@ -233,6 +243,23 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 13px; }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+/* Calendar colours: overdue red, due today accent, upcoming blue, done green (struck through), events teal */
+:root { --c-overdue: var(--danger); --c-today: var(--accent); --c-upcoming: #3b82f6; --c-done: var(--ok); --c-event: #0d9488; }
+.chip.t-overdue, .pill.t-overdue { background: color-mix(in srgb, var(--c-overdue) 16%, transparent); color: var(--c-overdue); }
+.chip.t-today, .pill.t-today { background: color-mix(in srgb, var(--c-today) 18%, transparent); color: var(--c-today); font-weight: 600; }
+.chip.t-upcoming, .pill.t-upcoming { background: color-mix(in srgb, var(--c-upcoming) 15%, transparent); color: var(--c-upcoming); }
+.chip.t-done, .pill.t-done { background: color-mix(in srgb, var(--c-done) 14%, transparent); color: var(--c-done); text-decoration: line-through; opacity: .75; }
+.chip.event { background: color-mix(in srgb, var(--c-event) 15%, transparent); color: var(--c-event); }
+.day-item { border-left: 3px solid transparent; padding-left: 8px; }
+.day-item.t-overdue { border-left-color: var(--c-overdue); }
+.day-item.t-today { border-left-color: var(--c-today); }
+.day-item.t-upcoming { border-left-color: var(--c-upcoming); }
+.day-item.t-done { border-left-color: var(--c-done); }
+.day-item.event { border-left-color: var(--c-event); }
+.day-item.repeat { border-left: 3px dashed var(--border); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-legend .chip { display: inline-block; width: 14px; height: 10px; padding: 0; text-decoration: none; opacity: 1; }
 .repeat-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 
 /* ===== Attachments ===== */
@@ -331,6 +358,9 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
   .drawer { width: 100vw; }
   .field-grid { grid-template-columns: 1fr; }
   .board-col { flex-basis: 82vw; }
+  .sticky-top { margin: -20px -16px 0; padding: 16px 16px 2px; }
+  .main.fill { height: auto; display: block; }
+  .main.fill .board { overflow: auto; }
   .qa-input { min-width: 0; flex-basis: calc(100% - 40px); }
   .qa-tools { padding-left: 22px; }
   .qa-preview { padding-left: 14px; }
@@ -954,20 +984,58 @@ const isOverdue = (t) => !t.done && !!t.due && new Date(t.due) < new Date();
 const inMyDay = (t) => t.myDay === todayISO(); // My Day empties itself each morning
 const currentTask = () => DB.tasks.find((t) => t.id === state.openTask) || null;
 
-function sortTasks(list) {
+// Sort orders for the Tasks screen (chosen per device). Done tasks go last, except when sorting by completion.
+const SORTS = {
+  due: 'Due date', priority: 'Priority', name: 'Name A–Z', newest: 'Newest added',
+  oldest: 'Oldest added', bucket: 'Bucket', completed: 'Completed (latest first)',
+};
+function sortTasks(list, mode = 'due') {
   const prio = { high: 0, med: 1, low: 2 };
-  return [...list].sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    if (!!a.due !== !!b.due) return a.due ? -1 : 1;
-    if (a.due !== b.due) return a.due < b.due ? -1 : 1;
-    return prio[a.priority] - prio[b.priority];
-  });
+  const byDue = (a, b) => (!!a.due !== !!b.due ? (a.due ? -1 : 1) : a.due !== b.due ? (a.due < b.due ? -1 : 1) : 0);
+  const bucketPos = (t) => { const b = bucketOf(t); return b ? b.order : -Infinity; };
+  const cmp = {
+    due: byDue,
+    priority: (a, b) => prio[a.priority] - prio[b.priority] || byDue(a, b),
+    name: (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }),
+    newest: (a, b) => (b.created || 0) - (a.created || 0),
+    oldest: (a, b) => (a.created || 0) - (b.created || 0),
+    bucket: (a, b) => bucketPos(a) - bucketPos(b) || byDue(a, b),
+    completed: (a, b) => (b.completedAt || 0) - (a.completedAt || 0) || byDue(a, b),
+  }[mode] || byDue;
+  return [...list].sort((a, b) => (a.done !== b.done ? (a.done === (mode !== 'completed') ? 1 : -1) : 0)
+    || cmp(a, b) || prio[a.priority] - prio[b.priority]);
 }
+
+// List view headings: by due date (Overdue / Today / Tomorrow / Next 7 days / Later / No date / Done) or by bucket.
+function groupTasks(list, mode) {
+  if (mode === 'bucket') {
+    const groups = [{ label: 'No bucket', items: list.filter((t) => !bucketOf(t)) },
+      ...sortedBuckets().map((b) => ({ label: b.name, items: list.filter((t) => t.bucket === b.id) }))];
+    return groups.filter((g) => g.items.length);
+  }
+  const today = todayISO();
+  const tomorrow = toISO(addDays(parseISO(today), 1));
+  const week = toISO(addDays(parseISO(today), 7));
+  const which = (t) => {
+    if (t.done) return 'Done';
+    if (!t.due) return 'No date';
+    if (isOverdue(t)) return 'Overdue';
+    const d = taskDate(t);
+    return d === today ? 'Today' : d === tomorrow ? 'Tomorrow' : d <= week ? 'Next 7 days' : 'Later';
+  };
+  return ['Overdue', 'Today', 'Tomorrow', 'Next 7 days', 'Later', 'No date', 'Done']
+    .map((label) => ({ label, items: list.filter((t) => which(t) === label) }))
+    .filter((g) => g.items.length);
+}
+
+// Colour on the calendar: done (green), overdue (red), today (accent), upcoming (blue).
+const taskStatus = (t) => (t.done ? 'done' : isOverdue(t) ? 'overdue' : taskDate(t) === todayISO() ? 'today' : 'upcoming');
+const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}` : it.kind === 'repeat' ? 'repeat' : 'event');
 
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
-  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task' }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t) }));
   const repeats = (previews && previews[key]) || [];
   return [...events, ...tasks, ...repeats].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
 }
@@ -979,6 +1047,8 @@ function render() {
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, settings: renderSettings };
   $('#main').innerHTML = (views[state.view] || renderToday)();
   $('.main').classList.toggle('wide', state.view === 'tasks' && taskLayout() === 'board');
+  // Board: the page fits the window and only the board scrolls, so the top stays put and column names stick.
+  $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
   renderStatus();
 }
 
@@ -1117,12 +1187,14 @@ function taskItem(t) {
 const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">${esc(l.name)}</span>`;
 
 function dayItem(i) {
-  const tag = i.kind === 'task' ? '<span class="pill">Task</span>' : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
+  const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
+  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${statusText[i.status]}</span>` : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
+  const open = i.kind === 'task' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   return `
-    <li class="item ${i.done ? 'done' : ''}">
+    <li class="item day-item ${chipClass(i)} ${i.done ? 'done' : ''}">
       <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
-      <div class="body"><div class="title">${esc(i.title)} ${tag}</div></div>
+      <div class="body${open}"><div class="title">${esc(i.title)} ${tag}</div></div>
       ${del}
     </li>`;
 }
@@ -1411,15 +1483,26 @@ function renderTasks() {
   if (state.taskBucket && state.taskBucket !== '-' && !DB.buckets.some((b) => b.id === state.taskBucket)) state.taskBucket = '';
   if (state.taskLabel && !DB.labels.some((l) => l.id === state.taskLabel)) state.taskLabel = '';
   const layout = taskLayout();
-  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t)));
+  const sortBy = SORTS[device.get('taskSort', 'due')] ? device.get('taskSort', 'due') : 'due';
+  const groupBy = device.get('taskGroup', 'none');
+  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t)), sortBy);
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
+  const listHtml = (items) => items.map(taskItem).join('');
+  const groups = groupBy === 'none' ? null : groupTasks(list, groupBy);
   return `
+    <div class="sticky-top">
     <div class="page-head">
       <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done).length} open</p></div>
       <div class="tabs">${Object.entries(TASK_TABS).map(([k, v]) => tab(k, v.label)).join('')}</div>
     </div>
     <div class="row toolbar">
+      <select class="input" data-input="task-sort" aria-label="Sort by" title="Sort by">
+        ${Object.entries(SORTS).map(([k, label]) => opt(k, '↕ ' + label, sortBy)).join('')}
+      </select>
+      ${layout === 'list' ? `<select class="input" data-input="task-group" aria-label="Group by" title="Group by">
+        ${opt('none', '☰ No groups', groupBy)}${opt('due', '☰ Group by due date', groupBy)}${opt('bucket', '☰ Group by bucket', groupBy)}
+      </select>` : ''}
       <select class="input" data-input="task-bucket" aria-label="Filter by bucket">
         ${opt('', 'All buckets', state.taskBucket)}${opt('-', 'No bucket', state.taskBucket)}${sortedBuckets().map((b) => opt(b.id, '▦ ' + b.name, state.taskBucket)).join('')}
       </select>
@@ -1433,9 +1516,11 @@ function renderTasks() {
         <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">▦ Board</button>
       </div>
     </div>
+    </div>
     ${quickAddBar('tasks')}
     ${layout === 'board' ? renderBoard(list) : `<div class="card">
-      <ul class="list">${list.map(taskItem).join('') || '<li class="empty">No tasks here</li>'}</ul>
+      ${groups ? groups.map((g) => `<h3 class="group-h">${esc(g.label)} <span>${g.items.length}</span></h3><ul class="list">${listHtml(g.items)}</ul>`).join('') || '<p class="empty">No tasks here</p>'
+        : `<ul class="list">${listHtml(list) || '<li class="empty">No tasks here</li>'}</ul>`}
       ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
     </div>`}`;
 }
@@ -2290,7 +2375,7 @@ function renderCalendar() {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const k = toISO(d);
     const items = itemsForDay(k, previews);
-    const chips = items.slice(0, 3).map((it) => `<span class="chip ${it.kind === 'task' || it.kind === 'repeat' ? it.kind : ''}">${it.kind === 'repeat' ? '↻ ' : ''}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
+    const chips = items.slice(0, 3).map((it) => `<span class="chip ${chipClass(it)}">${it.kind === 'repeat' ? '↻ ' : ''}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
         <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
@@ -2310,6 +2395,11 @@ function renderCalendar() {
           <div class="row"><button class="btn small" data-action="cal-today">Today</button><button class="btn small" data-action="cal-next" aria-label="Next month">›</button></div>
         </div>
         <div class="cal-grid">${dows}${cells.join('')}</div>
+        <div class="cal-legend">
+          <span><i class="chip t-overdue"></i>Overdue</span><span><i class="chip t-today"></i>Due today</span>
+          <span><i class="chip t-upcoming"></i>Upcoming</span><span><i class="chip t-done"></i>Done</span>
+          <span><i class="chip repeat"></i>Next repeat</span><span><i class="chip event"></i>Event</span>
+        </div>
       </div>
       <div class="card">
         <h2>${fmtDay(sel)}</h2>
@@ -2893,6 +2983,8 @@ document.addEventListener('input', (e) => {
   if (kind === 'device-name') { device.set('name', e.target.value.trim() || 'Computer'); return; }
   if (kind === 'task-bucket') { state.taskBucket = e.target.value; render(); return; }
   if (kind === 'task-label') { state.taskLabel = e.target.value; render(); return; }
+  if (kind === 'task-sort') { device.set('taskSort', e.target.value); render(); return; }
+  if (kind === 'task-group') { device.set('taskGroup', e.target.value); render(); return; }
   if (state.readOnly) return;
   const n = DB.notes.find((x) => x.id === state.activeNote);
   if (!n || (kind !== 'note-title' && kind !== 'note-body')) return;
