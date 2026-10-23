@@ -197,6 +197,13 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .manage-row .name { flex: 1; min-width: 0; }
 .manage-row .input { padding: 4px 8px; font-size: 13px; }
 
+/* ===== Recurring ===== */
+.input.num { width: 64px; padding: 6px 8px; }
+.weekdays { gap: 4px; }
+.day-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 13px; }
+.day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
@@ -683,10 +690,12 @@ function sortTasks(list) {
   });
 }
 
-function itemsForDay(key) {
+// previews: optional {date: [upcoming repeats]} from repeatPreviews()
+function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
   const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task' }));
-  return [...events, ...tasks].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  const repeats = (previews && previews[key]) || [];
+  return [...events, ...tasks, ...repeats].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
 }
 
 // ===================== Rendering =====================
@@ -781,11 +790,9 @@ function taskItem(t) {
 }
 
 const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">${esc(l.name)}</span>`;
-// Filled in by the recurring-tasks code; plain text for the ↻ line.
-function repeatText(r) { return r ? r.freq : ''; }
 
 function dayItem(i) {
-  const tag = i.kind === 'task' ? '<span class="pill">Task</span>' : '';
+  const tag = i.kind === 'task' ? '<span class="pill">Task</span>' : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
   return `
     <li class="item ${i.done ? 'done' : ''}">
@@ -1087,7 +1094,6 @@ function renderDrawer() {
 }
 // Filled in by later sections (buckets/labels, recurring, attachments).
 function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
-function repeatBlock() { return ''; }
 function attachBlock() { return ''; }
 
 function openTaskDrawer(id) {
@@ -1112,11 +1118,213 @@ function setTaskField(field, value) {
   changed('tasks');
   render();
 }
-function afterTaskEdit() { /* recurring tasks hook in here */ }
+function afterTaskEdit(t, field) {
+  if (field === 'due') { syncRepeatAnchor(t); renderDrawer(); } // the "next one is due…" line depends on it
+}
 
+// Ticking a repeating task off creates the next copy (once — re-ticking never makes a second).
 function completeTask(t) {
   t.done = true;
   t.completedAt = Date.now();
+  if (!t.repeat || t.spawnedNext) return null;
+  const due = nextDue(t, new Date());
+  if (!due) return null; // the repeat's end date has passed
+  const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
+  Object.assign(copy, {
+    id: uid(), due, done: false, completedAt: 0, notified: false, progress: 'not', myDay: '',
+    spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id,
+  });
+  copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
+  copy.attachments = copy.attachments.map((a) => ({ ...a, id: uid() })); // same files, shared
+  if (t.start && t.due) {
+    // Keep the same gap between start and due.
+    const gap = Math.round((parseISO(t.due.slice(0, 10)) - parseISO(t.start)) / DAY_MS);
+    copy.start = toISO(addDays(parseISO(due.slice(0, 10)), -gap));
+  } else copy.start = '';
+  t.seriesId = copy.seriesId;
+  t.spawnedNext = copy.id;
+  DB.tasks.push(copy);
+  toast(`↻ Next one created: ${fmtDay(due.slice(0, 10))}`);
+  return copy;
+}
+
+// ===================== Recurring tasks =====================
+// repeat = {
+//   freq: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly' | 'after',
+//   interval: 1–99 (every N days/weeks/months/years; for 'after': N units after you finish),
+//   days: [0–6] weekly days (0 = Sunday), unit: 'days'|'weeks'|'months' ('after' only),
+//   monthMode: 'date' | 'weekday', anchorDay: 1–31, weekday: 0–6, nth: 1–4 or -1 (last),
+//   until: 'YYYY-MM-DD' | ''  (no copies after this date)
+// }
+// anchorDay/weekday/nth are taken from the due date when you set the repeat or change the due date,
+// so "the 31st" stays the 31st after a short month instead of drifting to the 28th.
+const DAY_MS = 864e5;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const ORDINALS = ['', 'first', 'second', 'third', 'fourth'];
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+const weekStart = (d) => addDays(d, -d.getDay());
+function addMonthsClamped(d, n, anchorDay) {
+  const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const y = first.getFullYear(), m = first.getMonth();
+  return new Date(y, m, Math.min(anchorDay || d.getDate(), daysInMonth(y, m)));
+}
+function nthWeekday(y, m, weekday, nth) {
+  if (nth === -1) {
+    const last = new Date(y, m, daysInMonth(y, m));
+    return addDays(last, -((last.getDay() - weekday + 7) % 7));
+  }
+  const first = new Date(y, m, 1);
+  return addDays(first, ((weekday - first.getDay() + 7) % 7) + (nth - 1) * 7);
+}
+
+// The due date ('YYYY-MM-DDTHH:mm', same time of day) of the copy after t, or null when the repeat has ended.
+function nextDue(t, doneOn = new Date()) {
+  const r = t.repeat;
+  if (!r) return null;
+  const n = Math.min(99, Math.max(1, Math.floor(Number(r.interval)) || 1));
+  const time = t.due ? t.due.slice(10) : '';
+  const base = t.due ? parseISO(t.due.slice(0, 10)) : parseISO(toISO(doneOn));
+  let d;
+  switch (r.freq) {
+    case 'daily': d = addDays(base, n); break;
+    case 'weekdays':
+      d = addDays(base, 1);
+      while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
+      break;
+    case 'weekly': {
+      const days = r.days && r.days.length ? r.days : [base.getDay()];
+      const w0 = weekStart(base).getTime();
+      d = addDays(base, 1);
+      for (let i = 0; i < 7 * n + 7; i++, d = addDays(d, 1)) {
+        const week = Math.round((weekStart(d).getTime() - w0) / (7 * DAY_MS));
+        if (week % n === 0 && days.includes(d.getDay())) break;
+      }
+      break;
+    }
+    case 'monthly':
+      if (r.monthMode === 'weekday') {
+        const f = new Date(base.getFullYear(), base.getMonth() + n, 1);
+        d = nthWeekday(f.getFullYear(), f.getMonth(), r.weekday ?? base.getDay(), r.nth || 1);
+      } else d = addMonthsClamped(base, n, r.anchorDay);
+      break;
+    case 'yearly': d = addMonthsClamped(base, 12 * n, r.anchorDay); break;
+    case 'after': {
+      const from = parseISO(toISO(doneOn));
+      d = r.unit === 'weeks' ? addDays(from, 7 * n) : r.unit === 'months' ? addMonthsClamped(from, n) : addDays(from, n);
+      break;
+    }
+    default: return null;
+  }
+  const key = toISO(d);
+  if (r.until && key > r.until) return null;
+  return key + time;
+}
+
+function syncRepeatAnchor(t) {
+  const r = t.repeat;
+  if (!r || !t.due) return;
+  const d = parseISO(t.due.slice(0, 10));
+  r.anchorDay = d.getDate();
+  r.weekday = d.getDay();
+  r.nth = d.getDate() + 7 > daysInMonth(d.getFullYear(), d.getMonth()) ? -1 : Math.ceil(d.getDate() / 7);
+}
+
+function repeatText(r) {
+  if (!r) return '';
+  const n = Math.max(1, Math.floor(Number(r.interval)) || 1);
+  switch (r.freq) {
+    case 'daily': return n === 1 ? 'Daily' : `Every ${n} days`;
+    case 'weekdays': return 'Weekdays';
+    case 'weekly': {
+      const ds = [...(r.days || [])].sort().map((i) => WEEKDAYS[i].slice(0, 3)).join(', ');
+      return (n === 1 ? 'Weekly' : `Every ${n} weeks`) + (ds ? ` on ${ds}` : '');
+    }
+    case 'monthly':
+      return (n === 1 ? 'Monthly' : `Every ${n} months`) + (r.monthMode === 'weekday'
+        ? ` on the ${r.nth === -1 ? 'last' : ORDINALS[r.nth]} ${WEEKDAYS[r.weekday]}`
+        : r.anchorDay ? ` on day ${r.anchorDay}` : '');
+    case 'yearly': return n === 1 ? 'Yearly' : `Every ${n} years`;
+    case 'after': return `${n} ${r.unit || 'days'} after done`;
+    default: return '';
+  }
+}
+
+function repeatBlock(t) {
+  const r = t.repeat;
+  const f = r ? r.freq : '';
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
+  const unit = { daily: 'day(s)', weekly: 'week(s)', monthly: 'month(s)', yearly: 'year(s)' }[f];
+  let extra = '';
+  if (f === 'weekly') {
+    extra = `<div class="row weekdays">${WEEKDAYS.map((w, i) => `<button class="day-btn ${r.days.includes(i) ? 'on' : ''}" data-action="repeat-day" data-weekday="${i}" title="${w}" aria-pressed="${r.days.includes(i)}">${w[0]}</button>`).join('')}</div>`;
+  }
+  if (f === 'monthly' && r.anchorDay) {
+    extra = `<select class="input" data-repeat="monthMode">
+      ${opt('date', `On day ${r.anchorDay}${r.anchorDay > 28 ? " (or the month's last day)" : ''}`, r.monthMode)}
+      ${opt('weekday', `On the ${r.nth === -1 ? 'last' : ORDINALS[r.nth]} ${WEEKDAYS[r.weekday]}`, r.monthMode)}
+    </select>`;
+  }
+  let next = '';
+  if (r && !t.done) {
+    if (f === 'after') next = `When you tick this off, the next one is due ${r.interval} ${esc(r.unit)} after that day.`;
+    else {
+      const nd = nextDue(t);
+      next = nd ? `When you tick this off, the next one is due <b>${esc(fmtDay(nd.slice(0, 10)))}</b>.` : 'This is the last one — the end date comes before the next repeat.';
+    }
+  }
+  return `
+    <h3>Repeat</h3>
+    <div class="row">
+      <select class="input" data-repeat="freq" aria-label="Repeat">
+        ${opt('', 'Never', f)}${opt('daily', 'Daily', f)}${opt('weekdays', 'Weekdays (Mon–Fri)', f)}${opt('weekly', 'Weekly', f)}
+        ${opt('monthly', 'Monthly', f)}${opt('yearly', 'Yearly', f)}${opt('after', 'Again after I finish it', f)}
+      </select>
+      ${unit ? `<label class="row meta">every <input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval}"> ${unit}</label>` : ''}
+      ${f === 'after' ? `<label class="row meta"><input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval}">
+        <select class="input" data-repeat="unit">${opt('days', 'days', r.unit)}${opt('weeks', 'weeks', r.unit)}${opt('months', 'months', r.unit)}</select> later</label>` : ''}
+    </div>
+    ${extra}
+    ${r ? `<label class="field">Stop repeating after (optional)<input class="input" type="date" data-repeat="until" value="${esc(r.until || '')}"></label>
+      ${next ? `<p class="meta">↻ ${next}</p>` : ''}` : ''}`;
+}
+
+function setRepeat(key, value) {
+  const t = currentTask();
+  if (!t || state.readOnly) return;
+  if (key === 'freq') {
+    if (!value) t.repeat = null;
+    else {
+      if (!t.due) { t.due = `${todayISO()}T09:00`; toast('Repeating tasks need a due date, so it is set to today 9:00 — change it if you like'); }
+      t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...(t.repeat || {}), freq: value };
+      if (value === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
+      syncRepeatAnchor(t);
+    }
+  } else if (t.repeat) {
+    if (key === 'interval') t.repeat.interval = Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
+    else if (['monthMode', 'unit', 'until'].includes(key)) t.repeat[key] = value;
+    else return;
+  } else return;
+  changed('tasks');
+  render();
+  renderDrawer();
+}
+
+// Upcoming copies of repeating tasks for the calendar — shown, not saved.
+function repeatPreviews(fromKey, toKey) {
+  const out = {};
+  for (const t of DB.tasks) {
+    if (t.done || !t.repeat || t.repeat.freq === 'after' || !t.due) continue;
+    let cur = t;
+    for (let i = 0; i < 800; i++) {
+      const nd = nextDue(cur);
+      if (!nd || nd.slice(0, 10) > toKey) break;
+      cur = { ...cur, due: nd };
+      const k = nd.slice(0, 10);
+      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time: nd.slice(11, 16), kind: 'repeat' });
+    }
+  }
+  return out;
 }
 
 function addStep(text) {
@@ -1129,12 +1337,13 @@ function addStep(text) {
 function renderCalendar() {
   const m = state.calMonth;
   const start = new Date(m.getFullYear(), m.getMonth(), 1 - m.getDay());
+  const previews = repeatPreviews(toISO(start), toISO(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 41)));
   const cells = [];
   for (let i = 0; i < 42; i++) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const k = toISO(d);
-    const items = itemsForDay(k);
-    const chips = items.slice(0, 3).map((it) => `<span class="chip ${it.kind === 'task' ? 'task' : ''}">${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
+    const items = itemsForDay(k, previews);
+    const chips = items.slice(0, 3).map((it) => `<span class="chip ${it.kind === 'task' || it.kind === 'repeat' ? it.kind : ''}">${it.kind === 'repeat' ? '↻ ' : ''}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
         <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
@@ -1157,7 +1366,7 @@ function renderCalendar() {
       </div>
       <div class="card">
         <h2>${fmtDay(sel)}</h2>
-        <ul class="list">${itemsForDay(sel).map(dayItem).join('') || '<li class="empty">Nothing scheduled</li>'}</ul>
+        <ul class="list">${itemsForDay(sel, previews).map(dayItem).join('') || '<li class="empty">Nothing scheduled</li>'}</ul>
         <form class="edit-only" data-form="add-event" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <input class="input" name="title" placeholder="New event…" required autocomplete="off">
           <div class="row">
@@ -1389,6 +1598,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
+  'repeat-day',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -1439,6 +1649,16 @@ document.addEventListener('click', (e) => {
     }
     case 'open-task': openTaskDrawer(id); break;
     case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
+    case 'repeat-day': {
+      const t = currentTask();
+      const day = Number(btn.dataset.weekday);
+      if (!t || !t.repeat) break;
+      const days = t.repeat.days.includes(day) ? t.repeat.days.filter((x) => x !== day) : [...t.repeat.days, day];
+      if (!days.length) { toast('Pick at least one day'); break; }
+      t.repeat.days = days.sort();
+      changed('tasks'); render(); renderDrawer();
+      break;
+    }
     case 'toggle-label': {
       const t = currentTask();
       const l = btn.dataset.label;
@@ -1600,6 +1820,7 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('change', (e) => {
   if (e.target.dataset?.field && e.target.closest('#drawer')) return setTaskField(e.target.dataset.field, e.target.value);
+  if (e.target.dataset?.repeat && e.target.closest('#drawer')) return setRepeat(e.target.dataset.repeat, e.target.value);
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
     if (l) { l.color = e.target.value; changed('labels'); render(); }
@@ -1629,7 +1850,7 @@ setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket };
+window.PA = { DB, DF, RO, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText };
 </script>
 </body>
 </html>
