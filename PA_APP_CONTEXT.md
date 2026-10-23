@@ -50,7 +50,23 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **Drawer:** clicking a task opens the details drawer (`renderDrawer`). It's rebuilt only on structural changes (open, close, checklist, labels, repeat), never while you type, so the cursor stays put. Typing updates the task at once and saves 400 ms after a pause.
 - **Tabs:** All open, My Day, Planned (has a due date), Overdue, Done (`TASK_TABS`). They can be filtered by bucket (`state.taskBucket`: '' = all, '-' = no bucket) and by label. A task added while filtered lands in that bucket or label.
 - **Today screen:** shows My Day plus tasks due today or overdue. Its quick add puts the new task in My Day.
-- **Board:** one column per bucket, with "No bucket" hidden when empty. Each column has a quick add, and cards drag between columns (`moveTaskToBucket`). List or board is a per-device choice.
+- **Board (the default):** one column per bucket, with "No bucket" hidden when empty. Cards drag between columns (`moveTaskToBucket`).
+  - The board uses the full screen width: `.main.wide` drops the 1100 px limit.
+  - List or board is a per-device choice (`dev_taskLayout`; `taskLayout()` defaults to 'board').
+  - Each column has a Planner-style **"+ Add task"** button (`state.boardAdd`). It opens a card with the task name and Set due date; Enter adds and keeps the card open, and Esc closes it.
+- **Quick add box** (`quickAddBar`, `parseQuickAdd`, `quickAdd`), like Microsoft To Do, on Today and Tasks.
+  - **What it reads from typing:**
+    - dates: today, tonight, tomorrow, weekdays, "5 Nov", "Jan 15", "in 2 weeks", "next week", "due 28/10", "1/11/2026"
+    - times: "6pm", "18:30", "noon"
+    - repeats: "every Monday", "every other day", "every 3 days", "monthly", "weekdays"
+    - `#label` (created if new), `@bucket` (must exist), and `!`, `!high`, `!med` or `!low`
+  - **Preview:** shown live under the box, with "Keep words as typed" to switch the reading off for that task.
+  - **Buttons:** bucket, due date, reminder and repeat. What you click beats what you typed, and what you typed beats where you are.
+  - **Where you add it matters:** Today and My Day add to My Day; Planned makes the task due today.
+  - **Left alone on purpose:** day/month numbers need a year or "by/on/due" ("1/2 kg" stays text), and an unknown `@word` stays text.
+  - **Times already gone:** "6pm" after 6pm means tomorrow. A repeat whose time has gone today starts at its next repeat.
+  - Covered by `test-quick-add`.
+- **All-day due dates:** a due date without a time is stored as `T23:59` (`ALL_DAY`). It's shown without a time, has no reminder by default, and isn't overdue until the day ends.
 
 ## Recurring tasks (`nextDue`, `completeTask`)
 - **The repeat setting:** `repeat = {freq, interval, days, monthMode, anchorDay, weekday, nth, unit, until}`. `freq` is one of daily, weekdays, weekly, monthly, yearly, after.
@@ -119,5 +135,6 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     - Priority stays Low/Medium/High, with no extra "Important" star.
     - Recurring copies are created when you tick a task off, and "N after I finish" is also available.
     - Attachments go in a folder, not inside the data file.
-    - List is the default view, with Board one click away.
+    - List was the default at first; changed the same day to **Board by default**, at full width.
+    - The add-task box was reworked after the To Do and Planner designs: a smart add box plus "+ Add task" cards on the board.
     - Labels, progress and start date are all kept.
