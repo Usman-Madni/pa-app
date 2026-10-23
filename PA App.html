@@ -63,8 +63,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-si
 .theme-btn { font-size: 12px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 8px; cursor: pointer; color: var(--muted); }
 
 /* ===== Main ===== */
-.main { flex: 1; min-width: 0; padding: 28px 32px 60px; max-width: 1100px; }
-.main.wide { max-width: none; } /* the board uses the whole screen */
+.main { flex: 1; min-width: 0; padding: 28px 32px 60px; } /* every screen uses the full width */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .page-head h1 { margin: 0; font-size: 26px; }
 .sub { color: var(--muted); margin: 2px 0 0; }
@@ -248,6 +247,55 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .history-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 4px; }
 .history-note { font-style: italic; }
 
+/* ===== Task panel cards (To Do style) ===== */
+.p-card { background: var(--panel-2); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+.p-row {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 12px; width: 100%;
+  border: 0; background: transparent; color: var(--text); text-align: left; font-size: 14px;
+}
+.p-row + .p-row, .p-sub + .p-row, .p-row + .p-sub { border-top: 1px solid var(--border); }
+.p-wrap { flex-wrap: wrap; }
+.p-click { cursor: pointer; }
+.p-click:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.p-row.on, .p-row.on .p-input, .p-row.on .p-select { color: var(--accent); }
+.p-row.overdue, .p-row.overdue .p-input { color: var(--danger); }
+.p-ico { width: 22px; text-align: center; flex-shrink: 0; }
+.p-ico.accent, .p-input.accent::placeholder { color: var(--accent); }
+.p-lbl { color: var(--muted); width: 62px; flex-shrink: 0; font-size: 13px; }
+.p-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.p-text.muted { color: var(--muted); }
+.p-select, .p-input {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; padding: 6px 6px;
+  border-radius: 6px; font-size: 14px;
+}
+.p-select:hover, .p-input:hover { background: var(--panel); }
+.p-select:focus, .p-input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.p-select option { color: var(--text); background: var(--panel); }
+.p-input:disabled { opacity: .45; }
+.p-mini { border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0 2px; }
+.p-sub { padding: 8px 12px 12px 44px; display: flex; flex-direction: column; gap: 8px; }
+.p-sub.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.p-sub .repeat-box { background: transparent; border: 0; padding: 0; }
+.p-head { display: flex; justify-content: space-between; padding: 10px 12px 2px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.p-card .steps { padding: 4px 12px 0; }
+.p-notes { width: 100%; min-height: 110px; border: 0; background: transparent; padding: 12px; resize: vertical; color: inherit; outline: none; font: inherit; line-height: 1.5; }
+.p-notes::placeholder { color: var(--muted); }
+.num-box {
+  width: 70px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+  color: var(--text); text-align: center; font-size: 14px;
+}
+.num-box:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+/* ===== Pop-up (Done on…) ===== */
+.modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 60; }
+.modal {
+  position: fixed; z-index: 61; left: 50%; top: 30%; transform: translate(-50%, -30%); width: min(380px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+  padding: 18px; display: flex; flex-direction: column; gap: 12px;
+}
+.modal h3 { margin: 0; font-size: 17px; }
+.modal .field { flex: 1; min-width: 130px; }
+
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
@@ -307,6 +355,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 </div>
 <div class="drawer-backdrop" data-action="close-task"></div>
 <aside id="drawer" class="drawer" aria-label="Task details"></aside>
+<div id="modal"></div>
 <div id="toasts" class="toasts"></div>
 
 <script>
@@ -335,6 +384,7 @@ const fmtTime = (hhmm) => {
   return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
 const fmtDay = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtClock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'HH:mm' for a time box
 const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 // Record IDs: time + crypto random + a counter, so two devices (or two clicks in the same millisecond) never collide.
@@ -388,6 +438,7 @@ const TASK_DEFAULTS = {
   reminders: [],      // see reminderTime(): {id, kind:'before'|'dayof'|'at', minutes, daysBefore, time, at, fired}
   done: false,
   completedAt: 0,     // ms
+  completedAllDay: false, // done "on a day" without a time
   created: 0,         // ms
   myDay: '',          // 'YYYY-MM-DD' the task was added to My Day; only counts on that day
   bucket: '',         // bucket id or ''
@@ -465,6 +516,7 @@ const state = {
   boardAdd: null,          // bucket id whose "+ Add task" card is open on the board ('' = No bucket)
   remCustom: null,         // which custom reminder form is open in the drawer: 'before' | 'dayof' | 'at'
   remEdit: null,           // id of the reminder being changed in that form (null = adding a new one)
+  donePrompt: null,        // id of the task whose "Done on…" pop-up is open
 };
 
 // ===================== Data file (auto-save) =====================
@@ -1497,14 +1549,16 @@ function deleteLabel(id) {
 
 function labelBlock(t) {
   return `
-    <h3>Labels</h3>
-    <div class="label-row">${DB.labels.map((l) => `
-      <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${esc(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
-      || '<span class="meta">No labels yet — add one below.</span>'}
+    <div class="p-row p-wrap"><span class="p-ico">🏷</span>
+      <div class="label-row" style="flex:1">${DB.labels.map((l) => `
+        <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${esc(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
+        || '<span class="p-text muted">Labels</span>'}
+      </div>
     </div>
-    <form class="row edit-only" data-form="add-label">
-      <input class="input grow" name="title" placeholder="New label…" autocomplete="off" maxlength="30">
-      ${colorSelect(LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex)}
+    <form class="p-row edit-only" data-form="add-label">
+      <span class="p-ico"></span>
+      <input class="p-input" name="title" placeholder="+ New label" autocomplete="off" maxlength="30" aria-label="New label">
+      ${colorSelect(LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex, 'name="color" style="width:auto;padding:4px 6px;font-size:13px"')}
       <button class="btn small">Add</button>
     </form>`;
 }
@@ -1552,42 +1606,71 @@ function renderDrawer() {
       <button class="icon-btn" data-action="close-task" title="Close (Esc)">✕</button>
     </div>
     <fieldset class="drawer-body" ${ro}>
-      <div class="row edit-only">
-        <button class="btn small ${inMyDay(t) ? 'primary' : ''}" data-action="toggle-myday" data-id="${esc(t.id)}">☀ ${inMyDay(t) ? 'In My Day — remove' : 'Add to My Day'}</button>
-      </div>
-      <div class="field-grid">
-        <label>Bucket<select class="input" data-field="bucket">${opt('', 'No bucket', t.bucket)}${sortedBuckets().map((b) => opt(b.id, b.name, t.bucket)).join('')}</select></label>
-        <label>Progress<select class="input" data-field="progress">${opt('not', 'Not started', t.progress)}${opt('doing', 'In progress', t.progress)}</select></label>
-        <label>Priority<select class="input" data-field="priority">${opt('low', 'Low', t.priority)}${opt('med', 'Medium', t.priority)}${opt('high', 'High', t.priority)}</select></label>
-        <label>Start date<input class="input" type="date" data-field="start" value="${esc(t.start)}"></label>
-        <label>Due date<input class="input" type="date" data-field="dueDate" value="${esc(taskDate(t))}"></label>
-        <label>Due time
-          <span class="row" style="gap:4px;flex-wrap:nowrap">
-            <input class="input" style="flex:1;min-width:0" type="time" data-field="dueTime" value="${esc(taskTime(t))}" ${t.due ? '' : 'disabled'} aria-label="Due time">
-            ${taskTime(t) ? '<button type="button" class="icon-btn edit-only" data-action="clear-time" title="No time — any time that day">✕</button>' : ''}
-          </span>
-        </label>
-      </div>
-      ${reminderBlock(t)}
-      ${repeatBlock(t)}
-      ${labelBlock(t)}
-      <h3>Checklist <span>${t.checklist.length ? `${doneSteps}/${t.checklist.length}` : ''}</span></h3>
-      <ul class="steps">${t.checklist.map((s) => `
-        <li class="step ${s.done ? 'done' : ''}">
-          <input type="checkbox" class="check" data-action="toggle-step" data-step="${esc(s.id)}" ${s.done ? 'checked' : ''} aria-label="Step done">
-          <input class="step-text" data-step-text="${esc(s.id)}" value="${esc(s.text)}" aria-label="Step">
-          <button class="icon-btn edit-only" data-action="promote-step" data-step="${esc(s.id)}" title="Turn into its own task">↗</button>
-          <button class="icon-btn edit-only" data-action="delete-step" data-step="${esc(s.id)}" title="Delete step">✕</button>
-        </li>`).join('')}</ul>
-      <form class="row edit-only" data-form="add-step"><input class="input grow" name="title" placeholder="Add a step…" autocomplete="off"><button class="btn small">Add</button></form>
-      <h3>Notes</h3>
-      <textarea class="input" data-field="notes" rows="6" placeholder="Details, links, phone numbers…">${esc(t.notes)}</textarea>
-      ${attachBlock(t)}
+      <section class="p-card">
+        ${t.checklist.length ? `<div class="p-head">Steps <span>${doneSteps}/${t.checklist.length}</span></div>` : ''}
+        <ul class="steps">${t.checklist.map((s) => `
+          <li class="step ${s.done ? 'done' : ''}">
+            <input type="checkbox" class="check" data-action="toggle-step" data-step="${esc(s.id)}" ${s.done ? 'checked' : ''} aria-label="Step done">
+            <input class="step-text" data-step-text="${esc(s.id)}" value="${esc(s.text)}" aria-label="Step">
+            <button class="icon-btn edit-only" data-action="promote-step" data-step="${esc(s.id)}" title="Turn into its own task">↗</button>
+            <button class="icon-btn edit-only" data-action="delete-step" data-step="${esc(s.id)}" title="Delete step">✕</button>
+          </li>`).join('')}</ul>
+        <form class="p-row edit-only" data-form="add-step">
+          <span class="p-ico accent">＋</span>
+          <input class="p-input accent" name="title" placeholder="Add step" autocomplete="off" aria-label="Add step">
+        </form>
+      </section>
+
+      <section class="p-card">
+        <button class="p-row p-click ${inMyDay(t) ? 'on' : ''}" data-action="toggle-myday" data-id="${esc(t.id)}">
+          <span class="p-ico">☀</span><span class="p-text">${inMyDay(t) ? 'Added to My Day' : 'Add to My Day'}</span>${inMyDay(t) ? '<span class="meta edit-only">✕</span>' : ''}
+        </button>
+      </section>
+
+      <section class="p-card">
+        ${t.done ? `<div class="p-row on">
+          <span class="p-ico">✓</span><span class="p-lbl">Done on</span>
+          <input class="p-input" type="date" data-field="doneDate" value="${esc(toISO(new Date(t.completedAt || Date.now())))}" aria-label="Done on">
+          <input class="p-input" style="flex:0 0 auto" type="time" data-field="doneTime" value="${t.completedAllDay ? '' : esc(fmtClock(t.completedAt))}" aria-label="Done at">
+          ${t.completedAllDay ? '' : '<button type="button" class="p-mini edit-only" data-action="clear-done-time" title="No time — just the date">no time</button>'}
+        </div>` : ''}
+        <div class="p-row ${isOverdue(t) ? 'overdue' : t.due ? 'on' : ''}">
+          <span class="p-ico">📅</span><span class="p-lbl">Due</span>
+          <input class="p-input" type="date" data-field="dueDate" value="${esc(taskDate(t))}" aria-label="Due date">
+          <input class="p-input" style="flex:0 0 auto" type="time" data-field="dueTime" value="${esc(taskTime(t))}" ${t.due ? '' : 'disabled'} aria-label="Due time">
+          ${taskTime(t) ? '<button type="button" class="p-mini edit-only" data-action="clear-time" title="No time — any time that day">no time</button>' : ''}
+          ${t.due ? '<button type="button" class="icon-btn edit-only" data-action="clear-due" title="Remove the due date">✕</button>' : ''}
+        </div>
+        ${reminderBlock(t)}
+        ${repeatBlock(t)}
+      </section>
+
+      <section class="p-card">
+        <div class="p-row"><span class="p-ico">▦</span><span class="p-lbl">Bucket</span>
+          <select class="p-select" data-field="bucket">${opt('', 'No bucket', t.bucket)}${sortedBuckets().map((b) => opt(b.id, b.name, t.bucket)).join('')}</select></div>
+        <div class="p-row"><span class="p-ico">⚑</span><span class="p-lbl">Priority</span>
+          <select class="p-select" data-field="priority">${opt('low', 'Low', t.priority)}${opt('med', 'Medium', t.priority)}${opt('high', 'High', t.priority)}</select></div>
+        <div class="p-row"><span class="p-ico">◔</span><span class="p-lbl">Progress</span>
+          <select class="p-select" data-field="progress">${opt('not', 'Not started', t.progress)}${opt('doing', 'In progress', t.progress)}</select></div>
+        <div class="p-row"><span class="p-ico">▶</span><span class="p-lbl">Start</span>
+          <input class="p-input" type="date" data-field="start" value="${esc(t.start)}" aria-label="Start date"></div>
+        ${labelBlock(t)}
+      </section>
+
+      <section class="p-card">${attachBlock(t)}</section>
+
+      <section class="p-card">
+        <textarea class="p-notes" data-field="notes" rows="5" placeholder="Add note">${esc(t.notes)}</textarea>
+      </section>
+
       ${historyBlock(t)}
     </fieldset>
     <div class="drawer-foot">
-      <span class="meta">${t.created ? 'Created ' + esc(fmtStamp(t.created)) : ''}${t.done && t.completedAt ? ' · Done ' + esc(fmtStamp(t.completedAt)) : ''}</span>
-      <button class="btn small danger edit-only" data-action="delete-task" data-id="${esc(t.id)}">Delete task</button>
+      <span class="meta">${t.created ? 'Created ' + esc(fmtStamp(t.created)) : ''}</span>
+      <span class="row" style="gap:6px">
+        <button class="btn small edit-only" data-action="duplicate-task" title="Make a copy of this task">⧉ Duplicate</button>
+        <button class="btn small danger edit-only" data-action="delete-task" data-id="${esc(t.id)}">Delete</button>
+      </span>
     </div>`;
 }
 // Filled in by later sections (buckets/labels, recurring, attachments).
@@ -1597,12 +1680,12 @@ const fileIcon = (a) => (/^image\//.test(a.type) ? '🖼' : /pdf/.test(a.type) |
 
 function reminderBlock(t) {
   const list = t.reminders.map((r) => `
-    <li class="attach">
-      <span>🔔</span><span style="flex:1;min-width:0">${esc(reminderText(t, r))}</span>
+    <div class="p-row">
+      <span class="p-ico">🔔</span><span class="p-text">${esc(reminderText(t, r))}</span>
       ${r.fired ? '<span class="meta">done</span>' : ''}
       <button class="icon-btn edit-only" data-action="edit-reminder" data-rem="${esc(r.id)}" title="Change reminder">✎</button>
       <button class="icon-btn edit-only" data-action="delete-reminder" data-rem="${esc(r.id)}" title="Remove reminder">✕</button>
-    </li>`).join('');
+    </div>`).join('');
   const c = state.remCustom;
   // Editing fills the form with the reminder's current values; adding starts from sensible ones.
   const editing = state.remEdit && t.reminders.find((r) => r.id === state.remEdit);
@@ -1615,52 +1698,54 @@ function reminderBlock(t) {
   }
   const unitOpt = (val, label) => `<option value="${val}" ${v.unit === val ? 'selected' : ''}>${label}</option>`;
   const custom = !c ? '' : `
-    <form class="row edit-only" data-form="add-reminder" data-kind="${c}">
+    <form class="p-sub row edit-only" data-form="add-reminder" data-kind="${c}">
       ${editing ? '<span class="meta">Change:</span>' : ''}
-      ${c === 'before' ? `<input class="input num" type="number" name="n" min="0" max="999" value="${v.n}" aria-label="How many">
+      ${c === 'before' ? `<input class="num-box" type="number" name="n" min="0" max="999" value="${v.n}" aria-label="How many">
         <select class="input" name="unit" aria-label="Unit">${unitOpt(1, 'minutes')}${unitOpt(60, 'hours')}${unitOpt(1440, 'days')}</select> before`
-        : c === 'dayof' ? `<input class="input num" type="number" name="days" min="0" max="60" value="${v.days}" aria-label="Days before"> day(s) before, at
+        : c === 'dayof' ? `<input class="num-box" type="number" name="days" min="0" max="60" value="${v.days}" aria-label="Days before"> day(s) before, at
         <input class="input" type="time" name="time" value="${esc(v.time)}" required aria-label="Time">`
         : `<input class="input" type="datetime-local" name="at" value="${esc(v.at)}" required aria-label="Date and time">`}
       <button class="btn small primary">${editing ? 'Save' : 'Add'}</button>
       <button type="button" class="icon-btn" data-action="cancel-reminder" title="Cancel">✕</button>
     </form>`;
   return `
-    <h3>Reminders <span>${t.reminders.length || ''}</span></h3>
-    ${list ? `<ul class="attachments">${list}</ul>` : '<p class="meta">No reminders.</p>'}
-    <select class="input edit-only" data-rem-add aria-label="Add a reminder">
-      <option value="">+ Add a reminder…</option>
-      ${REMINDER_PRESETS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('')}
-      <option value="custom-before">Custom: some time before…</option>
-      <option value="custom-dayof">Custom: days before, at a time…</option>
-      <option value="custom-at">On a date and time…</option>
-    </select>
+    ${list}
+    <div class="p-row edit-only">
+      <span class="p-ico">⏰</span>
+      <select class="p-select" data-rem-add aria-label="Add a reminder">
+        <option value="">${t.reminders.length ? 'Add another reminder' : 'Remind me'}</option>
+        ${REMINDER_PRESETS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('')}
+        <option value="custom-before">Custom: some time before…</option>
+        <option value="custom-dayof">Custom: days before, at a time…</option>
+        <option value="custom-at">On a date and time…</option>
+      </select>
+    </div>
     ${custom}`;
 }
 
 function attachBlock(t) {
   const repeating = !!(t.repeat || t.seriesId);
   const list = t.attachments.map((a) => `
-    <li class="attach">
-      <span>${fileIcon(a)}</span>
+    <div class="p-row">
+      <span class="p-ico">${fileIcon(a)}</span>
       <button class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</button>
       <span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
         title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}">📌</button>` : ''}
       <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
       <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>
-    </li>`).join('');
+    </div>`).join('');
   let action = '';
   if (!state.readOnly) {
-    if (AT.status === 'ok') action = '<label class="btn small">📎 Attach files<input type="file" multiple data-input="attach" hidden></label>';
-    else if (AT.status === 'reconnect') action = '<button class="btn small primary" data-action="at-reconnect">Reconnect attachments folder</button><p class="meta">Browsers ask again for folder access after a restart.</p>';
-    else action = '<button class="btn small" data-action="at-folder">📁 Choose attachments folder</button><p class="meta">Pick a folder once, for example next to your data file. Files you attach are copied there; the data file only remembers which file belongs to which task.</p>';
+    if (AT.status === 'ok') action = '<label class="p-row p-click"><span class="p-ico">📎</span><span class="p-text">Add file</span><input type="file" multiple data-input="attach" hidden></label>';
+    else if (AT.status === 'reconnect') action = '<button class="p-row p-click" data-action="at-reconnect"><span class="p-ico">📎</span><span class="p-text">Reconnect attachments folder</span></button><p class="p-sub meta">Browsers ask again for folder access after a restart.</p>';
+    else action = '<button class="p-row p-click" data-action="at-folder"><span class="p-ico">📁</span><span class="p-text">Choose attachments folder</span></button><p class="p-sub meta">Pick a folder once, for example next to your data file. Files you attach are copied there; the data file only remembers which file belongs to which task.</p>';
   }
   return `
-    <h3>Attachments <span>${t.attachments.length || ''}</span></h3>
-    ${list ? `<ul class="attachments">${list}</ul>` : '<p class="meta">No attachments.</p>'}
-    ${repeating && t.attachments.length ? '<p class="meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
-    ${state.readOnly && t.attachments.length ? '<p class="meta">Attached files open on your computer only, for now.</p>' : ''}
+    ${list}
+    ${repeating && t.attachments.length ? '<p class="p-sub meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
+    ${state.readOnly && t.attachments.length ? '<p class="p-sub meta">Attached files open on your computer only, for now.</p>' : ''}
+    ${state.readOnly && !t.attachments.length ? '<div class="p-row"><span class="p-ico">📎</span><span class="p-text muted">No files</span></div>' : ''}
     ${action}`;
 }
 
@@ -1710,6 +1795,60 @@ function closeTaskDrawer() {
   renderDrawer();
 }
 
+// ----- "Done on…" pop-up: ticking a task asks when it was done (default: now), with "no time" as an option -----
+function openDonePrompt(t) {
+  state.donePrompt = t.id;
+  const now = new Date();
+  $('#modal').innerHTML = `
+    <div class="modal-back" data-action="done-cancel"></div>
+    <form class="modal" data-form="done-date" role="dialog" aria-label="When was it done?">
+      <h3>Mark done</h3>
+      <p class="meta" style="margin:0">${esc(t.title || 'New task')}</p>
+      <div class="row">
+        <label class="field">Done on<input class="input" type="date" name="date" value="${toISO(now)}" required></label>
+        <label class="field">Time<input class="input" type="time" name="time" value="${pad(now.getHours())}:${pad(now.getMinutes())}"></label>
+      </div>
+      <label class="row meta" style="gap:6px"><input type="checkbox" name="notime" data-done-notime> No time — just the date</label>
+      ${t.repeat && t.repeat.freq === 'after' ? '<p class="meta">↻ The next one is counted from this date.</p>' : ''}
+      <div class="row" style="justify-content:flex-end">
+        <button type="button" class="btn" data-action="done-cancel">Cancel</button>
+        <button class="btn primary" data-done-ok>Done</button>
+      </div>
+    </form>`;
+  $('#modal [data-done-ok]').focus(); // Enter = done now
+}
+function closeDonePrompt() { state.donePrompt = null; $('#modal').innerHTML = ''; }
+function finishDonePrompt(data) {
+  const t = DB.tasks.find((x) => x.id === state.donePrompt);
+  closeDonePrompt();
+  if (!t || t.done || !data.date) return;
+  const allDay = !!data.notime || !data.time;
+  const doneAt = new Date(`${data.date}T${allDay ? '12:00' : data.time}`); // midday for a date-only "done"
+  completeTask(t, doneAt, allDay);
+  changed('tasks');
+  render();
+  renderDrawer();
+}
+
+// Changing the done date of a done task. For "again after I finish it" repeats the next copy is counted
+// from it, so an untouched next copy is made again from the new date.
+function setDoneDate(t, date, time) {
+  if (!t.done || !date) return;
+  const allDay = !time;
+  const doneAt = new Date(`${date}T${allDay ? '12:00' : time}`);
+  t.completedAt = doneAt.getTime();
+  t.completedAllDay = allDay;
+  if (t.repeat && t.repeat.freq === 'after') {
+    const next = nextCopyIfUntouched(t);
+    if (next) {
+      DB.tasks = DB.tasks.filter((x) => x !== next);
+      t.spawnedNext = '';
+      const again = spawnNext(t, doneAt);
+      if (again) toast(`Next one moved to ${fmtDay(again.due.slice(0, 10))}`);
+    }
+  }
+}
+
 // "+ New task" opens the panel on a blank task; if you leave without giving it a name, it's thrown away.
 function newTaskInPanel() {
   const t = addTask({ title: '', myDay: state.view === 'today' ? todayISO() : '' });
@@ -1738,6 +1877,15 @@ function setTaskField(field, value) {
     if (!t.due) return;
     t.due = `${taskDate(t)}T${value || ALL_DAY}`;
     field = 'due';
+  } else if (field === 'doneDate' || field === 'doneTime') {
+    const d = new Date(t.completedAt || Date.now());
+    const time = t.completedAllDay ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (field === 'doneDate') setDoneDate(t, value, time);
+    else setDoneDate(t, toISO(d), value);
+    changed('tasks');
+    render();
+    renderDrawer();
+    return;
   }
   else if (['bucket', 'progress', 'priority', 'start', 'notes'].includes(field)) t[field] = value;
   else return;
@@ -1752,14 +1900,62 @@ function afterTaskEdit(t, field) {
   renderDrawer(); // date/time fields and the "next one is due…" line depend on it
 }
 
-// Ticking a repeating task off creates the next copy (once — re-ticking never makes a second).
-function completeTask(t) {
+// Ticking a task off. doneAt = when it was done (the pop-up lets you pick; default now); allDay = no time given.
+// A repeating task then gets its next copy (once — re-ticking never makes a second).
+function completeTask(t, doneAt = new Date(), allDay = false) {
   t.done = true;
-  t.completedAt = Date.now();
+  t.completedAt = doneAt.getTime();
+  t.completedAllDay = !!allDay;
+  return spawnNext(t, doneAt);
+}
+
+// A copy is "untouched" while it still matches what was made (reminders going off don't count).
+function taskSig(x) {
+  const { spawnSig, ...rest } = x;
+  return JSON.stringify({ ...rest, reminders: x.reminders.map(({ fired, ...r }) => r) });
+}
+function nextCopyIfUntouched(t) {
+  const next = t.spawnedNext && DB.tasks.find((x) => x.id === t.spawnedNext);
+  return next && !next.done && next.spawnSig && taskSig(next) === next.spawnSig ? next : null;
+}
+
+// Unticking: back to not done. If the next copy hasn't been touched, it goes away again.
+function uncompleteTask(t) {
+  t.done = false;
+  t.completedAt = 0;
+  t.completedAllDay = false;
+  if (!t.spawnedNext) return;
+  const next = nextCopyIfUntouched(t);
+  if (next) {
+    DB.tasks = DB.tasks.filter((x) => x !== next);
+    t.spawnedNext = '';
+    if (state.openTask === next.id) state.openTask = null;
+    toast(`Removed the next copy (${next.title}) — it hadn't been changed`);
+  } else if (DB.tasks.some((x) => x.id === t.spawnedNext)) {
+    toast('The next copy stays — you\'d already changed it');
+  } else t.spawnedNext = '';
+}
+
+// "Title (copy)": everything but attachments, done state and series; checklist unticked, reminders re-armed.
+function duplicateTask(t) {
+  const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
+  delete copy.spawnSig;
+  Object.assign(copy, {
+    id: uid(), title: `${t.title} (copy)`, done: false, completedAt: 0, completedAllDay: false, created: Date.now(),
+    attachments: [], seriesId: '', seriesIndex: 1, spawnedNext: '',
+  });
+  copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
+  copy.reminders = copy.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
+  DB.tasks.splice(DB.tasks.indexOf(t) + 1, 0, copy);
+  changed('tasks');
+  return copy;
+}
+
+function spawnNext(t, doneAt = new Date()) {
   if (!t.repeat || t.spawnedNext) return null;
   const index = t.seriesIndex || 1;
   if (endModeOf(t.repeat) === 'count' && index >= (t.repeat.count || 1)) return null; // that was the last one
-  const due = nextDue(t, new Date());
+  const due = nextDue(t, doneAt);
   if (!due) return null; // the repeat's end date has passed
   const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
   Object.assign(copy, {
@@ -1783,6 +1979,7 @@ function completeTask(t) {
   } else copy.start = '';
   t.seriesId = copy.seriesId;
   t.spawnedNext = copy.id;
+  copy.spawnSig = taskSig(copy); // so unticking can tell whether it's been changed since
   DB.tasks.push(copy);
   toast(`↻ Next one created: ${fmtDay(due.slice(0, 10))}`);
   return copy;
@@ -1822,7 +2019,7 @@ function nthWeekday(y, m, weekday, nth) {
 function nextDue(t, doneOn = new Date()) {
   const r = t.repeat;
   if (!r) return null;
-  const n = Math.min(99, Math.max(1, Math.floor(Number(r.interval)) || 1));
+  const n = Math.min(999, Math.max(1, Math.floor(Number(r.interval)) || 1));
   const time = t.due ? t.due.slice(10) : '';
   const base = t.due ? parseISO(t.due.slice(0, 10)) : parseISO(toISO(doneOn));
   let d;
@@ -1851,7 +2048,8 @@ function nextDue(t, doneOn = new Date()) {
     case 'yearly': d = addMonthsClamped(base, 12 * n, r.anchorDay); break;
     case 'after': {
       const from = parseISO(toISO(doneOn));
-      d = r.unit === 'weeks' ? addDays(from, 7 * n) : r.unit === 'months' ? addMonthsClamped(from, n) : addDays(from, n);
+      d = r.unit === 'weeks' ? addDays(from, 7 * n) : r.unit === 'months' ? addMonthsClamped(from, n)
+        : r.unit === 'years' ? addMonthsClamped(from, 12 * n) : addDays(from, n);
       break;
     }
     default: return null;
@@ -1907,7 +2105,7 @@ function repeatBlock(t) {
     box = `
       <div class="repeat-box">
         <div class="row meta">Every
-          <input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval || 1}" aria-label="Every how many">
+          <input class="num-box" type="number" min="1" max="999" data-repeat="interval" value="${r.interval || 1}" aria-label="Every how many">
           <select class="input" data-repeat="unitFreq" aria-label="Unit">${opt('daily', 'day(s)', f)}${opt('weekly', 'week(s)', f)}${opt('monthly', 'month(s)', f)}${opt('yearly', 'year(s)', f)}</select>
         </div>
         ${f === 'weekly' ? `<div class="row weekdays">${WEEKDAYS.map((w, i) => `<button class="day-btn ${r.days.includes(i) ? 'on' : ''}" data-action="repeat-day" data-weekday="${i}" title="${w}" aria-pressed="${r.days.includes(i)}">${w[0]}</button>`).join('')}</div>` : ''}
@@ -1918,8 +2116,8 @@ function repeatBlock(t) {
       </div>`;
     box += endBlock(r, end, opt);
   } else if (r && f === 'after') {
-    box = `<div class="repeat-box"><label class="row meta"><input class="input num" type="number" min="1" max="99" data-repeat="interval" value="${r.interval || 1}" aria-label="How many">
-      <select class="input" data-repeat="unit" aria-label="Unit">${opt('days', 'days', r.unit)}${opt('weeks', 'weeks', r.unit)}${opt('months', 'months', r.unit)}</select> after I tick it off</label></div>${endBlock(r, endModeOf(r), opt)}`;
+    box = `<div class="repeat-box"><label class="row meta"><input class="num-box" type="number" min="1" max="999" data-repeat="interval" value="${r.interval || 1}" aria-label="How many">
+      <select class="input" data-repeat="unit" aria-label="Unit">${opt('days', 'days', r.unit)}${opt('weeks', 'weeks', r.unit)}${opt('months', 'months', r.unit)}${opt('years', 'years', r.unit)}</select> after I tick it off</label></div>${endBlock(r, endModeOf(r), opt)}`;
   } else if (r) box = endBlock(r, endModeOf(r), opt);
   let next = '';
   if (r && !t.done) {
@@ -1932,14 +2130,19 @@ function repeatBlock(t) {
     }
   }
   return `
-    <h3>Repeat</h3>
-    <select class="input" data-repeat="freq" aria-label="Repeat">
-      ${opt('', 'Never', preset)}${opt('daily', 'Daily', preset)}${opt('weekdays', 'Weekdays (Mon–Fri)', preset)}${opt('weekly', 'Weekly', preset)}
-      ${opt('monthly', 'Monthly', preset)}${opt('yearly', 'Yearly', preset)}${opt('after', 'Again after I finish it', preset)}${opt('custom', 'Custom…', preset)}
-    </select>
-    ${box}
-    ${r ? `<label class="row meta" style="gap:6px"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}> Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</label>
-      ${next ? `<p class="meta">↻ ${next}</p>` : ''}` : ''}`;
+    <div class="p-row">
+      <span class="p-ico">↻</span>
+      <select class="p-select ${r ? 'set' : ''}" data-repeat="freq" aria-label="Repeat">
+        ${opt('', r ? "Don't repeat" : 'Repeat', preset)}${opt('daily', 'Daily', preset)}${opt('weekdays', 'Weekdays (Mon–Fri)', preset)}${opt('weekly', 'Weekly', preset)}
+        ${opt('monthly', 'Monthly', preset)}${opt('yearly', 'Yearly', preset)}${opt('after', 'Again after I finish it', preset)}${opt('custom', 'Custom…', preset)}
+      </select>
+      ${r ? '<button class="icon-btn edit-only" data-action="clear-repeat" title="Stop repeating">✕</button>' : ''}
+    </div>
+    ${r ? `<div class="p-sub">
+      ${box}
+      <label class="row meta" style="gap:6px"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}> Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</label>
+      ${next ? `<p class="meta" style="margin:0">↻ ${next}</p>` : ''}
+    </div>` : ''}`;
 }
 
 function endBlock(r, end, opt) {
@@ -1947,7 +2150,7 @@ function endBlock(r, end, opt) {
     <div class="row meta">Ends
       <select class="input" data-repeat="endMode" aria-label="Ends">${opt('never', 'Never', end)}${opt('date', 'On a date', end)}${opt('count', 'After a number of times', end)}</select>
       ${end === 'date' ? `<input class="input" type="date" data-repeat="until" value="${esc(r.until || '')}" aria-label="End date">` : ''}
-      ${end === 'count' ? `<input class="input num" type="number" min="1" max="999" data-repeat="count" value="${r.count || 10}" aria-label="How many times"> times` : ''}
+      ${end === 'count' ? `<input class="num-box" type="number" min="1" max="999" data-repeat="count" value="${r.count || 10}" aria-label="How many times"> times` : ''}
     </div>`;
 }
 
@@ -1967,7 +2170,7 @@ function setRepeat(key, value) {
     }
   } else if (t.repeat) {
     const r = t.repeat;
-    if (key === 'interval') r.interval = Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
+    if (key === 'interval') r.interval = Math.min(999, Math.max(1, Math.floor(Number(value)) || 1));
     else if (key === 'count') r.count = Math.min(999, Math.max(1, Math.floor(Number(value)) || 1));
     else if (key === 'endMode') {
       r.endMode = value;
@@ -2350,7 +2553,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
-  'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task',
+  'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -2381,11 +2584,37 @@ document.addEventListener('click', (e) => {
   switch (action) {
     case 'toggle-task': {
       const t = DB.tasks.find((x) => x.id === id);
-      if (t) {
-        if (t.done) { t.done = false; t.completedAt = 0; } else completeTask(t);
+      if (!t) break;
+      if (t.done) {
+        uncompleteTask(t);
         changed('tasks');
-      }
-      setTimeout(() => { render(); renderDrawer(); }, 150); // let the tick show before the list re-sorts
+        setTimeout(() => { render(); renderDrawer(); }, 150); // let the tick show before the list re-sorts
+      } else openDonePrompt(t); // ask when it was done, then tick it off
+      break;
+    }
+    case 'done-cancel': closeDonePrompt(); render(); renderDrawer(); break;
+    case 'clear-due': {
+      const t = currentTask();
+      if (!t) break;
+      if (t.repeat) { toast('A repeating task needs a due date — stop the repeat first'); break; }
+      t.due = '';
+      afterTaskEdit(t, 'due');
+      changed('tasks'); render();
+      break;
+    }
+    case 'clear-repeat': setRepeat('freq', ''); break;
+    case 'clear-done-time': {
+      const t = currentTask();
+      if (t && t.done) { setDoneDate(t, toISO(new Date(t.completedAt)), ''); changed('tasks'); render(); renderDrawer(); }
+      break;
+    }
+    case 'duplicate-task': {
+      const t = currentTask();
+      if (!t) break;
+      const copy = duplicateTask(t);
+      render();
+      openTaskDrawer(copy.id);
+      toast(`Made “${copy.title}”`);
       break;
     }
     case 'delete-task': {
@@ -2551,6 +2780,7 @@ document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (state.readOnly) return toast('Read-only on this device');
   const data = Object.fromEntries(new FormData(form));
+  if (form.dataset.form === 'done-date') { finishDonePrompt(data); return; }
   if (form.dataset.form === 'add-reminder') {
     const t = currentTask();
     const k = form.dataset.kind;
@@ -2611,6 +2841,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (state.openTask) closeTaskDrawer();
 });
@@ -2620,6 +2851,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.matches?.('[data-qa-tool]')) updateQuickPreview(e.target.form);
+  if (e.target.matches?.('[data-done-notime]')) e.target.form.elements.time.disabled = e.target.checked;
 });
 
 // Board drag and drop (computer only; phones are read-only).

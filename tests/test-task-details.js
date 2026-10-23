@@ -1,5 +1,5 @@
 // Task details drawer: old data still loads, fields save, checklist, notes, My Day, tabs, read-only drawer.
-const { loadApp, submitForm, tick, check, done } = require('./helpers');
+const { loadApp, submitForm, confirmDone, tick, check, done } = require('./helpers');
 
 const pad = (n) => String(n).padStart(2, '0');
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -123,6 +123,7 @@ const click = (win, sel) => win.document.querySelector(sel).click();
   // Ticking done from the drawer
   click(win, `[data-action="open-task"][data-id="${quick.id}"]`);
   click(win, '#drawer [data-action="toggle-task"]');
+  confirmDone(win);
   check(quick.done && quick.completedAt > 0, 'done from the drawer records when');
 
   // Close with Esc

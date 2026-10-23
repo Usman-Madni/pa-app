@@ -104,6 +104,16 @@ function submitForm(win, formName, values) {
   form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+// Ticking a task opens the "Done on…" pop-up; this answers it (default: now).
+function confirmDone(win, values = {}) {
+  const form = win.document.querySelector('#modal form[data-form="done-date"]');
+  if (!form) throw new Error('"Done on" pop-up not open');
+  for (const [k, v] of Object.entries(values)) {
+    if (form.elements[k].type === 'checkbox') form.elements[k].checked = !!v; else form.elements[k].value = v;
+  }
+  form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+}
+
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 let failures = 0;
@@ -116,4 +126,4 @@ function done() {
   process.exit(0);
 }
 
-module.exports = { DEPS_DIR, APP_FILE, loadApp, fakeFile, fakeFolder, submitForm, tick, check, done };
+module.exports = { DEPS_DIR, APP_FILE, loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, done };

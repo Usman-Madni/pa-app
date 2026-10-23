@@ -1,5 +1,5 @@
 // Tasks, events and notes save to the browser; IDs never collide; a fresh load shows saved data.
-const { loadApp, submitForm, tick, check, done } = require('./helpers');
+const { loadApp, submitForm, confirmDone, tick, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp();
@@ -32,6 +32,8 @@ const { loadApp, submitForm, tick, check, done } = require('./helpers');
   // Tick a task done
   win.document.querySelector('[data-view="tasks"]').click();
   doc.querySelector('[data-action="toggle-task"]').click();
+  check(PA.DB.tasks[0].done === false && doc.querySelector('#modal form[data-form="done-date"]'), 'ticking asks when it was done');
+  confirmDone(win);
   check(PA.DB.tasks[0].done === true, 'task can be ticked done');
 
   // IDs

@@ -1,6 +1,6 @@
 // Recurring tasks: the date maths (month ends, leap years, every N weeks…), the next copy is made exactly
 // once, it resets what should reset, the end date stops it, and the calendar shows upcoming repeats.
-const { loadApp, check, done } = require('./helpers');
+const { loadApp, confirmDone, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp();
@@ -88,6 +88,7 @@ const { loadApp, check, done } = require('./helpers');
   t.progress = 'doing';
   const before = PA.DB.tasks.length;
   doc.querySelector(`#drawer [data-action="toggle-task"]`).click();
+  confirmDone(win);
   const copy = PA.DB.tasks[PA.DB.tasks.length - 1];
   check(PA.DB.tasks.length === before + 1 && copy.title === 'Water plants' && !copy.done, 'ticking it off creates the next one');
   const expected = new Date(dueDay.getFullYear(), dueDay.getMonth(), dueDay.getDate() + 7);
@@ -122,6 +123,7 @@ const { loadApp, check, done } = require('./helpers');
   check(copy.repeat === null, 'repeat can be turned off');
   const n2 = PA.DB.tasks.length;
   doc.querySelector(`#drawer [data-action="toggle-task"]`).click();
+  confirmDone(win);
   check(PA.DB.tasks.length === n2, 'a non-repeating task makes no copy');
 
   // Monthly "31st" anchor survives being spawned
