@@ -33,6 +33,34 @@ const { loadApp, check, done } = require('./helpers');
   row.querySelector('[data-action="open-task"]').click();
   check(PA.state.openTask === t.id, 'clicking it opens the task');
   check(doc.querySelector('.cal-legend').textContent.includes('Done that day (late)') && doc.querySelector('.cal-legend').textContent.includes('Estimated repeat'), 'legend explains both new chips');
+  // --- Late bar: ○ due day ━━ ● done day, lanes, across week rows; chip notes; hover links them ---
+  const m = PA.addTask({ title: 'm', due: '2026-10-24T23:59' }); // a Saturday
+  PA.completeTask(m, new Date(2026, 9, 25, 12), true);           // the Sunday after (next week row)
+  const ins = PA.addTask({ title: 'Insurance', due: '2026-10-09T23:59' });
+  PA.completeTask(ins, new Date(2026, 9, 15, 12), true);
+  PA.render();
+  const segs = (id) => [...doc.querySelectorAll(`.late-seg[data-late="${id}"]`)];
+  const dayOf = (el) => el.closest('.cal-day').dataset.day;
+  check(segs(m.id).map(dayOf).join(',') === '2026-10-24,2026-10-25', 'the bar runs from the due day to the done day');
+  check(segs(m.id)[0].classList.contains('s-start') && segs(m.id)[1].classList.contains('s-end'), 'it starts at the due day (○) and ends at the done day (●)');
+  check(segs(m.id)[0].classList.contains('s-wrapr') && segs(m.id)[1].classList.contains('s-wrapl'), 'it carries on from Saturday to the next row\'s Sunday');
+  check(segs(t.id).length === 20, 'a 19-days-late task has a bar across all 20 days');
+  const lanes = (id) => new Set(segs(id).map((s) => s.style.getPropertyValue('--lane')));
+  check([...lanes(t.id)][0] !== [...lanes(ins.id)][0], 'overlapping late bars get separate lanes so they don\'t cover each other');
+  const dueChip = doc.querySelector('.cal-day[data-day="2026-10-24"] .chip[data-late]');
+  const doneChip = doc.querySelector('.cal-day[data-day="2026-10-25"] .chip[data-late]');
+  check(dueChip.textContent.includes('m · +1d') && dueChip.querySelector('.chip-note'), 'the due-day chip says "+1d"');
+  check(doneChip.textContent.includes('✓ m · due 24th'), 'the done-day chip says "due 24th"');
+  const otherMonth = doc.querySelector('.cal-day[data-day="2026-10-20"] .chip.doneon');
+  check(otherMonth && /due (1st|Oct 1)/.test(otherMonth.textContent), 'same month → "due 1st"');
+  dueChip.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
+  const lit = [...doc.querySelectorAll('.late-hl')];
+  check(lit.length === 4 && lit.every((x) => x.dataset.late === m.id), 'pointing at it highlights its due chip, bar and done chip together');
+  doc.querySelector('.cal-head').dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
+  check(!doc.querySelector('.late-hl'), 'moving away clears the highlight');
+  const legend = doc.querySelector('.cal-legend');
+  check(legend.querySelector('.chip.t-overdue').textContent === 'Task' && legend.querySelector('.legend-bar'), 'legend swatches are sample chips, plus the late bar');
+
   // The My Day "Events today" card only counts events
   PA.state.openTask = null;
   PA.renderDrawer();
