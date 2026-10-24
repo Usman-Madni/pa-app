@@ -250,6 +250,11 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .chip.t-upcoming, .pill.t-upcoming { background: color-mix(in srgb, var(--c-upcoming) 15%, transparent); color: var(--c-upcoming); }
 .chip.t-done, .pill.t-done { background: color-mix(in srgb, var(--c-done) 14%, transparent); color: var(--c-done); text-decoration: line-through; opacity: .75; }
 .chip.event { background: color-mix(in srgb, var(--c-event) 15%, transparent); color: var(--c-event); }
+/* Done late: green with an orange edge (calendar), orange text (lists) */
+:root { --c-late: #f97316; }
+.late { color: var(--c-late); font-weight: 600; }
+.chip.late, .pill.late { box-shadow: inset 0 0 0 1.5px var(--c-late); color: var(--c-done); font-weight: 400; }
+.day-item.late { border-left-color: var(--c-late); }
 .day-item { border-left: 3px solid transparent; padding-left: 8px; }
 .day-item.t-overdue { border-left-color: var(--c-overdue); }
 .day-item.t-today { border-left-color: var(--c-today); }
@@ -549,6 +554,7 @@ const state = {
   remCustom: null,         // which custom reminder form is open in the drawer: 'before' | 'dayof' | 'at'
   remEdit: null,           // id of the reminder being changed in that form (null = adding a new one)
   donePrompt: null,        // id of the task whose "Done on…" pop-up is open
+  labelManage: false,      // the panel's label list is open for renaming / recolouring / deleting
 };
 
 // ===================== Data file (auto-save) =====================
@@ -984,6 +990,15 @@ const taskTime = (t) => (t.due && t.due.slice(11, 16) !== ALL_DAY ? t.due.slice(
 const taskLayout = () => device.get('taskLayout', 'board'); // Board is the default; List is one click away
 const isOverdue = (t) => !t.done && !!t.due && new Date(t.due) < new Date();
 const inMyDay = (t) => t.myDay === todayISO(); // My Day empties itself each morning
+// Done after it was due? Whole days between the due date and the done date; a timed task done later the
+// same day counts as "late (same day)". An all-day task is only late from the next day.
+function lateDays(t) {
+  if (!t.done || !t.due || !t.completedAt) return 0;
+  const days = Math.round((parseISO(toISO(new Date(t.completedAt))) - parseISO(taskDate(t))) / DAY_MS);
+  if (days > 0) return days;
+  return days === 0 && taskTime(t) && !t.completedAllDay && t.completedAt > new Date(t.due).getTime() ? 0.5 : 0;
+}
+const lateText = (t) => { const d = lateDays(t); return d >= 1 ? `Done ${d} day${d === 1 ? '' : 's'} late` : d ? 'Done late (same day)' : ''; };
 const currentTask = () => DB.tasks.find((t) => t.id === state.openTask) || null;
 
 // Sort orders for the Tasks screen (chosen per device). Done tasks go last, except when sorting by completion.
@@ -1032,12 +1047,12 @@ function groupTasks(list, mode) {
 
 // Colour on the calendar: done (green), overdue (red), today (accent), upcoming (blue).
 const taskStatus = (t) => (t.done ? 'done' : isOverdue(t) ? 'overdue' : taskDate(t) === todayISO() ? 'today' : 'upcoming');
-const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}` : it.kind === 'repeat' ? 'repeat' : 'event');
+const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}${it.late ? ' late' : ''}` : it.kind === 'repeat' ? 'repeat' : 'event');
 
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
-  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t) }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0 }));
   const repeats = (previews && previews[key]) || [];
   return [...events, ...tasks, ...repeats].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
 }
@@ -1047,7 +1062,17 @@ function render() {
   document.body.classList.toggle('readonly', state.readOnly);
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, settings: renderSettings };
+  // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
+  const oldBoard = $('#main .board');
+  const keep = state.view === render.lastView
+    ? { y: window.scrollY, top: oldBoard ? oldBoard.scrollTop : 0, left: oldBoard ? oldBoard.scrollLeft : 0 } : null;
+  render.lastView = state.view;
   $('#main').innerHTML = (views[state.view] || renderToday)();
+  if (keep) {
+    const board = $('#main .board');
+    if (board) { board.scrollTop = keep.top; board.scrollLeft = keep.left; }
+    if (window.scrollY !== keep.y) try { window.scrollTo(0, keep.y); } catch { /* not available in tests */ }
+  }
   $('.main').classList.toggle('wide', state.view === 'tasks' && taskLayout() === 'board');
   // Board: the page fits the window and only the board scrolls, so the top stays put and column names stick.
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
@@ -1160,6 +1185,7 @@ function taskSummary(t) {
     const when = `${taskDate(t) === todayISO() ? 'Today' : fmtDay(taskDate(t))}${taskTime(t) ? ' ' + fmtTime(taskTime(t)) : ''}`;
     meta.push(`<span class="${isOverdue(t) ? 'overdue' : ''}">${isOverdue(t) ? 'Overdue · ' : ''}${esc(when)}</span>`);
   }
+  if (lateText(t)) meta.push(`<span class="late">${lateText(t)}</span>`);
   if (t.start && t.start > todayISO() && !t.done) meta.push(`<span>Starts ${esc(fmtDay(t.start))}</span>`);
   if (t.reminders.length && !t.done) meta.push(`<span>🔔 ${esc(reminderText(t, t.reminders[0]))}${t.reminders.length > 1 ? ` +${t.reminders.length - 1}` : ''}</span>`);
   if (t.repeat) meta.push(`<span title="Repeats">↻ ${esc(repeatText(t.repeat))}</span>`);
@@ -1190,7 +1216,7 @@ const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">
 
 function dayItem(i) {
   const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
-  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${statusText[i.status]}</span>` : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
+  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late ? 'Done late' : statusText[i.status]}</span>` : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
   const open = i.kind === 'task' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   return `
@@ -1641,7 +1667,16 @@ function labelBlock(t) {
         <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${esc(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
         || '<span class="p-text muted">Labels</span>'}
       </div>
+      ${DB.labels.length ? `<button type="button" class="p-mini edit-only" data-action="manage-labels" aria-expanded="${!!state.labelManage}">${state.labelManage ? 'Done' : '✎ Manage'}</button>` : ''}
     </div>
+    ${state.labelManage ? DB.labels.map((l) => `
+      <div class="p-row edit-only">
+        <span class="p-ico"></span>
+        <span class="p-text">${labelPill(l)} <span class="meta">${DB.tasks.filter((x) => x.labels.includes(l.id)).length} tasks</span></span>
+        ${colorSelect(l.color, `data-label-color="${esc(l.id)}" style="width:auto;padding:4px 6px;font-size:13px"`)}
+        <button type="button" class="icon-btn" data-action="rename-label" data-id="${esc(l.id)}" title="Rename">✎</button>
+        <button type="button" class="icon-btn" data-action="delete-label" data-id="${esc(l.id)}" title="Delete label">✕</button>
+      </div>`).join('') : ''}
     <form class="p-row edit-only" data-form="add-label">
       <span class="p-ico"></span>
       <input class="p-input" name="title" placeholder="+ New label" autocomplete="off" maxlength="30" aria-label="New label">
@@ -1720,7 +1755,7 @@ function renderDrawer() {
           <input class="p-input" type="date" data-field="doneDate" value="${esc(toISO(new Date(t.completedAt || Date.now())))}" aria-label="Done on">
           <input class="p-input" style="flex:0 0 auto" type="time" data-field="doneTime" value="${t.completedAllDay ? '' : esc(fmtClock(t.completedAt))}" aria-label="Done at">
           ${t.completedAllDay ? '' : '<button type="button" class="p-mini edit-only" data-action="clear-done-time" title="No time — just the date">no time</button>'}
-        </div>` : ''}
+        </div>${lateText(t) ? `<p class="p-sub late" style="padding-top:0">${lateText(t)}</p>` : ''}` : ''}
         <div class="p-row ${isOverdue(t) ? 'overdue' : t.due ? 'on' : ''}">
           <span class="p-ico">📅</span><span class="p-lbl">Due</span>
           <input class="p-input" type="date" data-field="dueDate" value="${esc(taskDate(t))}" aria-label="Due date">
@@ -1855,7 +1890,7 @@ function historyBlock(t) {
         <span>${x.done ? '✓' : '○'}</span>
         <button class="link-btn" data-action="open-history" data-id="${esc(x.id)}" title="Open this copy">${esc(x.title)}</button>
       </div>
-      <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? ` · done ${esc(fmtStamp(x.completedAt))}` : x.done ? '' : ' · not done yet'}</div>
+      <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? ` · done ${esc(x.completedAllDay ? fmtDay(toISO(new Date(x.completedAt))) : fmtStamp(x.completedAt))}` : x.done ? '' : ' · not done yet'}${lateText(x) ? ` · <span class="late">${lateText(x)}</span>` : ''}</div>
       ${x.notes.trim() ? `<div class="meta history-note">${esc(x.notes.trim().split('\n')[0].slice(0, 120))}</div>` : ''}
       ${x.attachments.length ? `<div class="label-row">${x.attachments.map((a) => `
         <button class="btn small" data-action="open-attach" data-task="${esc(x.id)}" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${fileIcon(a)} ${esc(a.name)}</button>`).join('')}</div>` : ''}
@@ -1893,9 +1928,8 @@ function openDonePrompt(t) {
       <p class="meta" style="margin:0">${esc(t.title || 'New task')}</p>
       <div class="row">
         <label class="field">Done on<input class="input" type="date" name="date" value="${toISO(now)}" required></label>
-        <label class="field">Time<input class="input" type="time" name="time" value="${pad(now.getHours())}:${pad(now.getMinutes())}"></label>
+        <label class="field">Time <span class="meta">(optional)</span><input class="input" type="time" name="time" value=""></label>
       </div>
-      <label class="row meta" style="gap:6px"><input type="checkbox" name="notime" data-done-notime> No time — just the date</label>
       ${t.repeat && t.repeat.freq === 'after' ? '<p class="meta">↻ The next one is counted from this date.</p>' : ''}
       <div class="row" style="justify-content:flex-end">
         <button type="button" class="btn" data-action="done-cancel">Cancel</button>
@@ -1909,7 +1943,7 @@ function finishDonePrompt(data) {
   const t = DB.tasks.find((x) => x.id === state.donePrompt);
   closeDonePrompt();
   if (!t || t.done || !data.date) return;
-  const allDay = !!data.notime || !data.time;
+  const allDay = !data.time; // time left empty = just the date
   const doneAt = new Date(`${data.date}T${allDay ? '12:00' : data.time}`); // midday for a date-only "done"
   completeTask(t, doneAt, allDay);
   changed('tasks');
@@ -2355,7 +2389,8 @@ function repeatPreviews(fromKey, toKey) {
       if (!nd || nd.slice(0, 10) > toKey) break;
       cur = { ...cur, due: nd };
       const k = nd.slice(0, 10);
-      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time: nd.slice(11, 16), kind: 'repeat' });
+      const time = nd.slice(11, 16) === ALL_DAY ? '' : nd.slice(11, 16); // no time stays no time (not "11:59 pm")
+      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time, kind: 'repeat' });
     }
   }
   return out;
@@ -2399,7 +2434,7 @@ function renderCalendar() {
         <div class="cal-grid">${dows}${cells.join('')}</div>
         <div class="cal-legend">
           <span><i class="chip t-overdue"></i>Overdue</span><span><i class="chip t-today"></i>Due today</span>
-          <span><i class="chip t-upcoming"></i>Upcoming</span><span><i class="chip t-done"></i>Done</span>
+          <span><i class="chip t-upcoming"></i>Upcoming</span><span><i class="chip t-done"></i>Done</span><span><i class="chip t-done late"></i>Done late</span>
           <span><i class="chip repeat"></i>Next repeat</span><span><i class="chip event"></i>Event</span>
         </div>
       </div>
@@ -2813,6 +2848,7 @@ document.addEventListener('click', (e) => {
     case 'bucket-left': moveBucket(id, -1); render(); break;
     case 'bucket-right': moveBucket(id, 1); render(); break;
     case 'rename-label': renameLabel(id); render(); renderDrawer(); break;
+    case 'manage-labels': state.labelManage = !state.labelManage; renderDrawer(); break;
     case 'delete-label': deleteLabel(id); render(); renderDrawer(); break;
     case 'close-task': closeTaskDrawer(); break;
     case 'toggle-myday': {
@@ -2943,8 +2979,16 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.matches?.('[data-qa-tool]')) updateQuickPreview(e.target.form);
-  if (e.target.matches?.('[data-done-notime]')) e.target.form.elements.time.disabled = e.target.checked;
 });
+
+// With the task panel open the rest is dimmed, but the mouse wheel over the dimmed part still scrolls the
+// tasks behind it (on the Board only the board scrolls, so pass the wheel on to it).
+document.addEventListener('wheel', (e) => {
+  if (!e.target.classList?.contains('drawer-backdrop')) return;
+  const board = $('.main.fill .board');
+  if (board) { board.scrollTop += e.deltaY; board.scrollLeft += e.deltaX; }
+  else try { window.scrollBy(e.deltaX, e.deltaY); } catch { /* not available in tests */ }
+}, { passive: true });
 
 // Board drag and drop (computer only; phones are read-only).
 document.addEventListener('dragstart', (e) => {
@@ -3017,7 +3061,7 @@ document.addEventListener('change', (e) => {
   }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
-    if (l) { l.color = e.target.value; changed('labels'); render(); }
+    if (l) { l.color = e.target.value; changed('labels'); render(); renderDrawer(); }
     return;
   }
   const kind = e.target.dataset?.input;

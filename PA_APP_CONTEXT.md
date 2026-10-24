@@ -58,7 +58,11 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     6. the note
   - History comes after the cards. The footer has ⧉ Duplicate and Delete.
   - **"+ New task"** opens it on a blank task, which is dropped if left unnamed.
-- **Done on… pop-up:** ticking any task opens it (`openDonePrompt`). Its date and time default to now, "No time" is allowed (`completedAllDay`), and Esc/Cancel leaves the task undone.
+- **Keeping your place:** `render()` keeps the page and board scroll position when redrawing the same screen. While the panel is open the rest is dimmed (`.drawer-backdrop`), but the mouse wheel over the dim area scrolls the board behind it, and clicking it closes the panel.
+- **Done on… pop-up:** ticking any task opens it (`openDonePrompt`). The date defaults to today and the **time is left empty**: empty means "done on that date" (`completedAllDay`). Esc/Cancel leaves the task undone.
+- **Done late** (`lateDays`, `lateText`): a task done after its due date shows "Done N days late" in orange in the list, panel and History. A timed task done later the same day shows "Done late (same day)"; an all-day task only counts as late from the next day. The calendar chip is green with an orange edge, and the legend has "Done late".
+- **Late repeats keep their missed copies:** the next copy is counted from the old due date, so a late weekly task makes the missed weeks as overdue copies. To catch up instead, use "Again after I finish it".
+- **Labels from the panel:** "✎ Manage" next to the labels opens rename, colour and delete for each (`state.labelManage`). Settings has the same controls.
   - A done task's date can be changed in the panel (`setDoneDate`).
   - For "again after I finish it" repeats, an untouched next copy is made again from the new date.
 - **Unticking a repeat** (`uncompleteTask`) removes the next copy if it's untouched: `spawnSig` is a snapshot taken when it was made, and reminders going off don't count as changes. A changed copy stays.
@@ -167,7 +171,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
 | `test-repeat-custom` | title roll-forward (months, years, quarters, weeks, dates, "May", "may" the verb), switch off; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
 | `test-private` | the private-data check catches private terms (including in old versions), emails, personal paths, forbidden files (including identical copies under another name), photos/PDFs/office files, attachments folders, private words in commit messages and personal commit emails; a clean repo passes; this project's history is clean |
-| `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, no time), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), Duplicate, full width |
+| `test-late-labels` | how late (days / same day / on time / early / no due date); shown in list, panel and History; late repeats keep the missed copy; calendar orange edge, legend, day list; no 23:59 on repeat previews; manage labels from the panel; board keeps its scroll after an edit; wheel over the dim scrolls the board |
+| `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, time left empty), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), Duplicate, full width |
 | `test-sort-calendar` | every sort order, remembered; group by due date or bucket; Board cards follow the sort; sticky top and column names; calendar colours, legend, day list colours, opening a task from it |
 | `test-panel-extras` | "+ New task" (blank dropped, My Day), editing reminders, no time subtext, scroll position kept after a change |
 | `test-task-details` | old tasks and version 1 files load with defaults; each task gets its own arrays; drawer fields, title can't be blanked, notes typing keeps focus; checklist (add, tick, edit, turn into a task, delete); My Day (empties next day, Today quick add); tabs; Esc; delete asks when the task has notes; phone drawer is locked |
@@ -214,4 +219,10 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Sticky top (List: tabs/filters; Board: page fits the window and column names stick).
   - Calendar colours with a legend.
   - Labels are kept.
+  - **Later the same day:**
+    - Labels can be managed from the panel.
+    - The dimming stays when the panel is open, but scrolling works under it.
+    - The Done pop-up leaves the time empty, with no tick box.
+    - "Done N days late" in orange, with an orange edge on the calendar.
+    - Late repeats keep their missed copies; use "after I finish it" to catch up instead.
     - Labels, progress and start date are all kept.
