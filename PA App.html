@@ -243,6 +243,10 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 13px; }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+.chip.repeat.est { border-style: dotted; font-style: italic; opacity: .8; } /* "after I finish it": an estimate */
+.chip.doneon, .pill.doneon { background: transparent; border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); color: var(--ok); opacity: .75; }
+.day-item.doneon { border-left: 3px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.pill.doneon { white-space: normal; }
 /* Calendar colours: overdue red, due today accent, upcoming blue, done green (struck through), events teal */
 :root { --c-overdue: var(--danger); --c-today: var(--accent); --c-upcoming: #3b82f6; --c-done: var(--ok); --c-event: #0d9488; }
 .chip.t-overdue, .pill.t-overdue { background: color-mix(in srgb, var(--c-overdue) 16%, transparent); color: var(--c-overdue); }
@@ -1047,14 +1051,23 @@ function groupTasks(list, mode) {
 
 // Colour on the calendar: done (green), overdue (red), today (accent), upcoming (blue).
 const taskStatus = (t) => (t.done ? 'done' : isOverdue(t) ? 'overdue' : taskDate(t) === todayISO() ? 'today' : 'upcoming');
-const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}${it.late ? ' late' : ''}` : it.kind === 'repeat' ? 'repeat' : 'event');
+const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}${it.late ? ' late' : ''}`
+  : it.kind === 'repeat' ? `repeat${it.est ? ' est' : ''}` : it.kind === 'doneon' ? 'doneon' : 'event');
+const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? '↻≈ ' : '↻ ') : it.kind === 'doneon' ? '✓ ' : '');
 
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
   const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0 }));
+  // A task done late also shows (faded, ✓) on the day it was actually done.
+  const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key).map((t) => ({
+    id: t.id, title: t.title, time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
+  }));
   const repeats = (previews && previews[key]) || [];
-  return [...events, ...tasks, ...repeats].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  // What's due/happening that day comes first (so a busy day's 3 chips show it), then "done here", then previews.
+  const rank = { task: 0, event: 0, doneon: 1, repeat: 2 };
+  return [...events, ...tasks, ...doneHere, ...repeats]
+    .sort((a, b) => rank[a.kind] - rank[b.kind] || (a.time || '99').localeCompare(b.time || '99'));
 }
 
 // ===================== Rendering =====================
@@ -1216,9 +1229,11 @@ const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">
 
 function dayItem(i) {
   const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
-  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late ? 'Done late' : statusText[i.status]}</span>` : i.kind === 'repeat' ? '<span class="pill">↻ Upcoming repeat</span>' : '';
+  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late ? 'Done late' : statusText[i.status]}</span>`
+    : i.kind === 'repeat' ? `<span class="pill">${i.est ? '↻≈ Estimated repeat (after I finish it)' : '↻ Upcoming repeat'}</span>`
+    : i.kind === 'doneon' ? `<span class="pill doneon">✓ Done this day — was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
-  const open = i.kind === 'task' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
+  const open = i.kind === 'task' || i.kind === 'doneon' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   return `
     <li class="item day-item ${chipClass(i)} ${i.done ? 'done' : ''}">
       <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
@@ -1466,7 +1481,7 @@ function renderToday() {
   const open = DB.tasks.filter((t) => !t.done);
   const dueToday = sortTasks(DB.tasks.filter((t) => (!t.done && (taskDate(t) === tk || isOverdue(t))) || inMyDay(t)));
   const noDate = sortTasks(open.filter((t) => !t.due && !inMyDay(t))).slice(0, 5);
-  const schedule = itemsForDay(tk).filter((i) => i.kind !== 'task');
+  const schedule = itemsForDay(tk).filter((i) => i.kind === 'event');
   return `
     <div class="page-head">
       <div><h1>☀ My Day</h1><p class="sub">${greet} — ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
@@ -1928,8 +1943,9 @@ function openDonePrompt(t) {
       <p class="meta" style="margin:0">${esc(t.title || 'New task')}</p>
       <div class="row">
         <label class="field">Done on<input class="input" type="date" name="date" value="${toISO(now)}" required></label>
-        <label class="field">Time <span class="meta">(optional)</span><input class="input" type="time" name="time" value=""></label>
+        <label class="field">Time<input class="input" type="time" name="time" value=""></label>
       </div>
+      <p class="meta" style="margin:-4px 0 0">Leave the time empty if you only want the date.</p>
       ${t.repeat && t.repeat.freq === 'after' ? '<p class="meta">↻ The next one is counted from this date.</p>' : ''}
       <div class="row" style="justify-content:flex-end">
         <button type="button" class="btn" data-action="done-cancel">Cancel</button>
@@ -2377,20 +2393,26 @@ function rollTitle(title, from, to) {
 }
 
 // Upcoming copies of repeating tasks for the calendar — shown, not saved.
+// "Again after I finish it" repeats can't be known ahead, so they're estimated as if each one is done on
+// its due date (from today if it's already overdue) and marked as estimates; the real copy follows the
+// day you actually tick it off.
 function repeatPreviews(fromKey, toKey) {
   const out = {};
+  const today = todayISO();
   for (const t of DB.tasks) {
-    if (t.done || !t.repeat || t.repeat.freq === 'after' || !t.due) continue;
+    if (t.done || !t.repeat || !t.due) continue;
+    const est = t.repeat.freq === 'after';
     let cur = t;
     let index = t.seriesIndex || 1;
     for (let i = 0; i < 800; i++) {
       if (endModeOf(t.repeat) === 'count' && ++index > (t.repeat.count || 1)) break;
-      const nd = nextDue(cur);
+      const dueDay = cur.due.slice(0, 10);
+      const nd = est ? nextDue(cur, parseISO(dueDay < today ? today : dueDay)) : nextDue(cur);
       if (!nd || nd.slice(0, 10) > toKey) break;
       cur = { ...cur, due: nd };
       const k = nd.slice(0, 10);
       const time = nd.slice(11, 16) === ALL_DAY ? '' : nd.slice(11, 16); // no time stays no time (not "11:59 pm")
-      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time, kind: 'repeat' });
+      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time, kind: 'repeat', est });
     }
   }
   return out;
@@ -2412,7 +2434,7 @@ function renderCalendar() {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const k = toISO(d);
     const items = itemsForDay(k, previews);
-    const chips = items.slice(0, 3).map((it) => `<span class="chip ${chipClass(it)}">${it.kind === 'repeat' ? '↻ ' : ''}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
+    const chips = items.slice(0, 3).map((it) => `<span class="chip ${chipClass(it)}">${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>`).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
         <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
@@ -2435,7 +2457,8 @@ function renderCalendar() {
         <div class="cal-legend">
           <span><i class="chip t-overdue"></i>Overdue</span><span><i class="chip t-today"></i>Due today</span>
           <span><i class="chip t-upcoming"></i>Upcoming</span><span><i class="chip t-done"></i>Done</span><span><i class="chip t-done late"></i>Done late</span>
-          <span><i class="chip repeat"></i>Next repeat</span><span><i class="chip event"></i>Event</span>
+          <span><i class="chip doneon"></i>✓ Done that day (late)</span>
+          <span><i class="chip repeat"></i>Next repeat</span><span><i class="chip repeat est"></i>Estimated repeat</span><span><i class="chip event"></i>Event</span>
         </div>
       </div>
       <div class="card">
