@@ -32,34 +32,38 @@ const { loadApp, check, done } = require('./helpers');
   check(row && /Done this day — was due Thu, (Oct 1|1 Oct) \(19 days late\)/.test(row.textContent), `day list: "Done this day — was due Oct 1 (19 days late)"`);
   row.querySelector('[data-action="open-task"]').click();
   check(PA.state.openTask === t.id, 'clicking it opens the task');
-  check(doc.querySelector('.cal-legend').textContent.includes('Done that day (late)') && doc.querySelector('.cal-legend').textContent.includes('Estimated repeat'), 'legend explains both new chips');
-  // --- Late bar: ○ due day ━━ ● done day, lanes, across week rows; chip notes; hover links them ---
-  const m = PA.addTask({ title: 'm', due: '2026-10-24T23:59' }); // a Saturday
-  PA.completeTask(m, new Date(2026, 9, 25, 12), true);           // the Sunday after (next week row)
-  const ins = PA.addTask({ title: 'Insurance', due: '2026-10-09T23:59' });
-  PA.completeTask(ins, new Date(2026, 9, 15, 12), true);
+  check(doc.querySelector('.cal-legend').textContent.includes('Done late, on this day') && doc.querySelector('.cal-legend').textContent.includes('Missed, done later') && doc.querySelector('.cal-legend').textContent.includes('Estimated repeat'), 'legend explains the late and estimate chips');
+  // --- Late task: orange "missed" chip on the due day, done chip with orange outline on the done day ---
+  const m = PA.addTask({ title: 'm', due: '2026-10-24T23:59' });
+  PA.completeTask(m, new Date(2026, 9, 25, 12), true);
+  const longOne = PA.addTask({ title: 'Pay the quarterly electricity and water bill at the office', due: '2026-10-12T23:59' });
+  PA.completeTask(longOne, new Date(2026, 9, 14, 12), true);
+  const ok = PA.addTask({ title: 'On time', due: '2026-10-16T23:59' });
+  PA.completeTask(ok, new Date(2026, 9, 16, 12), true);
   PA.render();
-  const segs = (id) => [...doc.querySelectorAll(`.late-seg[data-late="${id}"]`)];
-  const dayOf = (el) => el.closest('.cal-day').dataset.day;
-  check(segs(m.id).map(dayOf).join(',') === '2026-10-24,2026-10-25', 'the bar runs from the due day to the done day');
-  check(segs(m.id)[0].classList.contains('s-start') && segs(m.id)[1].classList.contains('s-end'), 'it starts at the due day (○) and ends at the done day (●)');
-  check(segs(m.id)[0].classList.contains('s-wrapr') && segs(m.id)[1].classList.contains('s-wrapl'), 'it carries on from Saturday to the next row\'s Sunday');
-  check(segs(t.id).length === 20, 'a 19-days-late task has a bar across all 20 days');
-  const lanes = (id) => new Set(segs(id).map((s) => s.style.getPropertyValue('--lane')));
-  check([...lanes(t.id)][0] !== [...lanes(ins.id)][0], 'overlapping late bars get separate lanes so they don\'t cover each other');
+  check(!doc.querySelector('.late-seg') && !doc.querySelector('.legend-bar'), 'no late bars any more');
   const dueChip = doc.querySelector('.cal-day[data-day="2026-10-24"] .chip[data-late]');
   const doneChip = doc.querySelector('.cal-day[data-day="2026-10-25"] .chip[data-late]');
-  check(dueChip.textContent.includes('m · +1d') && dueChip.querySelector('.chip-note'), 'the due-day chip says "+1d"');
-  check(doneChip.textContent.includes('✓ m · due 24th'), 'the done-day chip says "due 24th"');
+  check(dueChip.classList.contains('t-latedue') && !dueChip.classList.contains('t-done'), 'due day: an orange "missed" box (not the done look)');
+  check(dueChip.querySelector('.chip-t').textContent === 'm' && dueChip.querySelector('.chip-note').textContent === '· done 25th', 'due day says "m · done 25th" (no ✓)');
+  check(doneChip.classList.contains('doneon') && doneChip.querySelector('.chip-t').textContent === '✓ m' && doneChip.querySelector('.chip-note').textContent === '· due 24th', 'done day: "✓ m · due 24th", the done look with an orange outline');
+  const okChip = doc.querySelector('.cal-day[data-day="2026-10-16"] .chip');
+  check(okChip.classList.contains('t-done') && okChip.querySelector('.chip-t').textContent === '✓ On time' && !okChip.querySelector('.chip-note'), 'a task done on time: green "✓ name", no note');
   const otherMonth = doc.querySelector('.cal-day[data-day="2026-10-20"] .chip.doneon');
   check(otherMonth && /due (1st|Oct 1)/.test(otherMonth.textContent), 'same month → "due 1st"');
+  // Long names: the note is its own part, so only the name gets shortened
+  const longChip = doc.querySelector('.cal-day[data-day="2026-10-14"] .chip.doneon');
+  check(longChip.querySelector('.chip-t').textContent.startsWith('✓ Pay the quarterly') && longChip.querySelector('.chip-note').textContent === '· due 12th', 'a long name keeps its "· due 12th" note separate');
+  const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
+  check(/\.chip-t\s*\{[^}]*text-overflow:\s*ellipsis/.test(css) && /\.chip-note\s*\{[^}]*flex:\s*0 0 auto/.test(css), 'the name shortens with … and the note never shrinks');
+  check(/\.chip\.t-done \.chip-t[^{]*\{[^}]*line-through/.test(css) && !/\.chip\.t-latedue[^{]*\{[^}]*line-through/.test(css), 'done names are struck through; missed ones are not');
   dueChip.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
   const lit = [...doc.querySelectorAll('.late-hl')];
-  check(lit.length === 4 && lit.every((x) => x.dataset.late === m.id), 'pointing at it highlights its due chip, bar and done chip together');
+  check(lit.length === 2 && lit.every((x) => x.dataset.late === m.id), 'pointing at one highlights both chips of that task');
   doc.querySelector('.cal-head').dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
   check(!doc.querySelector('.late-hl'), 'moving away clears the highlight');
   const legend = doc.querySelector('.cal-legend');
-  check(legend.querySelector('.chip.t-overdue').textContent === 'Task' && legend.querySelector('.legend-bar'), 'legend swatches are sample chips, plus the late bar');
+  check(legend.querySelector('.chip.t-overdue').textContent === 'Task' && legend.querySelector('.chip.t-done').textContent === '✓ Task', 'legend swatches are sample chips');
 
   // The My Day "Events today" card only counts events
   PA.state.openTask = null;

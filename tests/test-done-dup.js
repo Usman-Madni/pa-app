@@ -16,7 +16,8 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   check(modal() && !a.done, 'ticking opens "Done on…" and does not tick yet');
   check(modal().elements.date.value === PA.toISO(new Date()) && modal().elements.time.value === '', 'it starts at today, with the time left empty');
   check(!modal().elements.notime, 'there is no "No time" tick box');
-  check(doc.activeElement === modal().querySelector('[data-done-ok]'), 'Done has the focus, so Enter ticks it off now');
+  check(doc.activeElement === modal().querySelector('[data-when="today"]'), '"Today" has the focus, so Enter ticks it off today');
+  check(!modal().querySelector('[data-when="due"]'), 'no "On the due date" when there is no due date');
   doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' }));
   check(!modal() && !a.done, 'Esc cancels; the task stays not done');
   tickBox(a.id);
@@ -31,6 +32,31 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   tickBox(b.id);
   confirmDone(win, { date: '2026-10-21' });
   check(b.done && b.completedAllDay && PA.toISO(new Date(b.completedAt)) === '2026-10-21', 'leaving the time empty = done on that date, no time');
+
+  // --- Quick choices ---
+  const q1 = PA.addTask({ title: 'Quick today', due: '2026-10-01T23:59' });
+  PA.render();
+  tickBox(q1.id);
+  modal().querySelector('[data-when="today"]').click();
+  check(q1.done && q1.completedAllDay && PA.toISO(new Date(q1.completedAt)) === PA.toISO(new Date()), '"Today" ticks it off today, no time');
+  const q2 = PA.addTask({ title: 'Quick due', due: '2026-10-02T23:59' });
+  PA.render();
+  tickBox(q2.id);
+  const dueBtn = modal().querySelector('[data-when="due"]');
+  check(dueBtn && /On the due date/.test(dueBtn.textContent), 'a past due date offers "On the due date"');
+  dueBtn.click();
+  check(q2.done && PA.toISO(new Date(q2.completedAt)) === '2026-10-02' && win.eval('lateDays')(q2) === 0, '"On the due date" ticks it off then — on time, not late');
+  const q3 = PA.addTask({ title: 'Quick timed', due: '2026-10-03T18:30' });
+  PA.render();
+  tickBox(q3.id);
+  modal().querySelector('[data-when="due"]').click();
+  const q3at = new Date(q3.completedAt);
+  check(q3at.getHours() === 18 && q3at.getMinutes() === 30 && !q3.completedAllDay && win.eval('lateDays')(q3) === 0, 'with a due time, it uses that time');
+  const q4 = PA.addTask({ title: 'Due today', due: `${PA.toISO(new Date())}T23:59` });
+  PA.render();
+  tickBox(q4.id);
+  check(!modal().querySelector('[data-when="due"]'), 'due today → only "Today"');
+  modal().querySelector('[data-action="done-cancel"]').click();
 
   // --- "Again after I finish it" counts from the chosen done date; years work; 999 allowed ---
   const w = PA.addTask({ title: 'Water plants', due: '2026-10-10T23:59' });

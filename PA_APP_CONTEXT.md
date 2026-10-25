@@ -59,12 +59,22 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - History comes after the cards. The footer has ⧉ Duplicate and Delete.
   - **"+ New task"** opens it on a blank task, which is dropped if left unnamed.
 - **Keeping your place:** `render()` keeps the page and board scroll position when redrawing the same screen. While the panel is open the rest is dimmed (`.drawer-backdrop`), but the mouse wheel over the dim area scrolls the board behind it, and clicking it closes the panel.
-- **Done on… pop-up:** ticking any task opens it (`openDonePrompt`). The date defaults to today and the **time is left empty**: empty means "done on that date" (`completedAllDay`). Esc/Cancel leaves the task undone.
-- **Done late** (`lateDays`, `lateText`): a task done after its due date shows "Done N days late" in orange in the list, panel and History. A timed task done later the same day shows "Done late (same day)"; an all-day task only counts as late from the next day. The calendar chip is green with an orange edge, and the legend has "Done late". A late task also shows as a faded "✓ title" chip (`kind: 'doneon'`) on the day it was actually done; its day list says "Done this day — was due … (N days late)" and opens the task. Tasks done on time or early get no extra chip.
-  - **Late bar** (in `renderCalendar`): an orange line runs along the bottom of the days from the due day (○) to the done day (●). It carries across week rows (`s-wrapl`/`s-wrapr`), and overlapping ones get lanes, up to 3.
-  - **Chip notes:** the due-day chip adds "· +Nd" (or "· late" for the same day), and the done-day chip adds "· due 24th" (or "due 30 Sep" across months). The notes aren't struck through.
-  - **Hover:** pointing at any part (`data-late`) highlights the due chip, the bar and the done chip together.
-  - **Legend:** swatches are sample chips ("Task", "✓ Task · due 3rd", …), plus a sample late bar.
+- **Done on… pop-up:** ticking any task opens it (`openDonePrompt`).
+  - **Quick choices** (`done-quick`):
+    - **Today** has the focus, so Enter ticks it off today with no time.
+    - **On the due date** shows only when the due date has passed. It uses the due time if there is one, so it counts as on time.
+  - **Another date:** the date defaults to today and the time is left empty; an empty time means "done on that date" (`completedAllDay`).
+  - Esc/Cancel leaves the task undone.
+- **Done late** (`lateDays`, `lateText`): a task done after its due date shows "Done N days late" in orange in the list, panel and History. A timed task done later the same day shows "Done late (same day)"; an all-day task only counts as late from the next day.   - **On the calendar a late task shows twice:**
+    - **Due day: "missed"** (`t-latedue`): an orange box, no strikethrough, "m · done 25th".
+    - **Done day** (`kind: 'doneon'`): the normal done look plus an orange outline, "✓ m · due 24th". Across months the note reads "due 30 Sep".
+    - Day lists say "Missed — done Sun, Oct 25 (1 day late)" and "✓ Done this day — was due …". Both open the task.
+    - Tasks done on time or early show once, as done.
+  - **Done chips:** a green box, the name in the normal text colour with a 1.5px strikethrough, and "✓" in front.
+  - **Chip parts:** a chip is `.chip-t` (the name, which shortens with …) plus `.chip-note`. The note stays whole while there's room; in a very narrow cell it gives way only after the name has a little room.
+  - **Hover:** pointing at either chip (`data-late`) highlights both.
+  - **Legend:** sample chips.
+  - The late bar was tried and removed (25 Oct).
 - **Late repeats keep their missed copies:** the next copy is counted from the old due date, so a late weekly task makes the missed weeks as overdue copies. To catch up instead, use "Again after I finish it".
 - **Labels from the panel:** "✎ Manage" next to the labels opens rename, colour and delete for each (`state.labelManage`). Settings has the same controls.
   - A done task's date can be changed in the panel (`setDoneDate`).
@@ -234,5 +244,10 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     - Late repeats keep their missed copies; use "after I finish it" to catch up instead.
     - The calendar also marks the day a late task was actually done (faded ✓).
     - "After I finish it" repeats show estimated next dates (↻≈).
-- **25 Oct 2026:** late tasks on the calendar are linked: an orange late bar from the due day to the done day, "+Nd" and "due 24th" notes on the chips, and hover highlighting all parts. The faded ✓ chip stays, and the legend uses bigger sample chips.
+- **25 Oct 2026:** late tasks on the calendar.
+  - The orange late bar was tried, then removed.
+  - Final look: an orange "missed · done 25th" box on the due day, and a done chip with an orange outline ("✓ m · due 24th") on the done day.
+  - Done chips use normal-coloured struck text.
+  - Notes never get hidden by long names.
+  - The Done pop-up has quick choices: Today (Enter) or On the due date (with its time).
     - Labels, progress and start date are all kept.

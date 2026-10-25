@@ -75,7 +75,7 @@ const { loadApp, check, done } = require('./helpers');
   check(!shown('Charlie') || hasCls('Charlie', 't-overdue'), 'overdue tasks are red');
   check(hasCls('alpha', 't-today'), 'tasks due today use the accent colour');
   check(!shown('Bravo') || hasCls('Bravo', 't-upcoming'), 'upcoming tasks are blue');
-  check(!shown('Golf') || hasCls('Golf', 't-done'), 'done tasks are green');
+  check(!shown('Golf') || hasCls('Golf', 't-latedue'), 'a task done after its due date is orange on its due day');
   check(!shown('Dentist') || hasCls('Dentist', 'event'), 'events have their own colour');
   check([...doc.querySelectorAll('.chip.repeat')].some((c) => c.textContent.includes('Gym')), 'next repeats are dashed');
   const legend = doc.querySelector('.cal-legend');

@@ -123,7 +123,11 @@ body.readonly .edit-only { display: none !important; }
   cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 3px; position: relative;
 }
 .cal-day .chip { max-width: 100%; }
-.chip-note { display: inline-block; text-decoration: none; color: var(--c-late, #f97316); font-weight: 600; } /* inline-block: no strike-through */
+/* Name shortens with "…"; the note ("· due 24th") never does */
+.chip:has(.chip-t) { display: flex; gap: 3px; align-items: baseline; }
+.chip-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The note doesn't shrink while there's room; only in a very narrow cell does it give way too */
+.chip-note { flex: 0 0 auto; white-space: nowrap; font-weight: 600; max-width: calc(100% - 2.4em); overflow: hidden; text-overflow: ellipsis; }
 .cal-day:hover { border-color: var(--accent); }
 .cal-day.other { opacity: .45; }
 .cal-day.today .num { background: var(--accent); color: #fff; }
@@ -246,21 +250,26 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
 .chip.repeat.est { border-style: dotted; font-style: italic; opacity: .8; } /* "after I finish it": an estimate */
-.chip.doneon, .pill.doneon { background: transparent; border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); color: var(--ok); opacity: .75; }
-.day-item.doneon { border-left: 3px solid color-mix(in srgb, var(--ok) 45%, transparent); }
-.pill.doneon { white-space: normal; }
 /* Calendar colours: overdue red, due today accent, upcoming blue, done green (struck through), events teal */
 :root { --c-overdue: var(--danger); --c-today: var(--accent); --c-upcoming: #3b82f6; --c-done: var(--ok); --c-event: #0d9488; }
 .chip.t-overdue, .pill.t-overdue { background: color-mix(in srgb, var(--c-overdue) 16%, transparent); color: var(--c-overdue); }
 .chip.t-today, .pill.t-today { background: color-mix(in srgb, var(--c-today) 18%, transparent); color: var(--c-today); font-weight: 600; }
 .chip.t-upcoming, .pill.t-upcoming { background: color-mix(in srgb, var(--c-upcoming) 15%, transparent); color: var(--c-upcoming); }
-.chip.t-done, .pill.t-done { background: color-mix(in srgb, var(--c-done) 14%, transparent); color: var(--c-done); text-decoration: line-through; opacity: .75; }
+/* Done: green box, the name in the normal text colour, a clear strike line */
+.chip.t-done, .pill.t-done, .chip.doneon, .pill.doneon {
+  background: color-mix(in srgb, var(--c-done) 18%, transparent); color: color-mix(in srgb, var(--text) 78%, transparent);
+}
+.chip.t-done .chip-t, .chip.doneon .chip-t, .pill.t-done { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .chip.event { background: color-mix(in srgb, var(--c-event) 15%, transparent); color: var(--c-event); }
-/* Done late: green with an orange edge (calendar), orange text (lists) */
+/* Late: on the due day "missed" (orange box, no strike); on the done day "done" with an orange outline */
 :root { --c-late: #f97316; }
 .late { color: var(--c-late); font-weight: 600; }
-.chip.late, .pill.late { box-shadow: inset 0 0 0 1.5px var(--c-late); color: var(--c-done); font-weight: 400; }
-.day-item.late { border-left-color: var(--c-late); }
+.chip.t-latedue, .pill.t-latedue { background: color-mix(in srgb, var(--c-late) 20%, transparent); color: var(--c-late); }
+.chip.doneon, .pill.doneon { box-shadow: inset 0 0 0 1.5px var(--c-late); }
+.chip.doneon .chip-note { color: var(--c-late); }
+.pill.doneon, .pill.t-latedue { white-space: normal; text-decoration: none; }
+.day-item.t-latedue { border-left-color: var(--c-late); }
+.day-item.doneon { border-left-color: var(--c-done); }
 .day-item { border-left: 3px solid transparent; padding-left: 8px; }
 .day-item.t-overdue { border-left-color: var(--c-overdue); }
 .day-item.t-today { border-left-color: var(--c-today); }
@@ -271,27 +280,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: 12px; color: var(--muted); }
 .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .cal-legend .chip { font-style: normal; }
-.legend-bar { position: relative; display: inline-block; width: 34px; height: 3px; background: var(--c-late); border-radius: 2px; margin: 0 4px; }
-.legend-bar::before, .legend-bar::after { content: ""; position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; }
-.legend-bar::before { left: -4px; border: 2px solid var(--c-late); background: var(--panel); }
-.legend-bar::after { right: -4px; background: var(--c-late); }
-
-/* Late bar on the calendar: ○ due day ━━━ ● done day, drawn under the chips, carried across week rows */
-.cal-day.has-late { padding-bottom: 26px; }
-.late-seg {
-  position: absolute; height: 3px; bottom: calc(7px + var(--lane) * 7px); left: -3px; right: -3px;
-  background: var(--c-late); z-index: 1; cursor: pointer;
-}
-.late-seg.s-start { left: calc(50% - 1px); }
-.late-seg.s-end { right: 50%; }
-.late-seg.s-wrapl { left: 3px; border-radius: 0; }
-.late-seg.s-wrapr { right: 3px; }
-.late-seg.s-start::before, .late-seg.s-end::after {
-  content: ""; position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box;
-}
-.late-seg.s-start::before { left: -4px; border: 2px solid var(--c-late); background: var(--panel); } /* ○ due */
-.late-seg.s-end::after { right: -4px; background: var(--c-late); }                                   /* ● done */
-.late-seg.late-hl { height: 5px; margin-bottom: -1px; }
+/* Pointing at one half of a late task lights up the other */
 .chip.late-hl { outline: 2px solid var(--c-late); outline-offset: 1px; }
 .repeat-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 
@@ -1075,14 +1064,17 @@ function groupTasks(list, mode) {
 
 // Colour on the calendar: done (green), overdue (red), today (accent), upcoming (blue).
 const taskStatus = (t) => (t.done ? 'done' : isOverdue(t) ? 'overdue' : taskDate(t) === todayISO() ? 'today' : 'upcoming');
-const chipClass = (it) => (it.kind === 'task' ? `t-${it.status}${it.late ? ' late' : ''}`
+// A task done late shows twice: on its due day as "missed" (orange, t-latedue) and on the day it was done
+// as done with an orange outline (doneon).
+const chipClass = (it) => (it.kind === 'task' ? (it.late ? 't-latedue' : `t-${it.status}`)
   : it.kind === 'repeat' ? `repeat${it.est ? ' est' : ''}` : it.kind === 'doneon' ? 'doneon' : 'event');
-const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? '↻≈ ' : '↻ ') : it.kind === 'doneon' ? '✓ ' : '');
+const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? '↻≈ ' : '↻ ')
+  : it.kind === 'doneon' || (it.kind === 'task' && it.done && !it.late) ? '✓ ' : '');
 
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
-  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t) }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
   // A task done late also shows (faded, ✓) on the day it was actually done.
   const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key).map((t) => ({
     id: t.id, title: t.title, time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
@@ -1253,13 +1245,15 @@ const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">
 
 function dayItem(i) {
   const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
-  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late ? 'Done late' : statusText[i.status]}</span>`
+  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late
+      ? `Missed — done ${esc(i.doneDay ? fmtDay(i.doneDay) : 'later')} (${esc(lateText(DB.tasks.find((t) => t.id === i.id)).replace(/^Done /, ''))})`
+      : statusText[i.status]}</span>`
     : i.kind === 'repeat' ? `<span class="pill">${i.est ? '↻≈ Estimated repeat (after I finish it)' : '↻ Upcoming repeat'}</span>`
     : i.kind === 'doneon' ? `<span class="pill doneon">✓ Done this day — was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
   const open = i.kind === 'task' || i.kind === 'doneon' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   return `
-    <li class="item day-item ${chipClass(i)} ${i.done && i.kind !== 'doneon' ? 'done' : ''}">
+    <li class="item day-item ${chipClass(i)} ${i.done && i.kind === 'task' && !i.late ? 'done' : ''}">
       <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
       <div class="body${open}"><div class="title">${esc(i.title)} ${tag}</div></div>
       ${del}
@@ -1960,11 +1954,19 @@ function closeTaskDrawer() {
 function openDonePrompt(t) {
   state.donePrompt = t.id;
   const now = new Date();
+  // "On the due date" only makes sense for a due date that has already passed (otherwise it's just Today).
+  const dueDay = taskDate(t);
+  const canDue = dueDay && dueDay < toISO(now);
   $('#modal').innerHTML = `
     <div class="modal-back" data-action="done-cancel"></div>
     <form class="modal" data-form="done-date" role="dialog" aria-label="When was it done?">
       <h3>Mark done</h3>
       <p class="meta" style="margin:0">${esc(t.title || 'New task')}</p>
+      <div class="row quick-done">
+        <button type="button" class="btn primary" data-action="done-quick" data-when="today">Today</button>
+        ${canDue ? `<button type="button" class="btn" data-action="done-quick" data-when="due">On the due date · ${esc(fmtDay(dueDay))}${taskTime(t) ? ' ' + esc(fmtTime(taskTime(t))) : ''}</button>` : ''}
+      </div>
+      <p class="meta" style="margin:4px 0 -4px">Another date:</p>
       <div class="row">
         <label class="field">Done on<input class="input" type="date" name="date" value="${toISO(now)}" required></label>
         <label class="field">Time<input class="input" type="time" name="time" value=""></label>
@@ -1973,10 +1975,10 @@ function openDonePrompt(t) {
       ${t.repeat && t.repeat.freq === 'after' ? '<p class="meta">↻ The next one is counted from this date.</p>' : ''}
       <div class="row" style="justify-content:flex-end">
         <button type="button" class="btn" data-action="done-cancel">Cancel</button>
-        <button class="btn primary" data-done-ok>Done</button>
+        <button class="btn" data-done-ok>Done</button>
       </div>
     </form>`;
-  $('#modal [data-done-ok]').focus(); // Enter = done now
+  $('#modal [data-when="today"]').focus(); // Enter = done today
 }
 function closeDonePrompt() { state.donePrompt = null; $('#modal').innerHTML = ''; }
 function finishDonePrompt(data) {
@@ -2455,40 +2457,24 @@ function renderCalendar() {
   const gridFrom = toISO(start);
   const gridTo = toISO(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 41));
   const previews = repeatPreviews(gridFrom, gridTo);
-  // Late bars: an orange line from the due day (○) to the day it was done (●). Each gets a lane (up to 3)
-  // so overlapping ones stack instead of covering each other.
-  const late = DB.tasks.filter((t) => lateDays(t) >= 1)
-    .map((t) => ({ t, from: taskDate(t), to: toISO(new Date(t.completedAt)) }))
-    .filter((x) => x.to >= gridFrom && x.from <= gridTo)
-    .sort((a, b) => a.from.localeCompare(b.from));
-  const laneEnds = [];
-  for (const x of late) {
-    let lane = laneEnds.findIndex((end) => end < x.from);
-    if (lane === -1) lane = laneEnds.length;
-    if (lane < 3) { laneEnds[lane] = x.to; x.lane = lane; }
-  }
-  const dueLabel = (dueKey, doneKey) => (dueKey.slice(0, 7) === doneKey.slice(0, 7) ? ordinal(Number(dueKey.slice(8)))
-    : parseISO(dueKey).toLocaleDateString([], { day: 'numeric', month: 'short' }));
+  // "24th" in the same month, "30 Sep" across months.
+  const dateLabel = (key, here) => (key.slice(0, 7) === here.slice(0, 7) ? ordinal(Number(key.slice(8)))
+    : parseISO(key).toLocaleDateString([], { day: 'numeric', month: 'short' }));
   const cells = [];
   for (let i = 0; i < 42; i++) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const k = toISO(d);
     const items = itemsForDay(k, previews);
+    // A chip = the name (shortened with … when long) + a note that always stays visible.
     const chips = items.slice(0, 3).map((it) => {
       const lateId = it.late || it.kind === 'doneon' ? ` data-late="${esc(it.id)}"` : '';
-      const extraText = it.late ? (it.lateBy >= 1 ? ` · +${Math.floor(it.lateBy)}d` : ' · late') : it.kind === 'doneon' ? ` · due ${dueLabel(it.dueDay, k)}` : '';
-      const extra = extraText ? `<span class="chip-note">${extraText}</span>` : ''; // not struck through with the title
-      return `<span class="chip ${chipClass(it)}"${lateId}>${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}${extra}</span>`;
-    }).join('');
-    const segs = late.filter((x) => x.lane != null && x.from <= k && k <= x.to).map((x) => {
-      const isStart = k === x.from;
-      const isEnd = k === x.to;
-      const cls = `late-seg${isStart ? ' s-start' : ''}${isEnd ? ' s-end' : ''}${!isStart && d.getDay() === 0 ? ' s-wrapl' : ''}${!isEnd && d.getDay() === 6 ? ' s-wrapr' : ''}`;
-      return `<span class="${cls}" style="--lane:${x.lane}" data-late="${esc(x.t.id)}" title="${esc(x.t.title)} — due ${esc(fmtDay(x.from))}, done ${esc(fmtDay(x.to))} (${esc(lateText(x.t).replace(/^Done /, ''))})"></span>`;
+      const note = it.late ? (it.lateBy >= 1 ? `done ${dateLabel(it.doneDay, k)}` : 'done late')
+        : it.kind === 'doneon' ? `due ${dateLabel(it.dueDay, k)}` : '';
+      return `<span class="chip ${chipClass(it)}"${lateId}><span class="chip-t">${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>${note ? `<span class="chip-note">· ${note}</span>` : ''}</span>`;
     }).join('');
     cells.push(`
-      <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''} ${segs ? 'has-late' : ''}" data-day="${k}">
-        <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}${segs}
+      <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
+        <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
       </button>`);
     // Drop the 6th row when it would only hold next month's days.
     if (i === 34 && new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getMonth() !== m.getMonth()) break;
@@ -2507,9 +2493,9 @@ function renderCalendar() {
         <div class="cal-grid">${dows}${cells.join('')}</div>
         <div class="cal-legend">
           <span><i class="chip t-overdue">Task</i>Overdue</span><span><i class="chip t-today">Task</i>Due today</span>
-          <span><i class="chip t-upcoming">Task</i>Upcoming</span><span><i class="chip t-done">Task</i>Done</span>
-          <span><i class="chip t-done late">Task · +2d</i>Done late</span><span><i class="chip doneon">✓ Task · due 3rd</i>Done that day (late)</span>
-          <span><i class="legend-bar"></i>Late: due ○ → ● done</span>
+          <span><i class="chip t-upcoming">Task</i>Upcoming</span><span><i class="chip t-done"><span class="chip-t">✓ Task</span></i>Done</span>
+          <span><i class="chip t-latedue"><span class="chip-t">Task</span><span class="chip-note">· done 3rd</span></i>Missed, done later</span>
+          <span><i class="chip doneon"><span class="chip-t">✓ Task</span><span class="chip-note">· due 1st</span></i>Done late, on this day</span>
           <span><i class="chip repeat">↻ Task</i>Next repeat</span><span><i class="chip repeat est">↻≈ Task</i>Estimated repeat</span><span><i class="chip event">Event</i>Event</span>
         </div>
       </div>
@@ -2795,6 +2781,14 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'done-cancel': closeDonePrompt(); render(); renderDrawer(); break;
+    case 'done-quick': {
+      // Today (no time), or on the due date (with its time, if it has one) — which counts as on time.
+      const t = DB.tasks.find((x) => x.id === state.donePrompt);
+      if (!t) break;
+      if (btn.dataset.when === 'due') finishDonePrompt({ date: taskDate(t), time: taskTime(t) });
+      else finishDonePrompt({ date: todayISO(), time: '' });
+      break;
+    }
     case 'clear-due': {
       const t = currentTask();
       if (!t) break;
@@ -3056,7 +3050,7 @@ document.addEventListener('change', (e) => {
   if (e.target.matches?.('[data-qa-tool]')) updateQuickPreview(e.target.form);
 });
 
-// Calendar: pointing at a late task's chip or bar highlights all of its parts (due chip, bar, done chip).
+// Calendar: pointing at a late task's chip highlights both of its chips (missed on the due day, done on the done day).
 document.addEventListener('mouseover', (e) => {
   const el = e.target.closest?.('[data-late]');
   $$('.late-hl').forEach((x) => { if (!el || x.dataset.late !== el.dataset.late) x.classList.remove('late-hl'); });

@@ -41,10 +41,10 @@ const { loadApp, check, done } = require('./helpers');
   PA.state.selectedDay = '2026-10-01';
   doc.querySelector('[data-view="calendar"]').click();
   const chip = [...doc.querySelectorAll('.cal-day[data-day="2026-10-01"] .chip')].find((c) => c.textContent.includes('Pay water bill'));
-  check(chip && chip.classList.contains('t-done') && chip.classList.contains('late'), 'calendar: done late is green with an orange edge');
+  check(chip && chip.classList.contains('t-latedue'), 'calendar: on the due day a late task is an orange "missed" box');
   check(doc.querySelector('.cal-legend').textContent.includes('Done late'), 'the legend has "Done late"');
   const dayRow = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Pay water bill'));
-  check(dayRow && dayRow.classList.contains('late') && dayRow.textContent.includes('Done late'), 'the day list says "Done late"');
+  check(dayRow && dayRow.classList.contains('t-latedue') && /Missed — done .*20.* \(19 days late\)/.test(dayRow.textContent) && !dayRow.classList.contains('done'), 'the day list says "Missed — done Oct 20 (19 days late)", not struck through');
   const previews = [...doc.querySelectorAll('.chip.repeat')].filter((c) => c.textContent.includes('Pay water bill'));
   check(previews.length > 0 && previews.every((c) => !/11:59|23:59/.test(c.textContent)), 'upcoming repeats of an all-day task show no 23:59');
 
