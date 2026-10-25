@@ -56,8 +56,33 @@ const { loadApp, check, done } = require('./helpers');
   check(longChip.querySelector('.chip-t').textContent.startsWith('✓ Pay the quarterly') && longChip.querySelector('.chip-note').textContent === '· due 12th', 'a long name keeps its "· due 12th" note separate');
   const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
   check(/\.chip-t\s*\{[^}]*text-overflow:\s*ellipsis/.test(css) && /\.chip-note\s*\{[^}]*flex:\s*0 0 auto/.test(css), 'the name shortens with … and the note never shrinks');
-  check(/\.chip\.t-done \.chip-t[^{]*\{[^}]*line-through/.test(css) && !/\.chip\.t-latedue[^{]*\{[^}]*line-through/.test(css), 'done names are struck through; missed ones are not');
-  dueChip.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
+  const strikeRule = css.match(/([^{}]*\.chip\.t-done \.chip-t[^{]*)\{([^}]*)\}/);
+  check(strikeRule && /linear-gradient/.test(strikeRule[2]) && /background-position:\s*0 6\d%/.test(strikeRule[2]) && /\.item\.done \.tt/.test(strikeRule[1]) && !/latedue/.test(strikeRule[1]),
+    'done names get a strike line drawn a little below the middle (list, board and calendar); missed ones don\'t');
+
+  // Click a task chip → its panel opens (and the day is shown); click empty space → just the day
+  PA.state.selectedDay = '2026-10-01';
+  PA.render();
+  doc.querySelector('.cal-day[data-day="2026-10-25"] .chip[data-action="open-task"]').click();
+  check(PA.state.openTask === m.id && PA.state.selectedDay === '2026-10-25', 'clicking a task on the calendar opens its panel (and shows that day)');
+  win.document.querySelector('#drawer [data-action="close-task"]').click();
+  doc.querySelector('.cal-day[data-day="2026-10-24"] .num').click();
+  check(!PA.state.openTask && PA.state.selectedDay === '2026-10-24', 'clicking empty space in a day just opens the day');
+  check(/\.chip\[data-action="open-task"\]:hover/.test(css), 'task chips light up when pointed at');
+
+  // Tick a task straight from the day list
+  const pending = PA.addTask({ title: 'Call plumber', due: '2026-10-24T10:00' });
+  PA.DB.events.push({ id: 'ev1', title: 'Dinner out', date: '2026-10-24', time: '19:00' });
+  PA.render();
+  const box = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Call plumber')).querySelector('[data-action="toggle-task"]');
+  check(box && !box.checked, 'tasks in the day list have a tick box');
+  box.click();
+  check(doc.querySelector('#modal form[data-form="done-date"]'), 'ticking it there asks "Done on…" as usual');
+  doc.querySelector('#modal [data-when="due"]').click();
+  check(pending.done && win.eval('lateDays')(pending) === 0, 'and it is ticked off without opening the panel');
+  const evRow = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Dinner out'));
+  check(evRow && !evRow.querySelector('[data-action="toggle-task"]') && evRow.querySelector('.check-space'), 'events have no tick box (a gap keeps the rows lined up)');
+  doc.querySelector('.cal-day[data-day="2026-10-24"] .chip[data-late]').dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
   const lit = [...doc.querySelectorAll('.late-hl')];
   check(lit.length === 2 && lit.every((x) => x.dataset.late === m.id), 'pointing at one highlights both chips of that task');
   doc.querySelector('.cal-head').dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));

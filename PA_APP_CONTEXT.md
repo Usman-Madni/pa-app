@@ -65,12 +65,14 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
     - **On the due date** shows only when the due date has passed. It uses the due time if there is one, so it counts as on time.
   - **Another date:** the date defaults to today and the time is left empty; an empty time means "done on that date" (`completedAllDay`).
   - Esc/Cancel leaves the task undone.
-- **Done late** (`lateDays`, `lateText`): a task done after its due date shows "Done N days late" in orange in the list, panel and History. A timed task done later the same day shows "Done late (same day)"; an all-day task only counts as late from the next day.   - **On the calendar a late task shows twice:**
+- **Done late** (`lateDays`, `lateText`): a task done after its due date shows "Done N days late" in orange in the list, panel and History. A timed task done later the same day shows "Done late (same day)"; an all-day task only counts as late from the next day.
+  - **On the calendar a late task shows twice:**
     - **Due day: "missed"** (`t-latedue`): an orange box, no strikethrough, "m · done 25th".
     - **Done day** (`kind: 'doneon'`): the normal done look plus an orange outline, "✓ m · due 24th". Across months the note reads "due 30 Sep".
     - Day lists say "Missed — done Sun, Oct 25 (1 day late)" and "✓ Done this day — was due …". Both open the task.
     - Tasks done on time or early show once, as done.
-  - **Done chips:** a green box, the name in the normal text colour with a 1.5px strikethrough, and "✓" in front.
+  - **Done chips:** a green box, the name in the normal text colour struck through, and "✓" in front.
+  - **The strike line** (lists, board cards, chips, day lists) is not `text-decoration: line-through`. It's a 1.5px `linear-gradient` background on the name only (`.tt` / `.chip-t`), placed at 64% so it sits a little below the middle of the letters, like To Do. Labels and tags next to the name aren't struck. Done-late rows in the day list are struck too, matching their chip.
   - **Chip parts:** a chip is `.chip-t` (the name, which shortens with …) plus `.chip-note`. The note stays whole while there's room; in a very narrow cell it gives way only after the name has a little room.
   - **Hover:** pointing at either chip (`data-late`) highlights both.
   - **Legend:** sample chips.
@@ -141,6 +143,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - **'after' repeats are estimates**, as if each one is done on its due date (from today if it's overdue). They're shown as dotted "↻≈" chips and "Estimated repeat" in the day list. The real copy follows the actual done day.
 - **Day cells** show their first 3 items: what's due or happening first, then "done that day", then previews.
 - **Calendar colours** (`taskStatus`, `chipClass`): overdue red, due today accent, upcoming blue, done green and struck through, events teal, next repeats dashed. A legend sits under the grid. The day list uses the same colours, and clicking a task there opens it.
+  - **Clicking the grid:** task chips (tasks, done-on days, repeat previews) light up when pointed at. Clicking one shows that day and opens the task's panel; clicking empty space in a day only shows the day.
+  - **Ticking from the day list:** tasks have a tick box there (events get an empty gap so rows line up). It goes through the usual "Mark done" pop-up, so there's no need to open the panel.
 
 ## Attachments (`AT`)
 - **Storage:** the user picks an attachments folder once; its handle is kept in IndexedDB as `attachments`.
@@ -187,7 +191,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
 | `test-repeat-custom` | title roll-forward (months, years, quarters, weeks, dates, "May", "may" the verb), switch off; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
 | `test-private` | the private-data check catches private terms (including in old versions), emails, personal paths, forbidden files (including identical copies under another name), photos/PDFs/office files, attachments folders, private words in commit messages and personal commit emails; a clean repo passes; this project's history is clean |
-| `test-calendar-extras` | late task also on its done day (faded ✓, day list text, opens it; none for on-time or early); late bar due→done (start/end, across week rows, full length, separate lanes), "+1d" / "due 24th" notes, hover highlight; legend sample chips; "after" repeats estimated from the due date (or today when overdue), stop at the count, look different, real copy follows the done day; Done pop-up has no "(optional)" |
+| `test-calendar-extras` | late task also on its done day (faded ✓, day list text, opens it; none for on-time or early); missed / done-on chips with "done 25th" / "due 24th" notes, long names keep the note, hover highlight; strike line drawn lower (gradient, not on missed chips); clicking a chip opens its panel, empty space only the day; tick box in the day list (none for events); legend sample chips; "after" repeats estimated from the due date (or today when overdue), stop at the count, look different, real copy follows the done day; Done pop-up has no "(optional)" |
 | `test-late-labels` | how late (days / same day / on time / early / no due date); shown in list, panel and History; late repeats keep the missed copy; calendar orange edge, legend, day list; no 23:59 on repeat previews; manage labels from the panel; board keeps its scroll after an edit; wheel over the dim scrolls the board |
 | `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, time left empty), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), Duplicate, full width |
 | `test-sort-calendar` | every sort order, remembered; group by due date or bucket; Board cards follow the sort; sticky top and column names; calendar colours, legend, day list colours, opening a task from it |

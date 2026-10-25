@@ -102,7 +102,15 @@ body.readonly .edit-only { display: none !important; }
 .item:last-child { border-bottom: 0; }
 .item .body { flex: 1; min-width: 0; }
 .item .title { overflow-wrap: anywhere; }
-.item.done .title { text-decoration: line-through; color: var(--muted); }
+.item.done .title { color: var(--muted); }
+/* Strikethrough a little below the middle of the letters (like To Do): drawn as a thin line behind the
+   name only, so labels and badges next to it aren't struck. */
+.item.done .tt, .day-item.doneon .tt, .task-card.done .tt, .chip.t-done .chip-t, .chip.doneon .chip-t, .pill.t-done {
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat; background-size: 100% 1.5px; background-position: 0 64%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
 .meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
 .meta .overdue { color: var(--danger); font-weight: 600; }
 .check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
@@ -123,6 +131,10 @@ body.readonly .edit-only { display: none !important; }
   cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 3px; position: relative;
 }
 .cal-day .chip { max-width: 100%; }
+/* Pointing at a task in a day lights it up (click opens it); the day itself still lights up its border */
+.cal-day .chip[data-action="open-task"] { cursor: pointer; transition: filter .1s; }
+.cal-day .chip[data-action="open-task"]:hover { filter: brightness(1.25) saturate(1.2); outline: 1.5px solid currentColor; outline-offset: 0; }
+.check-space { width: 20px; flex-shrink: 0; }
 /* Name shortens with "…"; the note ("· due 24th") never does */
 .chip:has(.chip-t) { display: flex; gap: 3px; align-items: baseline; }
 .chip-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -199,7 +211,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .task-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; }
 .task-card .body { flex: 1; min-width: 0; }
 .task-card .title { overflow-wrap: anywhere; }
-.task-card.done .title { text-decoration: line-through; color: var(--muted); }
+.task-card.done .title { color: var(--muted); }
 .task-card.dragging { opacity: .5; }
 .board-add-btn { width: 100%; text-align: left; border: 0; background: transparent; color: var(--muted); padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
 .board-add-btn:hover { background: var(--panel); color: var(--text); }
@@ -259,7 +271,6 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .chip.t-done, .pill.t-done, .chip.doneon, .pill.doneon {
   background: color-mix(in srgb, var(--c-done) 18%, transparent); color: color-mix(in srgb, var(--text) 78%, transparent);
 }
-.chip.t-done .chip-t, .chip.doneon .chip-t, .pill.t-done { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .chip.event { background: color-mix(in srgb, var(--c-event) 15%, transparent); color: var(--c-event); }
 /* Late: on the due day "missed" (orange box, no strike); on the done day "done" with an orange outline */
 :root { --c-late: #f97316; }
@@ -1228,7 +1239,7 @@ function taskSummary(t) {
   if (bucket && !onBoard) meta.push(`<span>▦ ${esc(bucket.name)}</span>`);
   const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
   return `
-    <div class="title">${esc(t.title) || '<span class="meta">New task…</span>'} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
+    <div class="title"><span class="tt">${esc(t.title) || '<span class="meta">New task…</span>'}</span> ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
 }
 
@@ -1252,10 +1263,15 @@ function dayItem(i) {
     : i.kind === 'doneon' ? `<span class="pill doneon">✓ Done this day — was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete">✕</button>` : '';
   const open = i.kind === 'task' || i.kind === 'doneon' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
+  // Tasks get a tick box right here (it opens the usual "Done on…" pop-up); events and previews don't.
+  const tick = i.kind === 'task' || i.kind === 'doneon'
+    ? `<input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(i.id)}" ${i.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="${i.done ? 'Mark not done' : 'Mark done'}">`
+    : '<span class="check-space"></span>';
   return `
     <li class="item day-item ${chipClass(i)} ${i.done && i.kind === 'task' && !i.late ? 'done' : ''}">
+      ${tick}
       <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
-      <div class="body${open}"><div class="title">${esc(i.title)} ${tag}</div></div>
+      <div class="body${open}"><div class="title"><span class="tt">${esc(i.title)}</span> ${tag}</div></div>
       ${del}
     </li>`;
 }
@@ -2470,7 +2486,9 @@ function renderCalendar() {
       const lateId = it.late || it.kind === 'doneon' ? ` data-late="${esc(it.id)}"` : '';
       const note = it.late ? (it.lateBy >= 1 ? `done ${dateLabel(it.doneDay, k)}` : 'done late')
         : it.kind === 'doneon' ? `due ${dateLabel(it.dueDay, k)}` : '';
-      return `<span class="chip ${chipClass(it)}"${lateId}><span class="chip-t">${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>${note ? `<span class="chip-note">· ${note}</span>` : ''}</span>`;
+      // Task chips open their task when clicked; clicking anywhere else in the day opens the day.
+      const opens = it.kind === 'task' || it.kind === 'doneon' || it.kind === 'repeat' ? ` data-action="open-task" data-id="${esc(it.id)}" title="Open ${esc(it.title)}"` : '';
+      return `<span class="chip ${chipClass(it)}"${lateId}${opens}><span class="chip-t">${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>${note ? `<span class="chip-note">· ${note}</span>` : ''}</span>`;
     }).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
@@ -2758,7 +2776,11 @@ document.addEventListener('click', (e) => {
     state.selectedDay = day.dataset.day;
     const d = parseISO(day.dataset.day);
     if (d.getMonth() !== state.calMonth.getMonth()) state.calMonth = monthStart(d);
-    return render();
+    // A task chip in the day opens that task (the day is shown alongside); empty space just opens the day.
+    const chip = e.target.closest('.chip[data-action="open-task"]');
+    render();
+    if (chip) openTaskDrawer(chip.dataset.id);
+    return;
   }
 
   const note = e.target.closest('[data-note]');
