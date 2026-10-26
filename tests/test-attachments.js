@@ -54,13 +54,14 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
 
   // Make it repeat; 📌 shows; keep the photo (say, the meter location) on every repeat
   t.repeat = { freq: 'monthly', interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', anchorDay: 5 };
+  t.title = 'Elec bill'; t.period = 'Aug'; // the date as its own moving part
   PA.renderDrawer();
   check(drawer().querySelectorAll('[data-action="toggle-keep"]').length === 2, 'a repeating task shows the 📌 switch on each file');
   click(`#drawer [data-action="toggle-keep"][data-att="${a2.id}"]`);
   check(a2.keep === true && a1.keep === false, '📌 marks one file to keep on every repeat');
 
   const next = PA.completeTask(t);
-  check(next.title === 'Sep elec bill', 'next copy is "Sep elec bill"');
+  check(PA.fullTitle(next) === 'Elec bill (Sep)', 'next copy is "Elec bill (Sep)"');
   check(next.attachments.length === 1 && next.attachments[0].file === a2.file && next.attachments[0].keep === true, 'only the 📌 file carries over');
   check(t.attachments.length === 2, "the bill stays with August's (done) copy");
 
@@ -105,14 +106,14 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   PA.state.openTask = next.id;
   PA.renderDrawer();
   const hist = drawer().querySelector('.history');
-  check(hist && hist.textContent.includes('Aug elec bill') && hist.textContent.includes('August electricity bill.pdf') && hist.textContent.includes('done'), "history shows August's copy, done, with its bill");
+  check(hist && hist.textContent.includes('Elec bill (Aug)') && hist.textContent.includes('August electricity bill.pdf') && hist.textContent.includes('done'), "history shows August's copy, done, with its bill");
   opened.length = 0;
   drawer().querySelector(`.history [data-action="open-attach"][data-task="${t.id}"]`).click();
   await tick(10);
   check(opened.includes('blob:fake'), "August's bill opens from the history");
   drawer().querySelector(`.history [data-action="open-history"][data-id="${t.id}"]`).click();
   check(PA.state.openTask === t.id, 'clicking a history entry opens that copy');
-  check(!drawer().querySelector('.history') && drawer().textContent.includes('Current copy: Sep elec bill'), "August's history doesn't list the current September copy, but links to it");
+  check(!drawer().querySelector('.history') && drawer().textContent.includes('Current copy: Elec bill (Sep)'), "August's history doesn't list the current September copy, but links to it");
   drawer().querySelector(`[data-action="open-history"][data-id="${next.id}"]`).click();
   check(PA.state.openTask === next.id, 'the link opens the current copy');
   // A third copy: September's done, October is current → October's history: Sep then Aug; Sep's history: only Aug
@@ -120,11 +121,11 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   PA.state.openTask = oct.id;
   PA.renderDrawer();
   const titles = [...drawer().querySelectorAll('.history-item .link-btn')].map((b) => b.textContent);
-  check(titles.join(',') === 'Sep elec bill,Aug elec bill', `history is newest first and only past copies (got ${titles.join(',')})`);
+  check(titles.join(',') === 'Elec bill (Sep),Elec bill (Aug)', `history is newest first and only past copies (got ${titles.join(',')})`);
   PA.state.openTask = next.id;
   PA.renderDrawer();
   const sepTitles = [...drawer().querySelectorAll('.history-item .link-btn')].map((b) => b.textContent);
-  check(sepTitles.join(',') === 'Aug elec bill', "September's history has only August — not the later October copy");
+  check(sepTitles.join(',') === 'Elec bill (Aug)', "September's history has only August — not the later October copy");
 
   // Restart: permission needs a click again
   const storage = {};

@@ -1,5 +1,5 @@
-// The custom repeat screen, "ends after N times / on a date / never", and titles that move forward
-// with each repeat ("Aug elec bill" → "Sep elec bill").
+// The custom repeat screen, "ends after N times / on a date / never", the moving part ("Elec bill (Oct 26)"
+// → "(Nov 26)"), splitting older dated titles into title + moving part, and renaming every copy of a series.
 const { loadApp, check, done } = require('./helpers');
 
 (async () => {
@@ -38,7 +38,43 @@ const { loadApp, check, done } = require('./helpers');
   is('Pay elec bill', D(2026, 9, 5), D(2026, 10, 5), 'Pay elec bill'); // nothing to move
   is('Aug bill and Sep reading', D(2026, 9, 5), D(2026, 10, 5), 'Sep bill and Oct reading');
 
-  // --- In the app: title moves forward when ticked off ---
+  // --- The moving part: "Oct 26" is October 2026 ---
+  const rp = (p, from, to, want) => { const got = PA.rollPeriod(p, from, to); check(got === want, `moving part "${p}" → "${want}"${got === want ? '' : `  (got "${got}")`}`); };
+  rp('Oct 26', D(2026, 10, 5), D(2026, 11, 5), 'Nov 26');
+  rp('Dec 26', D(2026, 12, 5), D(2027, 1, 5), 'Jan 27');
+  rp('October 2026', D(2026, 10, 5), D(2026, 11, 5), 'November 2026');
+  rp('26 Oct', D(2026, 10, 26), D(2026, 11, 26), '26 Nov'); // a day
+  rp('Oct 26th', D(2026, 10, 26), D(2026, 11, 26), 'Nov 26th'); // a day
+  rp('Q3', D(2026, 7, 1), D(2026, 10, 1), 'Q4');
+  rp('Week 43', D(2026, 10, 19), D(2026, 10, 26), 'Week 44');
+  rp('2026', D(2026, 7, 31), D(2027, 7, 31), '2027');
+
+  // Older titles with a date in them are split into title + moving part
+  const sp = (title, wantTitle, wantPeriod) => {
+    const got = PA.splitPeriod(title);
+    check(got.title === wantTitle && got.period === wantPeriod, `"${title}" → "${wantTitle}" + "${wantPeriod}"${got.title === wantTitle && got.period === wantPeriod ? '' : `  (got "${got.title}" + "${got.period}")`}`);
+  };
+  sp('Aug elec bill', 'Elec bill', 'Aug');
+  sp('Electricity bill – August 2026', 'Electricity bill', 'August 2026');
+  sp("Rent Dec '26", 'Rent', "Dec '26");
+  sp('Rent for Oct', 'Rent', 'Oct');
+  sp('Pension Apr 26', 'Pension', 'Apr 26'); // two digits = the year (April 2026)
+  sp('Landlord Nov 26 rent', 'Landlord rent', 'Nov 26');
+  sp('Meet Nov 5', 'Meet', '5 Nov'); // one digit = a day
+  sp('Q3 report', 'Report', 'Q3');
+  sp('Tax return 2026', 'Tax return', '2026');
+  sp('Call if you may', 'Call if you may', '');
+  sp('August', 'August', ''); // nothing would be left of the title
+  sp('Pay elec bill', 'Pay elec bill', '');
+  const rep = { freq: 'monthly', interval: 1, days: [], monthMode: 'date', unit: 'days', until: '' };
+  const old = PA.normalizeTask({ id: 'o1', title: 'Aug elec bill', due: '2026-08-05T23:59', repeat: rep });
+  check(old.title === 'Elec bill' && old.period === 'Aug', 'saved repeating tasks from before are split when loaded');
+  check(PA.normalizeTask({ id: 'o2', title: 'Aug elec bill', repeat: { ...rep, keepTitle: true } }).title === 'Aug elec bill', '…except ones that had "move dates forward" turned off');
+  check(PA.normalizeTask({ id: 'o3', title: 'Tax return 2026' }).title === 'Tax return 2026', '…and tasks that don\'t repeat');
+  check(PA.normalizeTask({ id: 'o4', title: 'Aug bill', period: '', repeat: rep }).title === 'Aug bill', '…and only once');
+  check(PA.AT.suggestName({ title: 'Phone bill', period: 'Oct 26', due: '2026-10-05T23:59' }, 'scan.PDF') === 'Phone bill Oct 26.pdf', 'attachments are named "Phone bill Oct 26.pdf"');
+
+  // --- In the app ---
   const t = PA.addTask({ title: 'Aug elec bill', due: '2026-09-05T23:59' });
   doc.querySelector('[data-view="tasks"]').click();
   doc.querySelector(`[data-action="open-task"][data-id="${t.id}"]`).click();
@@ -47,20 +83,40 @@ const { loadApp, check, done } = require('./helpers');
     if (el.type === 'checkbox') el.checked = value; else el.value = value;
     el.dispatchEvent(new win.Event('change', { bubbles: true }));
   };
+  check(!doc.querySelector('#drawer [data-field="period"]'), 'no moving part on a task that doesn\'t repeat');
   set('freq', 'monthly');
-  check(doc.querySelector('#drawer [data-repeat="rollTitle"]').checked, '"Move dates in the title forward" is on by default');
+  check(t.title === 'Elec bill' && t.period === 'Aug' && doc.querySelector('#toasts').textContent.includes('"Aug" is now the moving part'), 'making it repeat moves "Aug" out of the title (and says so)');
+  check(!doc.querySelector('#drawer [data-repeat="rollTitle"]'), 'the old "move dates forward" tick is gone');
+  const field = doc.querySelector('#drawer [data-field="period"]');
+  check(field && field.value === 'Aug', 'the moving part has its own box');
+  check(doc.querySelector('#drawer .period-hint').textContent === 'Shows as Elec bill (Aug) · next: Elec bill (Sep)', 'it shows how it looks now and next time');
+  check(doc.querySelector(`#main [data-id="${t.id}"]`).closest('.item').querySelector('.tt').textContent === 'Elec bill (Aug)', 'the list shows "Elec bill (Aug)"');
   let next = PA.completeTask(t);
-  check(next.title === 'Sep elec bill' && next.due === '2026-10-05T23:59', 'ticking "Aug elec bill" off makes "Sep elec bill"');
+  check(next.title === 'Elec bill' && next.period === 'Sep' && next.due === '2026-10-05T23:59', 'ticking it off makes "Elec bill (Sep)"');
   next = PA.completeTask(next);
-  check(next.title === 'Oct elec bill', '…then "Oct elec bill"');
-
-  // Turning it off keeps the title
+  check(PA.fullTitle(next) === 'Elec bill (Oct)', '…then "Elec bill (Oct)"');
+  // Typing a moving part
   PA.state.openTask = next.id;
   PA.renderDrawer();
-  set('rollTitle', false);
-  check(next.repeat.keepTitle === true, 'the switch can be turned off');
+  const box = doc.querySelector('#drawer [data-field="period"]');
+  box.value = '(Oct 26)';
+  box.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(next.period === 'Oct 26' && doc.querySelector('#drawer .period-hint').textContent.includes('next: Elec bill (Nov 26)'), 'typing "Oct 26" (brackets are dropped) → next one "Nov 26"');
+  check(t.period === 'Aug', 'changing the moving part changes this copy only');
+  PA.state.calMonth = new Date(2026, 11, 1);
+  const prev = win.eval('repeatPreviews')('2026-12-01', '2027-01-31');
+  check((prev['2026-12-05'] || []).some((i) => i.title === 'Elec bill (Nov 26)') && (prev['2027-01-05'] || []).some((i) => i.title === 'Elec bill (Dec 26)'), 'calendar previews move it on too (5 Dec: Nov 26, 5 Jan: Dec 26)');
   const same = PA.completeTask(next);
-  check(same.title === 'Oct elec bill', 'with it off, the title stays the same');
+  check(PA.fullTitle(same) === 'Elec bill (Nov 26)', 'and the real next copy is "Elec bill (Nov 26)"');
+  // Renaming renames every copy, done ones too
+  PA.state.openTask = same.id;
+  PA.renderDrawer();
+  const title = doc.querySelector('#drawer [data-field="title"]');
+  title.value = 'Electricity bill';
+  title.dispatchEvent(new win.Event('change', { bubbles: true }));
+  const series = PA.DB.tasks.filter((x) => x.seriesId === t.seriesId);
+  check(series.length === 4 && series.every((x) => x.title === 'Electricity bill') && series.map((x) => x.period).join(',') === 'Aug,Sep,Oct 26,Nov 26', 'renaming one copy renames all 4 (each keeps its moving part)');
+  check(doc.querySelector('#toasts').textContent.includes('Renamed 3 other copies of this task too'), 'and says how many');
 
   // --- Custom repeat screen ---
   const c = PA.addTask({ title: 'Gym', due: '2026-10-26T07:00' }); // a Monday

@@ -338,6 +338,9 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .p-sub { padding: 8px 12px 12px 44px; display: flex; flex-direction: column; gap: 8px; }
 .p-sub.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .p-sub .repeat-box { background: transparent; border: 0; padding: 0; }
+.period-row { flex-wrap: nowrap; gap: 8px; white-space: nowrap; }
+.period-row .input { flex: 1; min-width: 0; }
+.period-hint, .repeat-next { display: block; margin: 0; } /* plain text, so bold parts stay in the sentence */
 .p-head { display: flex; justify-content: space-between; padding: 10px 12px 2px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .p-card .steps { padding: 4px 12px 0; }
 .p-notes { width: 100%; min-height: 110px; border: 0; background: transparent; padding: 12px; resize: vertical; color: inherit; outline: none; font: inherit; line-height: 1.5; }
@@ -515,9 +518,12 @@ const TASK_DEFAULTS = {
   spawnedNext: '',    // id of the next copy, once created (so ticking twice never makes two)
   seriesIndex: 1,     // which copy of a repeating task this is (1 = the first) — for "ends after N times"
   attachments: [],    // {id, name, file, size, type, added} — file is the name inside the attachments folder
+  period: '',         // the "moving part" shown after the title, e.g. "Oct 26" → "Phone bill (Oct 26)"; moves forward with each repeat
 };
 function normalizeTask(t) {
   const n = { ...TASK_DEFAULTS, ...t };
+  // Before the moving part had its own field, dates in a repeating task's title moved forward ("Aug bill").
+  if (!('period' in t) && t.repeat && !t.repeat.keepTitle) Object.assign(n, splitPeriod(n.title));
   for (const k of ['labels', 'checklist', 'attachments']) n[k] = Array.isArray(t[k]) ? t[k] : []; // fresh arrays, never shared
   // Before multiple reminders, a task had one: remind (minutes before due, -1 = none) + notified.
   if (!Array.isArray(t.reminders)) {
@@ -918,13 +924,14 @@ const AT = {
     renderDrawer();
   },
 
-  // "Sep elec bill 2026.pdf": the task's title, plus the year when the title doesn't have one.
+  // "Phone bill Oct 26.pdf": the title and moving part; with no moving part, the year is added when the
+  // title doesn't have one ("Elec bill 2026.pdf").
   suggestName(task, original) {
     const dot = original.lastIndexOf('.');
     const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
     const year = (task.due ? task.due.slice(0, 4) : String(new Date().getFullYear()));
-    const base = (task.title || 'Attachment').trim();
-    return `${/\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
+    const base = `${(task.title || 'Attachment').trim()}${task.period ? ` ${task.period}` : ''}`;
+    return `${task.period || /\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
   },
 
   // Rename an attachment and its real file. A 📌 kept file is shared by every repeat, so they all
@@ -1011,7 +1018,8 @@ function attachCard() {
 }
 
 // ===================== Derived data =====================
-const taskDate = (t) => (t.due ? t.due.slice(0, 10) : '');
+const fullTitle = (t) => (t.period ? `${t.title} (${t.period})` : t.title); // "Phone bill (Oct 26)"
+const taskDate =(t) => (t.due ? t.due.slice(0, 10) : '');
 // A due date without a time is stored at 23:59 ("any time that day") and shown without a time.
 const ALL_DAY = '23:59';
 const taskTime = (t) => (t.due && t.due.slice(11, 16) !== ALL_DAY ? t.due.slice(11, 16) : '');
@@ -1041,7 +1049,7 @@ function sortTasks(list, mode = 'due') {
   const cmp = {
     due: byDue,
     priority: (a, b) => prio[a.priority] - prio[b.priority] || byDue(a, b),
-    name: (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }),
+    name: (a, b) => fullTitle(a).localeCompare(fullTitle(b), undefined, { sensitivity: 'base', numeric: true }),
     newest: (a, b) => (b.created || 0) - (a.created || 0),
     oldest: (a, b) => (a.created || 0) - (b.created || 0),
     bucket: (a, b) => bucketPos(a) - bucketPos(b) || byDue(a, b),
@@ -1085,10 +1093,10 @@ const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? '↻≈ ' : '↻ ')
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
-  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: t.title, time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: fullTitle(t), time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
   // A task done late also shows (faded, ✓) on the day it was actually done.
   const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key).map((t) => ({
-    id: t.id, title: t.title, time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
+    id: t.id, title: fullTitle(t), time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
   }));
   const repeats = (previews && previews[key]) || [];
   // What's due/happening that day comes first (so a busy day's 3 chips show it), then "done here", then previews.
@@ -1239,7 +1247,7 @@ function taskSummary(t) {
   if (bucket && !onBoard) meta.push(`<span>▦ ${esc(bucket.name)}</span>`);
   const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
   return `
-    <div class="title"><span class="tt">${esc(t.title) || '<span class="meta">New task…</span>'}</span> ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
+    <div class="title"><span class="tt">${esc(fullTitle(t)) || '<span class="meta">New task…</span>'}</span> ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
 }
 
@@ -1931,13 +1939,13 @@ function historyBlock(t) {
     .sort((a, b) => (b.seriesIndex || 0) - (a.seriesIndex || 0) || (b.due || '').localeCompare(a.due || ''));
   // Looking at an old copy: point to the one that's still to do.
   const current = t.done ? series.find((x) => !x.done) : null;
-  const currentLink = current ? `<p class="meta">Current copy: <button class="link-btn" style="flex:none" data-action="open-history" data-id="${esc(current.id)}">${esc(current.title)} →</button></p>` : '';
+  const currentLink = current ? `<p class="meta">Current copy: <button class="link-btn" style="flex:none" data-action="open-history" data-id="${esc(current.id)}">${esc(fullTitle(current))} →</button></p>` : '';
   if (!others.length) return currentLink ? `<h3>History</h3>${currentLink}` : '';
   const row = (x) => `
     <li class="history-item">
       <div class="row" style="gap:8px;flex-wrap:nowrap">
         <span>${x.done ? '✓' : '○'}</span>
-        <button class="link-btn" data-action="open-history" data-id="${esc(x.id)}" title="Open this copy">${esc(x.title)}</button>
+        <button class="link-btn" data-action="open-history" data-id="${esc(x.id)}" title="Open this copy">${esc(fullTitle(x))}</button>
       </div>
       <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? ` · done ${esc(x.completedAllDay ? fmtDay(toISO(new Date(x.completedAt))) : fmtStamp(x.completedAt))}` : x.done ? '' : ' · not done yet'}${lateText(x) ? ` · <span class="late">${lateText(x)}</span>` : ''}</div>
       ${x.notes.trim() ? `<div class="meta history-note">${esc(x.notes.trim().split('\n')[0].slice(0, 120))}</div>` : ''}
@@ -1977,7 +1985,7 @@ function openDonePrompt(t) {
     <div class="modal-back" data-action="done-cancel"></div>
     <form class="modal" data-form="done-date" role="dialog" aria-label="When was it done?">
       <h3>Mark done</h3>
-      <p class="meta" style="margin:0">${esc(t.title || 'New task')}</p>
+      <p class="meta" style="margin:0">${esc(fullTitle(t) || 'New task')}</p>
       <div class="row quick-done">
         <button type="button" class="btn primary" data-action="done-quick" data-when="today">Today</button>
         ${canDue ? `<button type="button" class="btn" data-action="done-quick" data-when="due">On the due date · ${esc(fmtDay(dueDay))}${taskTime(t) ? ' ' + esc(fmtTime(taskTime(t))) : ''}</button>` : ''}
@@ -2049,6 +2057,13 @@ function setTaskField(field, value) {
   if (field === 'title') {
     if (!value.trim()) { renderDrawer(); return; } // never leave a task without a title
     t.title = value.trim();
+    renameSeries(t);
+  } else if (field === 'period') {
+    t.period = value.trim().replace(/^\((.*)\)$/, '$1'); // typed with brackets → without
+    changed('tasks');
+    render();
+    renderDrawer(); // updates the "next one" preview
+    return;
   } else if (field === 'dueDate') {
     t.due = value ? `${value}T${taskTime(t) || ALL_DAY}` : '';
     field = 'due';
@@ -2071,6 +2086,20 @@ function setTaskField(field, value) {
   afterTaskEdit(t, field);
   changed('tasks');
   render();
+}
+// A title belongs to the whole repeating task: renaming one copy renames every copy, done ones too (each
+// keeps its own moving part). It doesn't count as changing a copy, so unticking can still tidy one away.
+function renameSeries(t) {
+  if (!t.seriesId) return;
+  const series = DB.tasks.filter((x) => x.seriesId === t.seriesId);
+  const others = series.filter((x) => x !== t && x.title !== t.title);
+  for (const x of series) {
+    let untouched = false;
+    try { const was = JSON.parse(x.spawnSig); was.title = x.title; untouched = JSON.stringify(was) === taskSig(x); } catch { /* no signature */ }
+    x.title = t.title;
+    if (untouched) x.spawnSig = taskSig(x);
+  }
+  if (others.length) toast(`Renamed ${others.length} other cop${others.length === 1 ? 'y' : 'ies'} of this task too`);
 }
 function afterTaskEdit(t, field) {
   if (field !== 'due') return;
@@ -2098,20 +2127,43 @@ function nextCopyIfUntouched(t) {
   return next && !next.done && next.spawnSig && taskSig(next) === next.spawnSig ? next : null;
 }
 
-// Unticking: back to not done. If the next copy hasn't been touched, it goes away again.
+// What was changed on a copy since it was made, in words ("renamed, notes").
+const CHANGE_WORDS = {
+  title: 'renamed', period: 'moving part', due: 'due date', notes: 'notes', checklist: 'steps', attachments: 'attachments',
+  reminders: 'reminders', priority: 'priority', bucket: 'bucket', labels: 'labels', start: 'start date', progress: 'progress', repeat: 'repeat',
+};
+function whatChanged(x) {
+  let was;
+  try { was = JSON.parse(x.spawnSig); } catch { return ''; }
+  const now = JSON.parse(taskSig(x));
+  const words = Object.keys(CHANGE_WORDS).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k])).map((k) => CHANGE_WORDS[k]);
+  return words.join(', ');
+}
+
+// Unticking: back to not done. If the next copy hasn't been touched, it goes away again; if it has, ask.
 function uncompleteTask(t) {
   t.done = false;
   t.completedAt = 0;
   t.completedAllDay = false;
   if (!t.spawnedNext) return;
-  const next = nextCopyIfUntouched(t);
-  if (next) {
+  const remove = (next) => {
     DB.tasks = DB.tasks.filter((x) => x !== next);
     t.spawnedNext = '';
     if (state.openTask === next.id) state.openTask = null;
-    toast(`Removed the next copy (${next.title}) — it hadn't been changed`);
-  } else if (DB.tasks.some((x) => x.id === t.spawnedNext)) {
-    toast('The next copy stays — you\'d already changed it');
+  };
+  const next = nextCopyIfUntouched(t);
+  const other = DB.tasks.find((x) => x.id === t.spawnedNext);
+  if (next) {
+    remove(next);
+    toast(`Removed the next copy (${fullTitle(next)}) — it hadn't been changed`);
+  } else if (other && other.done) {
+    toast('The next copy stays — it\'s already done');
+  } else if (other) {
+    const what = whatChanged(other);
+    if (confirm(`The next copy (${fullTitle(other)}) was changed after it was made${what ? ` (${what})` : ''}. Remove it anyway?`)) {
+      remove(other);
+      toast(`Removed the next copy (${fullTitle(other)})`);
+    } else toast('The next copy stays');
   } else t.spawnedNext = '';
 }
 
@@ -2141,7 +2193,7 @@ function spawnNext(t, doneAt = new Date()) {
     id: uid(), due, done: false, completedAt: 0, progress: 'not', myDay: '',
     spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id, seriesIndex: index + 1,
   });
-  if (!t.repeat.keepTitle && t.due) copy.title = rollTitle(t.title, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10)));
+  if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
   copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
   // Reminders come along; an exact-time one moves by as many days as the due date did.
   const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
@@ -2317,11 +2369,26 @@ function repeatBlock(t) {
       </select>
       ${r ? '<button class="icon-btn edit-only" data-action="clear-repeat" title="Stop repeating">✕</button>' : ''}
     </div>
-    ${r ? `<div class="p-sub">
+    ${r || t.period ? `<div class="p-sub">
       ${box}
-      <label class="p-check meta"><input type="checkbox" data-repeat="rollTitle" ${r.keepTitle ? '' : 'checked'}><span>Move dates in the title forward (e.g. "Aug bill" → "Sep bill")</span></label>
-      ${next ? `<p class="meta" style="margin:0">↻ ${next}</p>` : ''}
+      ${periodField(t)}
+      ${next ? `<p class="meta repeat-next">↻ ${next}</p>` : ''}
     </div>` : ''}`;
+}
+
+// The moving part: typed once ("Oct 26"), shown after the title and moved forward on each repeat.
+function periodField(t) {
+  let shows = '';
+  if (t.period) {
+    const nd = t.repeat && t.due && !t.done ? nextDue(t) : null;
+    const next = nd ? fullTitle({ ...t, period: rollPeriod(t.period, parseISO(taskDate(t)), parseISO(nd.slice(0, 10))) }) : '';
+    shows = `Shows as <b>${esc(fullTitle(t))}</b>${next ? ` · next: <b>${esc(next)}</b>` : ''}`;
+  } else shows = 'e.g. "Oct 26" (October 2026), "26 Oct", "Q3", "Week 43" or "2026". It moves forward with each repeat.';
+  return `
+    <label class="row meta period-row">Moving part
+      <input class="input" data-field="period" value="${esc(t.period)}" placeholder="e.g. Oct 26" aria-label="Moving part" ${state.readOnly ? 'readonly' : ''}>
+    </label>
+    <p class="meta period-hint">${shows}</p>`;
 }
 
 function endBlock(r, end, opt) {
@@ -2339,6 +2406,11 @@ function setRepeat(key, value) {
   if (key === 'freq' || key === 'unitFreq') {
     if (!value) t.repeat = null;
     else {
+      // Starting to repeat: a date in the title ("Aug bill") becomes the moving part, so it moves forward.
+      if (!t.repeat && !t.period) {
+        const s = splitPeriod(t.title);
+        if (s.period) { Object.assign(t, s); toast(`"${s.period}" is now the moving part — it moves forward with each repeat`); }
+      }
       const freq = value === 'custom' ? (t.repeat && t.repeat.freq !== 'weekdays' && t.repeat.freq !== 'after' ? t.repeat.freq : 'weekly') : value;
       if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; toast('Repeating tasks need a due date, so it is set to today — change it if you like'); }
       t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...(t.repeat || {}), freq };
@@ -2355,8 +2427,7 @@ function setRepeat(key, value) {
       r.endMode = value;
       if (value !== 'date') r.until = '';
       if (value === 'count' && !r.count) r.count = 10;
-    } else if (key === 'rollTitle') r.keepTitle = !value;
-    else if (['monthMode', 'unit', 'until'].includes(key)) r[key] = value;
+    } else if (['monthMode', 'unit', 'until'].includes(key)) r[key] = value;
     else return;
   } else return;
   changed('tasks');
@@ -2364,7 +2435,46 @@ function setRepeat(key, value) {
   renderDrawer();
 }
 
-// ----- Titles that move forward with each repeat -----
+// ----- The moving part: moves forward with each repeat -----
+// "Oct 26" is October 2026 (a two-digit number right after a month is a year here); anything else moves
+// like rollTitle below ("26 Oct" / "Oct 26th" are days).
+function rollPeriod(p, from, to) {
+  const m = p.match(new RegExp(`^(\\s*(?:${MONTH_WORD})\\.?\\s+)(\\d{2})(\\s*)$`, 'i'));
+  if (!m) return rollTitle(p, from, to);
+  return rollTitle(`${m[1]}'${m[2]}${m[3]}`, from, to).replace("'", '');
+}
+
+// An older repeating title with a date in it ("Aug elec bill") → { title: 'Elec bill', period: 'Aug' }.
+// Takes the first date-like part, most specific kind first; nothing found → the title as it is.
+function splitPeriod(title) {
+  const M = MONTH_WORD;
+  const kinds = [
+    new RegExp(`\\b\\d{1,2}(st|nd|rd|th)?\\s+(${M})\\b\\.?(\\s+\\d{4})?\\b`, 'i'), // "5 Nov", "5th November 2026"
+    new RegExp(`\\b(${M})\\.?\\s+(\\d{1,2})(st|nd|rd|th)?\\b(,?\\s+\\d{4})?`, 'i'), // "Nov 5", "November 5th, 2026"
+    new RegExp(`\\b(${M})\\b\\.?(\\s*['’]?(\\d{4}|\\d{2})\\b)?`, 'i'), // "Aug", "August 2026", "Aug '26"
+    /\bQ[1-4]\b(\s+\d{4})?/, // "Q3", "Q4 2026"
+    /\b(week|wk)\s*\d{1,2}\b|\bW\d{1,2}\b/i, // "Week 43", "W43"
+    /\b\d{1,2}(st|nd|rd|th)\b/i, // "5th"
+    /\b(19|20)\d{2}\b/, // "2026"
+  ];
+  for (const [i, re] of kinds.entries()) {
+    const m = title.match(re);
+    if (!m) continue;
+    if (i === 2 && m[1] === 'may' && !m[2]) continue; // "may" the verb
+    let period = m[0].trim();
+    // "Apr 26" stays as written (two digits after a month = the year, as in the box); "Nov 5" is a day,
+    // which the box would also read as a day, but it's written "5 Nov" to be clear.
+    if (i === 1 && !m[3] && !m[4] && m[2].length === 1) period = `${m[2]} ${m[1]}`;
+    let rest = `${title.slice(0, m.index)} ${title.slice(m.index + m[0].length)}`
+      .replace(/\s{2,}/g, ' ').replace(/^[\s–—\-:,]+|[\s–—\-:,]+$/g, '').replace(/\s+(for|on|of|in)$/i, '').trim();
+    if (!rest) return { title, period: '' }; // the date was the whole title
+    if (/^[A-Z]/.test(title) && /^[a-z]/.test(rest)) rest = rest[0].toUpperCase() + rest.slice(1);
+    return { title: rest, period };
+  }
+  return { title, period: '' };
+}
+
+// ----- Dates that move forward (used for the moving part) -----
 // "Aug elec bill" → "Sep elec bill", "Bill – August 2026" → "September 2026", "Q3" → "Q4",
 // "Week 43" → "Week 44", "due 5th" / "5 Nov" move by the same days, a lone "2026" moves by years.
 // Everything shifts by how far the due date moved, so it works for any repeat.
@@ -2451,10 +2561,11 @@ function repeatPreviews(fromKey, toKey) {
       const dueDay = cur.due.slice(0, 10);
       const nd = est ? nextDue(cur, parseISO(dueDay < today ? today : dueDay)) : nextDue(cur);
       if (!nd || nd.slice(0, 10) > toKey) break;
-      cur = { ...cur, due: nd };
+      const period = cur.period ? rollPeriod(cur.period, parseISO(cur.due.slice(0, 10)), parseISO(nd.slice(0, 10))) : '';
+      cur = { ...cur, due: nd, period };
       const k = nd.slice(0, 10);
       const time = nd.slice(11, 16) === ALL_DAY ? '' : nd.slice(11, 16); // no time stays no time (not "11:59 pm")
-      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: t.title, time, kind: 'repeat', est });
+      if (k >= fromKey) (out[k] = out[k] || []).push({ id: t.id, title: fullTitle(cur), time, kind: 'repeat', est });
     }
   }
   return out;
@@ -2742,7 +2853,7 @@ function checkReminders() {
       const at = reminderTime(t, r);
       if (at == null || now < at) continue;
       const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
-      notify(t.title, when);
+      notify(fullTitle(t), when);
       if (state.readOnly) state.remindedHere.add(key);
       else { r.fired = true; changedAny = true; }
     }
@@ -2832,14 +2943,14 @@ document.addEventListener('click', (e) => {
       const copy = duplicateTask(t);
       render();
       openTaskDrawer(copy.id);
-      toast(`Made “${copy.title}”`);
+      toast(`Made “${fullTitle(copy)}”`);
       break;
     }
     case 'delete-task': {
       const t = DB.tasks.find((x) => x.id === id);
       if (!t) break;
       const rich = t.notes.trim() || t.checklist.length || t.attachments.length;
-      if (rich && !confirm(`Delete "${t.title}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`)) break;
+      if (rich && !confirm(`Delete "${fullTitle(t)}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`)) break;
       DB.tasks = DB.tasks.filter((x) => x.id !== id);
       changed('tasks');
       if (state.openTask === id) closeTaskDrawer();
@@ -3188,7 +3299,7 @@ setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF
 setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle };
+window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle };
 </script>
 </body>
 </html>

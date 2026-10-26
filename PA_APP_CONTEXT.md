@@ -12,7 +12,7 @@ Shared data (in `localStorage` as `pa_<key>`, and in the data file under `data.<
 
 | key | record |
 |---|---|
-| `tasks` | Every field and default is in `TASK_DEFAULTS` in PA App.html; `normalizeTask()` fills in missing fields on load. Fields: `id, title, due:'YYYY-MM-DDTHH:mm' or '', start:'YYYY-MM-DD' or '', priority:'low'/'med'/'high', progress:'not'/'doing', reminders:[…] (see Reminders), done, completedAt, created, myDay:'YYYY-MM-DD' (in My Day only on that date), bucket (id or ''), labels:[ids], notes, checklist:[{id,text,done}], repeat (see below) or null, seriesId, seriesIndex, spawnedNext, attachments:[{id,name,file,original,size,type,added,keep}]`. Older tasks had one reminder as `remind` (minutes before, -1 = none) + `notified`; `normalizeTask()` turns that into a one-item `reminders` list and drops the old fields. |
+| `tasks` | Every field and default is in `TASK_DEFAULTS` in PA App.html; `normalizeTask()` fills in missing fields on load. Fields: `id, title, due:'YYYY-MM-DDTHH:mm' or '', start:'YYYY-MM-DD' or '', priority:'low'/'med'/'high', progress:'not'/'doing', reminders:[…] (see Reminders), done, completedAt, created, myDay:'YYYY-MM-DD' (in My Day only on that date), bucket (id or ''), labels:[ids], notes, checklist:[{id,text,done}], repeat (see below) or null, seriesId, seriesIndex, spawnedNext, attachments:[{id,name,file,original,size,type,added,keep}], period` (the moving part, shown as "title (period)"; see Recurring tasks). Older tasks had one reminder as `remind` (minutes before, -1 = none) + `notified`; `normalizeTask()` turns that into a one-item `reminders` list and drops the old fields. A task saved before `period` existed that repeats (without `keepTitle`) has the date in its title split into `period` when loaded (`splitPeriod`), once. |
 | `notes` | `{id, title, body, updated (ms)}` |
 | `events` | `{id, title, date:'YYYY-MM-DD', time:'HH:mm' or ''}` |
 | `buckets` | `{id, name, order}`. Deleting a bucket moves its tasks to "No bucket"; it never deletes tasks. |
@@ -81,7 +81,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **Labels from the panel:** "✎ Manage" next to the labels opens rename, colour and delete for each (`state.labelManage`). Settings has the same controls.
   - A done task's date can be changed in the panel (`setDoneDate`).
   - For "again after I finish it" repeats, an untouched next copy is made again from the new date.
-- **Unticking a repeat** (`uncompleteTask`) removes the next copy if it's untouched: `spawnSig` is a snapshot taken when it was made, and reminders going off don't count as changes. A changed copy stays.
+- **Unticking a repeat** (`uncompleteTask`) removes the next copy if it's untouched: `spawnSig` is a snapshot taken when it was made, and reminders going off don't count as changes. If it was changed, it asks "The next copy (…) was changed after it was made (steps, notes). Remove it anyway?" (`whatChanged`); No keeps it. A next copy that's already done always stays.
 - **Duplicate** (`duplicateTask`) makes "title (copy)": no attachments, checklist unticked, reminders re-armed, its own new series.
 - **Tabs:** All (no filter), Open (the default), Overdue, Done (`TASK_TABS`). They can be filtered by bucket (`state.taskBucket`: '' = all, '-' = no bucket) and by label. A task added while filtered lands in that bucket or label. There's no My Day or Planned tab: My Day is its own screen, and Planned was dropped.
 - **My Day screen** (view key `today`, first in the sidebar): tasks added to My Day, plus tasks due today or overdue, plus a few undated ones under "Anytime". Its quick add puts the new task in My Day.
@@ -123,17 +123,22 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **All-day due dates:** a due date without a time is stored as `T23:59` (`ALL_DAY`). It's shown without a time, has no reminder by default, and isn't overdue until the day ends.
 
 ## Recurring tasks (`nextDue`, `completeTask`)
-- **The repeat setting:** `repeat = {freq, interval, days, monthMode, anchorDay, weekday, nth, unit, endMode, until, count, keepTitle}`. `freq` is one of daily, weekdays, weekly, monthly, yearly, after.
+- **The repeat setting:** `repeat = {freq, interval, days, monthMode, anchorDay, weekday, nth, unit, endMode, until, count}` (older ones may have `keepTitle`). `freq` is one of daily, weekdays, weekly, monthly, yearly, after.
 - **Drawer:** quick choices (Never, Daily, Weekdays, Weekly, Monthly, Yearly, Again after I finish it), plus **Custom…**. Under the list is a box with "Every N [days/weeks/months/years]", weekday picks, monthly "on day X / on the Nth weekday", and **Ends**. A quick choice resets to "every 1"; the list shows "Custom…" for anything else.
 - **Ends:** `endMode` is 'never', 'date' (`until`) or 'count' (`count` copies in all, counted by `seriesIndex`). Older repeats had only `until` and are treated as 'date' when it's set (`endModeOf`). The calendar preview stops at the count as well.
 - **How copies are made:** ticking a repeating task off creates the next copy once, recorded in `spawnedNext`, so re-ticking never makes two.
   - The copy keeps the time of day and the gap between start and due date.
   - Its checklist, reminders, My Day and progress reset.
   - Only 📌 kept attachments carry over (see Attachments).
-  - **The title moves forward** (`rollTitle`, unless `keepTitle`), by however far the due date moved:
+  - **The title never changes; the moving part does** (`period`, `rollPeriod`). "Phone bill" + "Oct 26" shows as "Phone bill (Oct 26)" (`fullTitle`) and the next copy is "Phone bill (Nov 26)". It moves by however far the due date moved:
+    - **"Oct 26" means October 2026**: two digits right after a month are a year. "26 Oct" / "Oct 26th" are days.
     - months keep their style: "Aug" → "Sep", "August 2026" → "September 2026", "Dec '26" → "Jan '27"
     - "Q3" → "Q4", "Week 43" → "Week 44", "5 Nov" / "Nov 30th" / "due 5th" by the same number of days, a lone year by years
     - "may" the verb and words like "Marketing" are left alone; "May" counts as a full month name
+  - The panel's **Moving part** box sits in the repeat section, with "Shows as … · next: …" under it. Brackets typed around it are dropped. Changing it changes that copy only.
+  - **Switching a task to repeat** moves a date in its title into the moving part ("Aug bill" → "Bill (Aug)") and says so. Saved repeating tasks are split the same way once, when loaded (see Data model). `splitPeriod` takes the first date-like part, most specific kind first; "Apr 26" stays as written (the year), "Nov 5" becomes "5 Nov". The old "Move dates in the title forward" tick (`keepTitle`) is gone; tasks that had it off keep their titles.
+  - **Renaming a title renames every copy** of the series, done ones included (`renameSeries`), and says how many. Each copy keeps its own moving part. A rename doesn't count as changing a copy (its `spawnSig` is updated), so unticking can still tidy an untouched next copy away.
+  - Calendar previews of future repeats show the moved part too. Attachments are named "Phone bill Oct 26.pdf".
   - Covered by `test-repeat-custom`.
 - **Anchors:** `anchorDay`, `weekday` and `nth` are taken from the due date when the repeat is set or the due date is edited (`syncRepeatAnchor`), not when a copy is made. That keeps "the 31st" on the 31st after February, and Feb 29 coming back in leap years.
 - **'after':** counts from the day you finish (the done date from the pop-up), not from the old due date. The units are days, weeks, months or years.
@@ -189,11 +194,11 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-datafile` | create, save, load another device's save, conflicts (keep mine / use theirs), empty browser, wrong file, daily backup once per day |
 | `test-readonly` | phone can open and view, every edit path blocked, reminders don't change data, `?readonly` |
 | `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
-| `test-repeat-custom` | title roll-forward (months, years, quarters, weeks, dates, "May", "may" the verb), switch off; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
+| `test-repeat-custom` | dates moving forward (months, years, quarters, weeks, dates, "May", "may" the verb); moving part ("Oct 26" = Oct 2026, days, brackets dropped, panel box and preview, list, calendar previews, attachment names); splitting dated titles (on load once, not with keepTitle or no repeat, on switching to repeat); renaming renames every copy; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
 | `test-private` | the private-data check catches private terms (including in old versions), emails, personal paths, forbidden files (including identical copies under another name), photos/PDFs/office files, attachments folders, private words in commit messages and personal commit emails; a clean repo passes; this project's history is clean |
 | `test-calendar-extras` | late task also on its done day (faded ✓, day list text, opens it; none for on-time or early); missed / done-on chips with "done 25th" / "due 24th" notes, long names keep the note, hover highlight; strike line drawn lower (gradient, not on missed chips); clicking a chip opens its panel, empty space only the day; tick box in the day list (none for events); legend sample chips; "after" repeats estimated from the due date (or today when overdue), stop at the count, look different, real copy follows the done day; Done pop-up has no "(optional)" |
 | `test-late-labels` | how late (days / same day / on time / early / no due date); shown in list, panel and History; late repeats keep the missed copy; calendar orange edge, legend, day list; no 23:59 on repeat previews; manage labels from the panel; board keeps its scroll after an edit; wheel over the dim scrolls the board |
-| `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, time left empty), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), Duplicate, full width |
+| `test-done-dup` | Done on… pop-up (cancel, Esc, a chosen date, time left empty), "after" counted from the done date, years, 999, changing the done date moves an untouched copy (not a changed one), unticking removes the untouched next copy (a fired reminder doesn't count as a change), asks before removing a changed one (says what changed; No keeps it; Yes removes it), a series rename doesn't count, Duplicate, full width |
 | `test-sort-calendar` | every sort order, remembered; group by due date or bucket; Board cards follow the sort; sticky top and column names; calendar colours, legend, day list colours, opening a task from it |
 | `test-panel-extras` | "+ New task" (blank dropped, My Day), editing reminders, no time subtext, scroll position kept after a change |
 | `test-task-details` | old tasks and version 1 files load with defaults; each task gets its own arrays; drawer fields, title can't be blanked, notes typing keeps focus; checklist (add, tick, edit, turn into a task, delete); My Day (empties next day, Today quick add); tabs; Esc; delete asks when the task has notes; phone drawer is locked |
@@ -254,4 +259,9 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Done chips use normal-coloured struck text.
   - Notes never get hidden by long names.
   - The Done pop-up has quick choices: Today (Enter) or On the due date (with its time).
+  - The strike line sits a little lower (like To Do). Calendar task chips light up and open their panel; the day list has tick boxes.
+- **26 Oct 2026:**
+  - Repeating tasks get a **moving part** ("Phone bill (Oct 26)") instead of dates moving inside the title. "Oct 26" = October 2026. Existing dated repeating titles were split automatically.
+  - Renaming a title renames every copy, past and future.
+  - Unticking asks before removing a next copy you changed, instead of quietly keeping it.
     - Labels, progress and start date are all kept.
