@@ -265,3 +265,13 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Renaming a title renames every copy, past and future.
   - Unticking asks before removing a next copy you changed, instead of quietly keeping it.
     - Labels, progress and start date are all kept.
+- **28 Oct 2026:** phone notifications will come from **Microsoft To Do** (planned, not built). The phone's own reminder app syncs with To Do, so To Do does the notifying even when the laptop is off.
+  - Rejected: an MCP (it connects Claude, not the app), a push service such as ntfy (only holds messages a few days ahead, task names pass through a public service) and a calendar feed (slow refresh, phones drop its alerts).
+  - The app keeps a "PA App" list in To Do and never touches other lists. **Every open task** goes, dated or not.
+  - Sent: full title (with the moving part), notes, due date (To Do has no due time), the next reminder that hasn't gone off (To Do allows one), high priority as Important, done with its date. Repeats are not sent as repeats, so To Do never makes its own copies; only the current copy is there.
+  - Written back: done (with its date, so the next copy is made), title (renames the series), notes, due date (the time is kept), reminder (as an exact-time one), Important, new tasks added to the list. Deleting in To Do only unlinks; it never deletes in the app.
+  - Only edit devices sync (on open, after changes, every 5 minutes, "Sync now"). The phone view stays read-only.
+  - The link is stored on each task in the data file as a `todo` entry (the To Do ID plus what was last synced, to tell which side changed). Old files keep loading.
+  - Sign-in is written into the app (OAuth code flow with PKCE, personal Microsoft accounts, scopes `Tasks.ReadWrite offline_access`), with no library. The client ID is not a secret. Tokens are per device and never go in the data file.
+  - Sign-in needs an `https` or `localhost` address, so the laptop uses the GitHub Pages address (installed as an app) instead of opening the file.
+  - Steps (checklist) are for later.
