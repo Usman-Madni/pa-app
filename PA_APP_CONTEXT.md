@@ -194,7 +194,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Deleted in To Do → kept here as `todo: {removed: true}` and never sent again. A whole deleted list is made again with everything.
   - A lost link finds its old To Do task by `externalId` (= the task id) instead of making a second one.
   - **Safety:** over 10 removals that are also over half the list, either way, are refused with a message.
-- **When:** after the data file has loaded, 5 s after a task change (`changed()` → `TD.soon`), every 5 minutes, and **Sync now** in Settings. Never on read-only devices, and not while the data file needs reconnecting or a decision.
+- **When:** after the data file has loaded, 5 s after a task change (`changed()` → `TD.soon`), every 5 minutes, and **Sync now** in Settings. Never on read-only devices, and not while the data file needs reconnecting or a decision (`waitingForFile`): the Phone reminders card then says "Paused — reconnect the data file first", and `DF.check()` starts a sync as soon as the file is OK again. (Before 30 Oct it waited silently until the next 5-minute check, which looked like ticks on the phone not coming back.)
 - After changes come in, a toast says how many, and the page and open task panel are redrawn unless you're typing.
 - Steps (checklist) aren't synced yet.
 

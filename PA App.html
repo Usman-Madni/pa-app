@@ -692,7 +692,10 @@ const DF = {
         this.status = 'conflict';
         this.conflict = file;
       }
-    } catch (e) { this.fail(e); } finally { renderStatus(); }
+    } catch (e) { this.fail(e); } finally {
+      renderStatus();
+      if (this.status === 'ok') TD.soon(); // To Do waits for the data file (e.g. Reconnect after a restart)
+    }
   },
 
   load(file) {
@@ -2800,6 +2803,7 @@ const TD = {
   auth() { return device.get('msAuth', null); },
   connected() { return !!this.auth(); },
   needsSignIn() { const a = this.auth(); return !!a && !a.refresh && !(a.access && a.exp > Date.now()); },
+  waitingForFile() { return !!DF.handle && DF.status !== 'ok'; }, // syncing waits until the data file is reconnected or decided
 
   async signIn() {
     // Open the pop-up straight from the click, or the browser blocks it; it's pointed at Microsoft a moment later.
@@ -2995,7 +2999,7 @@ const TD = {
   async sync() {
     if (state.readOnly || !this.connected()) return;
     if (this.busy) { this.again = true; return; }
-    if (DF.handle && DF.status !== 'ok') return; // the data file needs reconnecting or a decision first
+    if (this.waitingForFile()) return; // the data file needs reconnecting or a decision first; DF.check() syncs after
     this.busy = true;
     let sent = 0, cameIn = false;
     try {
@@ -3115,6 +3119,7 @@ function todoCard() {
   const last = device.get('todoLast', 0);
   const onPhone = DB.tasks.filter((t) => t.todo && t.todo.id && !t.done).length;
   const status = TD.needsSignIn() ? '<span class="status-dot warn"></span>Paused — sign in to Microsoft again'
+    : TD.waitingForFile() ? '<span class="status-dot warn"></span>Paused — reconnect the data file first (Data file, above)'
     : TD.error ? '<span class="status-dot bad"></span>Sync problem' : '<span class="status-dot on"></span>Connected';
   return `<div class="card edit-only"><h2>Phone reminders</h2><p class="sub">${intro}</p>
     <p>${status}</p>
@@ -3479,7 +3484,9 @@ document.addEventListener('click', (e) => {
     case 'df-use-theirs': DF.useTheirs(); break;
     case 'df-backup-folder': DF.pickBackupFolder(); break;
     case 'td-connect': TD.signIn(); break;
-    case 'td-sync': TD.sync(); render(); break;
+    case 'td-sync':
+      if (TD.waitingForFile()) { toast('Reconnect the data file first — then it syncs straight away'); break; }
+      TD.sync(); render(); break;
     case 'td-disconnect': if (confirm('Stop sending tasks to Microsoft To Do on this computer?')) TD.disconnect(); break;
     case 'cycle-theme': cycleTheme(); break;
     case 'enable-notifications': askNotifications(); break;

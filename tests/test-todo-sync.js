@@ -2,7 +2,7 @@
 // sent with its next reminder, only changes sent again, repeats get their own copy, deletions both ways, lost links
 // never make duplicates, safety limits, signing in again, and phones never sync.
 const nodeCrypto = require('crypto');
-const { loadApp, tick, check, done } = require('./helpers');
+const { loadApp, fakeFile, tick, check, done } = require('./helpers');
 
 // A pretend Microsoft: the sign-in token endpoint plus the To Do lists and tasks of Microsoft Graph.
 function fakeMicrosoft() {
@@ -284,6 +284,26 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   before = g.writes().length;
   await PA.TD.sync();
   check(g.writes().length === before, 'nothing changed on either side: nothing is sent');
+
+  // After a browser restart the data file waits for Reconnect: syncing waits too, says so, and starts on reconnecting.
+  const file = fakeFile();
+  PA.DF.handle = file;
+  PA.DF.status = 'reconnect';
+  R(e).status = 'completed';
+  await PA.TD.sync();
+  check(!e.done, 'while the data file waits for Reconnect, nothing is synced');
+  PA.state.view = 'settings';
+  PA.render();
+  check(/Paused — reconnect the data file/.test(doc.querySelector('#main').textContent), 'and the Phone reminders card says why');
+  doc.querySelector('[data-action="td-sync"]').click();
+  check(/Reconnect the data file first/.test(doc.querySelector('#toast')?.textContent || doc.body.textContent), 'Sync now says what to do');
+  PA.TD.SOON_MS = 10;
+  await PA.DF.reconnect();
+  await tick(100);
+  check(PA.DF.status === 'ok' && e.done, 'reconnecting the data file syncs straight away: the tick from To Do comes in');
+  PA.TD.SOON_MS = 5000;
+  PA.DF.handle = null;
+  PA.DF.status = 'none';
 
   // --- Signing in again ---
   win.localStorage.setItem('dev_msAuth', JSON.stringify({ ...JSON.parse(win.localStorage.getItem('dev_msAuth')), exp: 0 }));
