@@ -520,6 +520,7 @@ const TASK_DEFAULTS = {
   seriesIndex: 1,     // which copy of a repeating task this is (1 = the first) — for "ends after N times"
   attachments: [],    // {id, name, file, size, type, added} — file is the name inside the attachments folder
   period: '',         // the "moving part" shown after the title, e.g. "Oct 26" → "Phone bill (Oct 26)"; moves forward with each repeat
+  todo: null,         // its copy in Microsoft To Do: {id, sig} (sig = what was last sent), {removed:true}, or null — see TD
 };
 function normalizeTask(t) {
   const n = { ...TASK_DEFAULTS, ...t };
@@ -562,6 +563,7 @@ function changed(...keys) {
   if (state.readOnly) return;
   keys.forEach((k) => DB.persist(k));
   DF.markDirty();
+  if (keys.includes('tasks') && !TD.busy) TD.soon(); // the phone's copy in To Do follows a few seconds later
 }
 
 // ===================== Screen state =====================
@@ -1171,7 +1173,10 @@ function statusBanner() {
     case 'error':
       return `<div class="banner error"><span>Couldn't save to the data file: ${esc(DF.error)}</span><button class="btn small" data-action="df-retry">Try again</button></div>`;
     default:
-      return '';
+      return TD.needsSignIn()
+        ? `<div class="banner warn"><span>📱 Phone reminders are paused — Microsoft asks you to sign in again about once a day.</span>
+          <button class="btn small primary" data-action="td-connect">Sign in</button></div>`
+        : '';
   }
 }
 
@@ -2118,9 +2123,9 @@ function completeTask(t, doneAt = new Date(), allDay = false) {
   return spawnNext(t, doneAt);
 }
 
-// A copy is "untouched" while it still matches what was made (reminders going off don't count).
+// A copy is "untouched" while it still matches what was made (reminders going off and being sent to To Do don't count).
 function taskSig(x) {
-  const { spawnSig, ...rest } = x;
+  const { spawnSig, todo, ...rest } = x;
   return JSON.stringify({ ...rest, reminders: x.reminders.map(({ fired, ...r }) => r) });
 }
 function nextCopyIfUntouched(t) {
@@ -2174,7 +2179,7 @@ function duplicateTask(t) {
   delete copy.spawnSig;
   Object.assign(copy, {
     id: uid(), title: `${t.title} (copy)`, done: false, completedAt: 0, completedAllDay: false, created: Date.now(),
-    attachments: [], seriesId: '', seriesIndex: 1, spawnedNext: '',
+    attachments: [], seriesId: '', seriesIndex: 1, spawnedNext: '', todo: null,
   });
   copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
   copy.reminders = copy.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
@@ -2193,6 +2198,7 @@ function spawnNext(t, doneAt = new Date()) {
   Object.assign(copy, {
     id: uid(), due, done: false, completedAt: 0, progress: 'not', myDay: '',
     spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id, seriesIndex: index + 1,
+    todo: null, // gets its own To Do task; it must never update the previous one's
   });
   if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
   copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
@@ -2719,6 +2725,7 @@ function renderSettings() {
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <div class="grid" style="max-width:720px">
       <div class="card" id="df-card">${dataFileCard()}</div>
+      ${state.readOnly ? '' : todoCard()}
       ${attachCard()}
       ${manageCard()}
       <div class="card">
@@ -2744,6 +2751,262 @@ function renderSettings() {
         </div>
       </div>
     </div>`;
+}
+
+// ===================== Phone reminders (Microsoft To Do) =====================
+// Every open task is copied to a "PA App" list in the user's Microsoft To Do, whose phone app does the notifying
+// (and passes it on to the phone's own reminder app), even with this computer off. Only edit devices sync.
+// Sign-in: OAuth code flow with PKCE in a pop-up, no library. Tokens stay on this device (dev_msAuth), never in
+// the data file. A synced task keeps t.todo = {id, sig}: its To Do task and a fingerprint of what was last sent,
+// so only changed tasks go again. {removed: true} = deleted in To Do; it stays here and isn't sent again.
+const utcStamp = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`; };
+const shortHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// To Do allows one reminder per task: send the next one still to come. Once it goes off, the next sync sends the one after.
+function nextReminderAt(t, now = Date.now()) {
+  const times = t.reminders.filter((r) => !r.fired).map((r) => reminderTime(t, r)).filter((x) => x != null && x > now);
+  return times.length ? Math.min(...times) : null;
+}
+
+const TD = {
+  CLIENT_ID: '011c6ecd-2984-4293-a6be-c83ebba20855', // not a secret; only works from the addresses registered in Azure
+  AUTH: 'https://login.microsoftonline.com/consumers/oauth2/v2.0',
+  GRAPH: 'https://graph.microsoft.com/v1.0',
+  SCOPE: 'Tasks.ReadWrite offline_access',
+  LIST_NAME: 'PA App',
+  APP_NAME: 'PA App',   // linkedResources.applicationName — marks the To Do tasks this app made
+  SYNC_MS: 5 * 60000,   // while open
+  SOON_MS: 5000,        // after a change
+  MASS: 10,             // never remove more than this many at once (and over half the list) without a person checking
+  busy: false,
+  again: false,
+  timer: null,
+  error: '',
+
+  // Azure won't accept "PA%20App.html" as a sign-in return address, so Microsoft returns to the folder instead.
+  redirectUri() { return new URL('./', location.href.split('?')[0]).href; },
+  auth() { return device.get('msAuth', null); },
+  connected() { return !!this.auth(); },
+  needsSignIn() { const a = this.auth(); return !!a && !a.refresh && !(a.access && a.exp > Date.now()); },
+
+  async signIn() {
+    // Open the pop-up straight from the click, or the browser blocks it; it's pointed at Microsoft a moment later.
+    const popup = window.open('', 'pa-ms-signin', 'width=480,height=640');
+    if (!popup) { toast('The sign-in pop-up was blocked — allow pop-ups for this site and try again'); return; }
+    try {
+      const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+      const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+      const check = uid();
+      const q = new URLSearchParams({
+        client_id: this.CLIENT_ID, response_type: 'code', redirect_uri: this.redirectUri(), scope: this.SCOPE,
+        code_challenge: challenge, code_challenge_method: 'S256', state: check, prompt: 'select_account',
+      });
+      popup.location.href = `${this.AUTH}/authorize?${q}`;
+      const back = await this.waitForPopup(popup);
+      if (back.get('error')) throw new Error(back.get('error_description') || back.get('error'));
+      if (back.get('state') !== check) throw new Error('The sign-in answer didn\'t match — try again');
+      await this.token({ grant_type: 'authorization_code', code: back.get('code'), redirect_uri: this.redirectUri(), code_verifier: verifier });
+      this.error = '';
+      toast('Connected to Microsoft To Do');
+      this.sync();
+    } catch (e) {
+      this.error = e.message;
+      try { popup.close(); } catch { /* already closed */ }
+    }
+    render();
+  },
+  // Microsoft sends the pop-up back to our own site with ?code=…; until then its address can't be read.
+  waitForPopup(popup) {
+    return new Promise((resolve, reject) => {
+      const iv = setInterval(() => {
+        if (popup.closed) { clearInterval(iv); reject(new Error('The sign-in window was closed')); return; }
+        let href = '';
+        try { href = popup.location.href; } catch { return; } // still on Microsoft's site
+        if (!href || !href.startsWith(this.redirectUri())) return;
+        const p = new URL(href).searchParams;
+        if (!p.has('code') && !p.has('error')) return;
+        clearInterval(iv);
+        popup.close();
+        resolve(p);
+      }, 250);
+    });
+  },
+  async token(params) {
+    const res = await fetch(`${this.AUTH}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: this.CLIENT_ID, scope: this.SCOPE, ...params }).toString(),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split('\n')[0] : 'Microsoft sign-in failed');
+    const old = this.auth() || {};
+    device.set('msAuth', { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '' });
+  },
+  async accessToken() {
+    const a = this.auth();
+    if (!a) throw new Error('Not connected');
+    if (a.access && a.exp - 60000 > Date.now()) return a.access;
+    if (a.refresh) {
+      try { await this.token({ grant_type: 'refresh_token', refresh_token: a.refresh }); return this.auth().access; } catch { /* it lasts about a day */ }
+    }
+    device.set('msAuth', { access: '', exp: 0, refresh: '' });
+    throw Object.assign(new Error('Sign in to Microsoft again'), { signin: true });
+  },
+  async graph(method, path, body) {
+    const url = path.startsWith('https://') ? path : this.GRAPH + path;
+    const send = async () => fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${await this.accessToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let res = await send();
+    if (res.status === 401) { const a = this.auth(); if (a) device.set('msAuth', { ...a, exp: 0 }); res = await send(); }
+    if (res.status === 204) return null;
+    const j = await res.json().catch(() => null);
+    if (!res.ok) throw Object.assign(new Error((j && j.error && j.error.message) || `To Do answered ${res.status}`), { status: res.status });
+    return j;
+  },
+
+  // What a task looks like in To Do.
+  payload(t) {
+    const next = t.done ? null : nextReminderAt(t);
+    return {
+      title: fullTitle(t),
+      body: { content: t.notes || '', contentType: 'text' },
+      importance: t.priority === 'high' ? 'high' : 'normal',
+      status: t.done ? 'completed' : 'notStarted',
+      // To Do due dates have no time. Noon UTC is the same calendar day here (and almost everywhere).
+      dueDateTime: t.due ? { dateTime: `${taskDate(t)}T12:00:00`, timeZone: 'UTC' } : null,
+      isReminderOn: next != null,
+      ...(next != null ? { reminderDateTime: { dateTime: utcStamp(next), timeZone: 'UTC' } } : {}),
+    };
+  },
+  async listId() {
+    const cached = device.get('todoList', '');
+    if (cached) return cached;
+    const j = await this.graph('GET', '/me/todo/lists');
+    const found = (j.value || []).find((l) => l.displayName === this.LIST_NAME);
+    const id = found ? found.id : (await this.graph('POST', '/me/todo/lists', { displayName: this.LIST_NAME })).id;
+    device.set('todoList', id);
+    return id;
+  },
+  async remoteTasks(list) {
+    const all = new Map();
+    let url = `/me/todo/lists/${list}/tasks?$top=100&$expand=linkedResources`;
+    while (url) {
+      const j = await this.graph('GET', url);
+      for (const x of j.value || []) all.set(x.id, x);
+      url = j['@odata.nextLink'] || '';
+    }
+    return all;
+  },
+  ourId(x) { const l = (x.linkedResources || []).find((r) => r.applicationName === this.APP_NAME); return l ? l.externalId : ''; },
+
+  soon() {
+    if (state.readOnly || !this.connected()) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.sync(), this.SOON_MS);
+  },
+  async sync() {
+    if (state.readOnly || !this.connected()) return;
+    if (this.busy) { this.again = true; return; }
+    if (DF.handle && DF.status !== 'ok') return; // the data file needs reconnecting or a decision first
+    this.busy = true;
+    let sent = 0;
+    try {
+      let list = await this.listId();
+      let remote;
+      try { remote = await this.remoteTasks(list); } catch (e) {
+        if (e.status !== 404) throw e;
+        // The whole list was deleted in To Do: make it again and send everything afresh.
+        device.remove('todoList');
+        DB.tasks.forEach((t) => { if (t.todo && t.todo.id) t.todo = null; });
+        list = await this.listId();
+        remote = await this.remoteTasks(list);
+      }
+      const byOurId = new Map([...remote.values()].filter((x) => this.ourId(x)).map((x) => [this.ourId(x), x]));
+      // Tasks deleted in To Do stay here and aren't sent again — unless it's most of them, which smells of a mistake.
+      const gone = DB.tasks.filter((t) => t.todo && t.todo.id && !remote.has(t.todo.id));
+      const linkedCount = DB.tasks.filter((t) => t.todo && t.todo.id).length;
+      if (gone.length > this.MASS && gone.length > linkedCount / 2) throw new Error(`${gone.length} tasks are missing from the To Do list — nothing was changed. Check the "${this.LIST_NAME}" list in To Do.`);
+      for (const t of gone) t.todo = t.done ? null : { removed: true };
+      if (gone.length) toast(`${gone.length} task${gone.length === 1 ? ' was' : 's were'} deleted in To Do — kept here, not sent again`);
+      sent = gone.length;
+
+      for (const t of [...DB.tasks]) {
+        if (!DB.tasks.includes(t) || (t.todo && t.todo.removed)) continue;
+        if (!t.todo && t.done) continue; // only open tasks go; a done one only finishes off its phone copy
+        const body = this.payload(t);
+        const sig = shortHash(JSON.stringify(body));
+        if (!t.todo) {
+          const had = byOurId.get(t.id); // sent before, but the link was lost: use that one, never a second copy
+          if (had) t.todo = { id: had.id, sig: '' };
+          else {
+            const made = await this.graph('POST', `/me/todo/lists/${list}/tasks`, {
+              ...body, linkedResources: [{ applicationName: this.APP_NAME, displayName: 'PA App', externalId: t.id, webUrl: location.href.split('?')[0] }],
+            });
+            t.todo = { id: made.id, sig };
+            sent++;
+            DB.persist('tasks'); // keep the link even if the page closes mid-sync
+            continue;
+          }
+        }
+        if (t.todo.sig !== sig) {
+          await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${t.todo.id}`, body);
+          t.todo.sig = sig;
+          sent++;
+        }
+      }
+
+      // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
+      const keep = new Set(DB.tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
+      const extra = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id));
+      if (extra.length > this.MASS && extra.length > remote.size / 2) throw new Error(`Not removing ${extra.length} tasks from To Do at once — check that your tasks look right here.`);
+      for (const x of extra) {
+        try { await this.graph('DELETE', `/me/todo/lists/${list}/tasks/${x.id}`); } catch (e) { if (e.status !== 404) throw e; }
+        sent++;
+      }
+      if (sent) changed('tasks');
+      this.error = '';
+      device.set('todoLast', Date.now());
+    } catch (e) {
+      if (sent) changed('tasks'); // links made before the problem are kept
+      this.error = e.signin ? '' : e.message;
+    } finally {
+      this.busy = false;
+    }
+    renderStatus();
+    if (state.view === 'settings' && !document.querySelector('#main :focus')) render();
+    if (this.again) { this.again = false; this.soon(); }
+  },
+  disconnect() {
+    device.remove('msAuth');
+    device.remove('todoList');
+    this.error = '';
+    toast(`Disconnected. The "${this.LIST_NAME}" list stays in To Do — delete it there if you don't want it`);
+    render();
+  },
+};
+
+function todoCard() {
+  const a = TD.auth();
+  const err = TD.error ? `<p class="sub" style="color:var(--danger)">${esc(TD.error)}</p>` : '';
+  const intro = `Copies every open task, with its next reminder, to a “${TD.LIST_NAME}” list in your Microsoft To Do. To Do then reminds you on your phone, even when this computer is off.`;
+  if (!a) {
+    return `<div class="card edit-only"><h2>Phone reminders</h2><p class="sub">${intro}</p>
+      <button class="btn primary" data-action="td-connect">Connect Microsoft To Do</button>${err}</div>`;
+  }
+  const last = device.get('todoLast', 0);
+  const onPhone = DB.tasks.filter((t) => t.todo && t.todo.id && !t.done).length;
+  const status = TD.needsSignIn() ? '<span class="status-dot warn"></span>Paused — sign in to Microsoft again'
+    : TD.error ? '<span class="status-dot bad"></span>Sync problem' : '<span class="status-dot on"></span>Connected';
+  return `<div class="card edit-only"><h2>Phone reminders</h2><p class="sub">${intro}</p>
+    <p>${status}</p>
+    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list · last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>${err}
+    <div class="row">
+      ${TD.needsSignIn() ? '<button class="btn primary" data-action="td-connect">Sign in again</button>' : `<button class="btn" data-action="td-sync" ${TD.busy ? 'disabled' : ''}>${TD.busy ? 'Syncing…' : 'Sync now'}</button>`}
+      <button class="btn danger" data-action="td-disconnect">Disconnect</button>
+    </div></div>`;
 }
 
 // ===================== Actions =====================
@@ -2872,6 +3135,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
+  'td-connect', 'td-sync', 'td-disconnect',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -3098,6 +3362,9 @@ document.addEventListener('click', (e) => {
     case 'df-keep-mine': DF.keepMine(); break;
     case 'df-use-theirs': DF.useTheirs(); break;
     case 'df-backup-folder': DF.pickBackupFolder(); break;
+    case 'td-connect': TD.signIn(); break;
+    case 'td-sync': TD.sync(); render(); break;
+    case 'td-disconnect': if (confirm('Stop sending tasks to Microsoft To Do on this computer?')) TD.disconnect(); break;
     case 'cycle-theme': cycleTheme(); break;
     case 'enable-notifications': askNotifications(); break;
     case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
@@ -3289,18 +3556,26 @@ window.addEventListener('beforeunload', () => { if (!state.readOnly) DB.persist(
 document.addEventListener('visibilitychange', () => { if (!document.hidden && DF.status === 'ok') DF.check(); });
 
 // ===================== Start =====================
+// On localhost Microsoft's sign-in pop-up comes back to this page; there it only hands the answer to the main
+// window (which reads it from the pop-up's address), so the app itself doesn't start.
+const signInPopup = !!window.opener && /[?&](code|error)=/.test(location.search);
 applyTheme();
-if (state.readOnly) RO.boot(); else DB.load();
-render();
-DF.init();
-AT.init();
-checkReminders();
-setInterval(checkReminders, 20000);
-setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
-setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
+if (signInPopup) document.body.textContent = 'Signing in…';
+else {
+  if (state.readOnly) RO.boot(); else DB.load();
+  render();
+  // To Do waits until the data file has loaded, so it never works from an out-of-date copy.
+  Promise.resolve(DF.init()).finally(() => TD.sync());
+  AT.init();
+  checkReminders();
+  setInterval(checkReminders, 20000);
+  setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
+  setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
+  setInterval(() => TD.sync(), TD.SYNC_MS);
+}
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle };
+window.PA = { DB, DF, RO, AT, TD, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, uncompleteTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
 </script>
 </body>
 </html>

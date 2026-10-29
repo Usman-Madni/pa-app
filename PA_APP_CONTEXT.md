@@ -12,14 +12,14 @@ Shared data (in `localStorage` as `pa_<key>`, and in the data file under `data.<
 
 | key | record |
 |---|---|
-| `tasks` | Every field and default is in `TASK_DEFAULTS` in PA App.html; `normalizeTask()` fills in missing fields on load. Fields: `id, title, due:'YYYY-MM-DDTHH:mm' or '', start:'YYYY-MM-DD' or '', priority:'low'/'med'/'high', progress:'not'/'doing', reminders:[…] (see Reminders), done, completedAt, created, myDay:'YYYY-MM-DD' (in My Day only on that date), bucket (id or ''), labels:[ids], notes, checklist:[{id,text,done}], repeat (see below) or null, seriesId, seriesIndex, spawnedNext, attachments:[{id,name,file,original,size,type,added,keep}], period` (the moving part, shown as "title (period)"; see Recurring tasks). Older tasks had one reminder as `remind` (minutes before, -1 = none) + `notified`; `normalizeTask()` turns that into a one-item `reminders` list and drops the old fields. A task saved before `period` existed that repeats (without `keepTitle`) has the date in its title split into `period` when loaded (`splitPeriod`), once. |
+| `tasks` | Every field and default is in `TASK_DEFAULTS` in PA App.html; `normalizeTask()` fills in missing fields on load. Fields: `id, title, due:'YYYY-MM-DDTHH:mm' or '', start:'YYYY-MM-DD' or '', priority:'low'/'med'/'high', progress:'not'/'doing', reminders:[…] (see Reminders), done, completedAt, created, myDay:'YYYY-MM-DD' (in My Day only on that date), bucket (id or ''), labels:[ids], notes, checklist:[{id,text,done}], repeat (see below) or null, seriesId, seriesIndex, spawnedNext, attachments:[{id,name,file,original,size,type,added,keep}], period, todo` (its Microsoft To Do copy, see Phone reminders; `null` on older tasks) (the moving part, shown as "title (period)"; see Recurring tasks). Older tasks had one reminder as `remind` (minutes before, -1 = none) + `notified`; `normalizeTask()` turns that into a one-item `reminders` list and drops the old fields. A task saved before `period` existed that repeats (without `keepTitle`) has the date in its title split into `period` when loaded (`splitPeriod`), once. |
 | `notes` | `{id, title, body, updated (ms)}` |
 | `events` | `{id, title, date:'YYYY-MM-DD', time:'HH:mm' or ''}` |
 | `buckets` | `{id, name, order}`. Deleting a bucket moves its tasks to "No bucket"; it never deletes tasks. |
 | `labels` | `{id, name, color:'#rrggbb'}`. Deleting a label takes it off its tasks. |
 
 Per-device settings (`localStorage` `dev_<key>`; never in the data file or backups):
-`view`, `theme` (auto/dark/light), `taskLayout` (list/board), `name` (device label), `seenToken`, `unsaved`, `lastBackupDay`, `roData`/`roInfo` (phone's last opened file).
+`view`, `theme` (auto/dark/light), `taskLayout` (list/board), `name` (device label), `seenToken`, `unsaved`, `lastBackupDay`, `roData`/`roInfo` (phone's last opened file), `msAuth` (Microsoft sign-in tokens), `todoList` (the To Do list's id), `todoLast` (last sync time).
 
 **Invariants**
 - Old data files must keep loading. If a record shape changes, add defaults when loading; don't require the new field.
@@ -172,6 +172,23 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **Phone:** shows attachment names but can't open or add files yet. That comes with the OneDrive connection.
 - **Privacy:** an `attachments/` folder is git-ignored, and the private-data check blocks photos, PDFs, office files and anything under `attachments/` from ever being pushed.
 
+## Phone reminders: Microsoft To Do (`TD`)
+- **Why:** the phone view can't notify. To Do can, and the phone's own reminder app syncs with To Do, so To Do does the notifying even with the laptop off.
+- **Sign-in** (`TD.signIn`): OAuth code flow with PKCE in a pop-up, personal Microsoft accounts (`/consumers`), scopes `Tasks.ReadWrite offline_access`, no library.
+  - The client ID is in the code. It isn't a secret: Azure only lets it return to the registered addresses, `https://usman-madni.github.io/pa-app/` and `http://localhost:8790/`.
+  - Azure refuses `PA%20App.html` as a return address ("Reply url contains punycode"), so Microsoft returns to the **folder** (`redirectUri()`). On GitHub there's no page there, which doesn't matter: the app reads `?code=` from the pop-up's address (same site) and closes it. On localhost the pop-up lands on the app itself, which then doesn't start (`signInPopup`).
+  - Tokens live in `dev_msAuth` only. The refresh token from a pop-up sign-in lasts about 24 hours, then a banner asks to sign in again (`needsSignIn`).
+- **What syncs** (`TD.sync`, stage 1: this computer → To Do only):
+  - Every open task goes to a "PA App" list (made if missing). Done tasks only finish off an existing copy.
+  - Sent (`payload`): full title, notes, Important for high priority, completed/not, due date as `YYYY-MM-DDT12:00:00` UTC (To Do has no due time; noon UTC is the same day here), and the **next reminder still to come** (`nextReminderAt`; To Do allows one) as an exact UTC moment. Repeats aren't sent as repeats.
+  - `t.todo = {id, sig}`: the To Do task and a hash of what was last sent; only tasks whose payload changed are sent again. Repeat copies and duplicates start with `todo: null` and get their own To Do task. `taskSig` ignores `todo`, so being sent doesn't make a next copy "changed".
+  - Deleted here → deleted in To Do (only tasks marked with a `linkedResources` entry `applicationName: 'PA App'`; tasks added on the phone are left alone).
+  - Deleted in To Do → kept here as `todo: {removed: true}` and never sent again. A whole deleted list is made again with everything.
+  - A lost link finds its old To Do task by `externalId` (= the task id) instead of making a second one.
+  - **Safety:** over 10 removals that are also over half the list, either way, are refused with a message.
+- **When:** after the data file has loaded, 5 s after a task change (`changed()` → `TD.soon`), every 5 minutes, and **Sync now** in Settings. Never on read-only devices, and not while the data file needs reconnecting or a decision.
+- **Stage 2 (not built):** reading changes back from To Do (ticks, edits, new tasks). Steps are later still.
+
 ## Read-only mode (phones)
 - Read-only when any of these is true:
   - It's a phone or tablet (`isPhone()`: `userAgentData.mobile`, or a user-agent string mentioning Android/iPhone/iPad/Mobi, or an iPad asking for the desktop site). This holds even when that phone's Chrome can write files.
@@ -204,6 +221,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-task-details` | old tasks and version 1 files load with defaults; each task gets its own arrays; drawer fields, title can't be blanked, notes typing keeps focus; checklist (add, tick, edit, turn into a task, delete); My Day (empties next day, Today quick add); tabs; Esc; delete asks when the task has notes; phone drawer is locked |
 | `test-buckets-labels` | board columns, quick add per column, moving and reordering, renaming; bucket and label filters; labels in the drawer and Settings; everything reaches the data file (version 2); deleting asks and never deletes tasks; phone can't drag |
 | `test-recurring` | date maths (daily, weekdays, weekly multi-day and every N weeks, monthly by date with month-end, monthly by weekday incl. last, yearly with Feb 29, after-completion, end date); drawer setup; one copy only; what resets; start gap; calendar previews not saved; anchor survives copy after copy |
+| `test-todo-sync` | against a fake Microsoft: pop-up sign-in (personal accounts, To Do scope only, PKCE verifier matches, returns to the folder, wrong answer refused), tokens only on the device; every open task sent with title + moving part, notes, Important, due day, next reminder; only changes sent again; next reminder after one goes off; repeat copies get their own task and unticking still removes them; deleted here → deleted there; phone-made tasks left alone; deleted in To Do → kept, not resent; lost link reused; deleted list remade; mass removal refused; token renewal and the sign-in-again banner; Disconnect; phones never sync |
 | `test-attachments` | choose folder, smart names without overwriting, contents copied, only names in the data file, open, missing file, 📌 keep vs this-one-only on repeat, renaming (all copies / this one / shared legacy file), delete only when unused, other files untouched, series history (files open, entries open), reconnect after restart, phone can't attach |
 
 ## Keeping the public repo clean
@@ -265,7 +283,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Renaming a title renames every copy, past and future.
   - Unticking asks before removing a next copy you changed, instead of quietly keeping it.
     - Labels, progress and start date are all kept.
-- **28 Oct 2026:** phone notifications will come from **Microsoft To Do** (planned, not built). The phone's own reminder app syncs with To Do, so To Do does the notifying even when the laptop is off.
+- **28 Oct 2026:** phone notifications will come from **Microsoft To Do** (stage 1, this computer → To Do, built 29 Oct; see Phone reminders). The phone's own reminder app syncs with To Do, so To Do does the notifying even when the laptop is off.
   - Rejected: an MCP (it connects Claude, not the app), a push service such as ntfy (only holds messages a few days ahead, task names pass through a public service) and a calendar feed (slow refresh, phones drop its alerts).
   - The app keeps a "PA App" list in To Do and never touches other lists. **Every open task** goes, dated or not.
   - Sent: full title (with the moving part), notes, due date (To Do has no due time), the next reminder that hasn't gone off (To Do allows one), high priority as Important, done with its date. Repeats are not sent as repeats, so To Do never makes its own copies; only the current copy is there.

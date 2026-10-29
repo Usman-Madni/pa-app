@@ -89,6 +89,11 @@ function loadApp(opts = {}) {
       }
       win.confirm = () => true;
       win.scrollTo = () => {};
+      if (opts.fetch) win.fetch = opts.fetch; // a fake Microsoft (see test-todo-sync)
+      if (!win.TextEncoder) win.TextEncoder = require('util').TextEncoder;
+      if (win.crypto && !win.crypto.subtle) {
+        try { Object.defineProperty(win.crypto, 'subtle', { value: require('crypto').webcrypto.subtle }); } catch { /* sign-in tests will say so */ }
+      }
       if (!win.CSS) win.CSS = { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c) };
     },
   });
