@@ -114,7 +114,8 @@ body.readonly .edit-only { display: none !important; }
 .meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
 .meta .overdue { color: var(--danger); font-weight: 600; }
 .check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
-.pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+/* inline-block + nowrap: a pill that doesn't fit moves to the next line whole, never split in two. */
+.pill { display: inline-block; white-space: nowrap; max-width: 100%; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
 .pill.high { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 .pill.med { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 .empty { color: var(--muted); padding: 18px 4px; text-align: center; }

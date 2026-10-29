@@ -56,6 +56,7 @@ const { loadApp, check, done } = require('./helpers');
   check(longChip.querySelector('.chip-t').textContent.startsWith('✓ Pay the quarterly') && longChip.querySelector('.chip-note').textContent === '· due 12th', 'a long name keeps its "· due 12th" note separate');
   const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
   check(/\.chip-t\s*\{[^}]*text-overflow:\s*ellipsis/.test(css) && /\.chip-note\s*\{[^}]*flex:\s*0 0 auto/.test(css), 'the name shortens with … and the note never shrinks');
+  check(/\n\.pill\s*\{[^}]*display:\s*inline-block[^}]*white-space:\s*nowrap/.test(css), 'a short pill like "Due today" moves to the next line whole, never split in two');
   const strikeRule = css.match(/([^{}]*\.chip\.t-done \.chip-t[^{]*)\{([^}]*)\}/);
   check(strikeRule && /linear-gradient/.test(strikeRule[2]) && /background-position:\s*0 6\d%/.test(strikeRule[2]) && /\.item\.done \.tt/.test(strikeRule[1]) && !/latedue/.test(strikeRule[1]),
     'done names get a strike line drawn a little below the middle (list, board and calendar); missed ones don\'t');
@@ -113,7 +114,9 @@ const { loadApp, check, done } = require('./helpers');
   c.repeat = { freq: 'after', interval: 1, unit: 'days', days: [], monthMode: 'date', until: '', endMode: 'count', count: 2 };
   check(items(plus(2)).some((i) => i.id === c.id) && !items(plus(3)).some((i) => i.id === c.id), 'estimates stop at the end (2 times)');
   // On the grid: dotted, ↻≈
-  PA.state.calMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Show the month the +4 estimate falls in (late in a month that's next month).
+  const est4 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4);
+  PA.state.calMonth = new Date(est4.getFullYear(), est4.getMonth(), 1);
   PA.state.selectedDay = plus(4);
   PA.render();
   const echip = [...doc.querySelectorAll('.chip.repeat.est')].find((x) => x.textContent.includes('Water plants'));
