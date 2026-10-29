@@ -26,6 +26,13 @@ function fakeMicrosoft() {
       g.tasks.set(l.id, new Map());
       return reply(201, l);
     }
+    const lr = path.match(/^\/me\/todo\/lists\/([^/]+)\/tasks\/([^/]+)\/linkedResources$/);
+    if (lr && method === 'POST') {
+      const t = g.tasks.get(lr[1]) && g.tasks.get(lr[1]).get(lr[2]);
+      if (!t) return reply(404, { error: { message: 'The task was not found' } });
+      t.linkedResources = [...(t.linkedResources || []), { ...body, id: `R${++g.n}` }];
+      return reply(201, body);
+    }
     const m = path.match(/^\/me\/todo\/lists\/([^/]+)\/tasks(?:\/([^/]+))?$/);
     if (m) {
       const list = g.tasks.get(m[1]);
@@ -115,7 +122,7 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   const rb = L.get(b.todo.id);
   check(rb.title === 'Buy milk' && rb.dueDateTime === null && rb.isReminderOn === false, 'no due date or reminder: sent all the same');
   const saved = JSON.parse(win.localStorage.getItem('pa_tasks')).find((x) => x.id === a.id);
-  check(saved.todo && saved.todo.id === a.todo.id && saved.todo.sig, 'the link is saved with the task (so it reaches the data file)');
+  check(saved.todo && saved.todo.id === a.todo.id && saved.todo.base && saved.todo.base.title === 'Phone bill (Oct 26)', 'the link is saved with the task (so it reaches the data file)');
   PA.state.view = 'settings';
   PA.render();
   check(/3 tasks on your phone list/.test(doc.querySelector('#main').textContent) && doc.querySelector('[data-action="td-sync"]'), 'Settings shows how many are on the phone, with Sync now');
@@ -145,12 +152,10 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(!L.has(nextTodo) && L.get(a.todo.id).status === 'notStarted', 'its To Do copy is deleted, and the unticked one is open again');
 
   // --- Deleting ---
-  L.set('P1', { id: 'P1', title: 'Added on the phone', linkedResources: [] });
   PA.DB.tasks = PA.DB.tasks.filter((x) => x !== b);
   const bTodo = b.todo.id;
   await PA.TD.sync();
   check(!L.has(bTodo), 'deleted here: deleted in To Do');
-  check(L.has('P1'), 'a task added on the phone is left alone');
   L.delete(d.todo.id);
   await PA.TD.sync();
   check(PA.DB.tasks.includes(d) && d.todo && d.todo.removed, 'deleted in To Do: kept here, marked as removed from the phone');
@@ -182,6 +187,103 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   for (const id of bulkIds) L2.delete(id);
   await PA.TD.sync();
   check(PA.TD.error === '', 'and clears once things match again');
+
+  // --- Changes made in To Do come back (stage 2) ---
+  // The phone's To Do keeps a due date as local midnight, given in UTC (19:00 the day before, here).
+  const phoneDue = (k) => ({ dateTime: new Date(`${k}T00:00`).toISOString().slice(0, 19) + '.0000000', timeZone: 'UTC' });
+  const phoneAt = (ms) => ({ dateTime: new Date(ms).toISOString().slice(0, 19) + '.0000000', timeZone: 'UTC' });
+  const e = PA.addTask({ title: 'Renew passport', due: `${day(5)}T10:30`, reminders: [{ id: 'e1', kind: 'before', minutes: 60, fired: false }] });
+  const f = PA.addTask({ title: 'Water plants' });
+  const h = PA.addTask({ title: 'Gym', due: `${day(1)}T23:59` });
+  Object.assign(h, { period: 'Week 1', repeat: { freq: 'daily', interval: 1, days: [], monthMode: 'date', until: '' } });
+  await PA.TD.sync();
+  const R = (t) => L2.get(t.todo.id);
+  before = g.writes().length;
+  R(e).title = 'Renew passport now';
+  R(e).body = { content: '<p>Bring <b>two</b> photos</p><p>And the old one</p>', contentType: 'html' };
+  R(e).importance = 'high';
+  R(e).dueDateTime = phoneDue(day(7));
+  await PA.TD.sync();
+  check(e.title === 'Renew passport now', 'renamed in To Do: renamed here');
+  check(e.notes === 'Bring two photos\nAnd the old one', 'notes edited in To Do come back as plain text');
+  check(e.priority === 'high', 'marked Important in To Do: high priority here');
+  check(e.due === `${day(7)}T10:30`, 'due date moved in To Do: the new day here, keeping its time');
+  check(PA.DB.exportAll().tasks.find((x) => x.id === e.id).todo.base.title === 'Renew passport now', 'what came in is saved');
+  const sentBack = g.writes().length - before;
+  await PA.TD.sync();
+  check(g.writes().length - before === sentBack, 'and doesn\'t bounce back and forth');
+  R(e).importance = 'normal';
+  await PA.TD.sync();
+  check(e.priority === 'med', 'Important taken off in To Do: medium priority here');
+
+  // A reminder changed in To Do replaces the one that was sent; the next one here still comes after it.
+  const newRem = new Date(`${day(6)}T08:15`).getTime();
+  R(e).reminderDateTime = phoneAt(newRem);
+  R(e).isReminderOn = true;
+  await PA.TD.sync();
+  const rr = e.reminders.find((r) => r.kind === 'at');
+  check(rr && rr.at === `${day(6)}T08:15` && !rr.fired && e.reminders.find((r) => r.id === 'e1').fired, 'reminder changed in To Do: kept here as that exact time, the old one done with');
+  check(sentAt(R(e)) === newRem, 'and To Do keeps it');
+
+  // Both sides changed: the same field keeps this app's version; different fields both stay.
+  R(f).title = 'Water the plants (phone)';
+  R(f).body = { content: 'From the phone', contentType: 'text' };
+  f.title = 'Water plants (laptop)';
+  await PA.TD.sync();
+  check(f.title === 'Water plants (laptop)' && R(f).title === 'Water plants (laptop)', 'changed on both sides: this app\'s version wins and is sent');
+  check(f.notes === 'From the phone', 'while a different field changed on the phone still comes in');
+
+  // The moving part survives a rename in To Do.
+  R(h).title = 'Gym session (Week 1)';
+  await PA.TD.sync();
+  check(h.title === 'Gym session' && h.period === 'Week 1', 'renamed in To Do: the title changes, the moving part stays');
+
+  // Ticked in To Do.
+  R(f).status = 'completed';
+  R(f).completedDateTime = phoneDue(PA.toISO(new Date()));
+  await PA.TD.sync();
+  check(f.done && f.completedAt && !f.completedAllDay, 'ticked in To Do (today): done here');
+  R(h).status = 'completed';
+  await PA.TD.sync();
+  const hNext = PA.DB.tasks.find((x) => x.id === h.spawnedNext);
+  check(h.done && hNext && hNext.todo && hNext.title === 'Gym session' && R(hNext).title === PA.fullTitle(hNext) && R(hNext).status === 'notStarted', 'a repeating task ticked in To Do: its next copy is made and sent');
+  R(f).status = 'notStarted';
+  await PA.TD.sync();
+  check(!f.done && f.completedAt === 0, 'unticked in To Do: open again here');
+  const old = PA.addTask({ title: 'Last week' });
+  await PA.TD.sync();
+  R(old).status = 'completed';
+  R(old).completedDateTime = phoneDue(day(-3));
+  await PA.TD.sync();
+  check(old.done && old.completedAllDay && PA.toISO(new Date(old.completedAt)) === day(-3), 'ticked in To Do on an earlier day: done on that day');
+
+  // Added in To Do.
+  L2.set('P1', { id: 'P1', title: 'Added on the phone', body: { content: 'Call back', contentType: 'text' }, importance: 'high', status: 'notStarted', dueDateTime: phoneDue(day(2)), isReminderOn: true, reminderDateTime: phoneAt(new Date(`${day(2)}T17:00`).getTime()), createdDateTime: new Date().toISOString(), linkedResources: [] });
+  L2.set('P2', { id: 'P2', title: 'Already done there', status: 'completed', linkedResources: [] });
+  const count = PA.DB.tasks.length;
+  await PA.TD.sync();
+  const p1 = PA.DB.tasks.find((x) => x.todo && x.todo.id === 'P1');
+  check(p1 && p1.title === 'Added on the phone' && p1.notes === 'Call back' && p1.priority === 'high', 'a task added in To Do comes in, with its notes and Important');
+  check(p1 && p1.due === `${day(2)}T23:59` && p1.reminders.length === 1 && p1.reminders[0].at === `${day(2)}T17:00`, 'with its due day (all day) and reminder');
+  check(PA.DB.tasks.length === count + 1, 'one already done in To Do isn\'t brought in');
+  check(L2.get('P1').linkedResources.some((r) => r.applicationName === 'PA App' && r.externalId === p1.id), 'it\'s marked in To Do as linked to its task here');
+  await PA.TD.sync();
+  L2.get('P1').linkedResources = []; // even if To Do loses the mark
+  await PA.TD.sync();
+  check(PA.DB.tasks.length === count + 1, 'and never comes in twice');
+  PA.DB.tasks = PA.DB.tasks.filter((x) => x !== p1);
+  await PA.TD.sync();
+  check(!L2.has('P1'), 'deleting it here deletes it in To Do, like any other');
+
+  // Linked before stage 2 (only a fingerprint kept): a change in To Do still comes in if nothing changed here.
+  e.todo = { id: e.todo.id, sig: PA.TD.payload ? (() => { let s = JSON.stringify(PA.TD.payload(e)), x = 5381; for (let i = 0; i < s.length; i++) x = (x * 33 + s.charCodeAt(i)) | 0; return (x >>> 0).toString(36); })() : '' };
+  R(e).title = 'Passport (old link)';
+  await PA.TD.sync();
+  check(e.title === 'Passport (old link)' && e.todo.base && !('sig' in e.todo), 'an older link takes To Do\'s change and is brought up to date');
+
+  before = g.writes().length;
+  await PA.TD.sync();
+  check(g.writes().length === before, 'nothing changed on either side: nothing is sent');
 
   // --- Signing in again ---
   win.localStorage.setItem('dev_msAuth', JSON.stringify({ ...JSON.parse(win.localStorage.getItem('dev_msAuth')), exp: 0 }));

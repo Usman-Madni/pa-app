@@ -520,7 +520,7 @@ const TASK_DEFAULTS = {
   seriesIndex: 1,     // which copy of a repeating task this is (1 = the first) — for "ends after N times"
   attachments: [],    // {id, name, file, size, type, added} — file is the name inside the attachments folder
   period: '',         // the "moving part" shown after the title, e.g. "Oct 26" → "Phone bill (Oct 26)"; moves forward with each repeat
-  todo: null,         // its copy in Microsoft To Do: {id, sig} (sig = what was last sent), {removed:true}, or null — see TD
+  todo: null,         // its copy in Microsoft To Do: {id, base} (base = how both sides looked after the last sync), {removed:true}, or null — see TD
 };
 function normalizeTask(t) {
   const n = { ...TASK_DEFAULTS, ...t };
@@ -2146,8 +2146,9 @@ function whatChanged(x) {
   return words.join(', ');
 }
 
-// Unticking: back to not done. If the next copy hasn't been touched, it goes away again; if it has, ask.
-function uncompleteTask(t) {
+// Unticking: back to not done. If the next copy hasn't been touched, it goes away again; if it has, ask
+// (quiet = unticked in To Do, with nobody to ask: a changed next copy stays).
+function uncompleteTask(t, quiet = false) {
   t.done = false;
   t.completedAt = 0;
   t.completedAllDay = false;
@@ -2164,6 +2165,8 @@ function uncompleteTask(t) {
     toast(`Removed the next copy (${fullTitle(next)}) — it hadn't been changed`);
   } else if (other && other.done) {
     toast('The next copy stays — it\'s already done');
+  } else if (other && quiet) {
+    toast(`The next copy (${fullTitle(other)}) stays — it was changed after it was made`);
   } else if (other) {
     const what = whatChanged(other);
     if (confirm(`The next copy (${fullTitle(other)}) was changed after it was made${what ? ` (${what})` : ''}. Remove it anyway?`)) {
@@ -2757,9 +2760,18 @@ function renderSettings() {
 // Every open task is copied to a "PA App" list in the user's Microsoft To Do, whose phone app does the notifying
 // (and passes it on to the phone's own reminder app), even with this computer off. Only edit devices sync.
 // Sign-in: OAuth code flow with PKCE in a pop-up, no library. Tokens stay on this device (dev_msAuth), never in
-// the data file. A synced task keeps t.todo = {id, sig}: its To Do task and a fingerprint of what was last sent,
-// so only changed tasks go again. {removed: true} = deleted in To Do; it stays here and isn't sent again.
+// the data file. A synced task keeps t.todo = {id, base}: its To Do task and how both sides looked after the last
+// sync (TD.fields), so a field that differs from base was changed on that side. Changes made in To Do (ticks,
+// edits) come back here; a field changed on both sides keeps this app's version. Tasks added to the list in To Do
+// come in as new tasks. {removed: true} = deleted in To Do; it stays here and isn't sent again.
 const utcStamp = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`; };
+const localStamp = (ms) => { const d = new Date(ms); return `${toISO(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'YYYY-MM-DDTHH:mm', as tasks keep times
+// A Graph date {dateTime: '2026-10-29T19:00:00.0000000', timeZone: 'UTC'} as an exact moment (ms), or null.
+const graphMs = (d) => {
+  if (!d || !d.dateTime) return null;
+  const ms = Date.parse(d.dateTime.slice(0, 19) + (/^utc$/i.test(d.timeZone || 'UTC') ? 'Z' : ''));
+  return Number.isNaN(ms) ? null : ms;
+};
 const shortHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 // To Do allows one reminder per task: send the next one still to come. Once it goes off, the next sync sends the one after.
@@ -2901,6 +2913,79 @@ const TD = {
     return all;
   },
   ourId(x) { const l = (x.linkedResources || []).find((r) => r.applicationName === this.APP_NAME); return l ? l.externalId : ''; },
+  link(t) { return { applicationName: this.APP_NAME, displayName: 'PA App', externalId: t.id, webUrl: location.href.split('?')[0] }; },
+  // Notes as plain text. To Do may answer in HTML; DOMParser reads it without running or loading anything.
+  plain(body) {
+    let s = (body && body.content) || '';
+    if (body && body.contentType === 'html') {
+      s = new DOMParser().parseFromString(s.replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n'), 'text/html').body.textContent || '';
+    }
+    return s.replace(/\r\n?/g, '\n').trim();
+  },
+  // What both sides are compared on — the same for what we send (payload) and what To Do has.
+  fields(x) {
+    const due = graphMs(x.dueDateTime);
+    const rem = x.isReminderOn ? graphMs(x.reminderDateTime) : null;
+    return {
+      title: (x.title || '').trim(),
+      notes: shortHash(this.plain(x.body)),
+      imp: x.importance === 'high' ? 'high' : 'normal',
+      done: x.status === 'completed',
+      due: due == null ? '' : toISO(new Date(due)), // our noon UTC, or the phone's local midnight: the same day here
+      rem: rem == null ? '' : String(Math.round(rem / 60000)), // to the minute
+    };
+  },
+  same(a, b) { return !!a && !!b && Object.keys(a).every((k) => a[k] === b[k]); },
+  // Bring the fields changed in To Do (`take`) into the task. `was` = how they looked after the last sync.
+  apply(t, x, take, was) {
+    const there = this.fields(x);
+    if (take.includes('title') && there.title) {
+      const m = t.period ? there.title.match(/^(.*\S)\s*\(([^()]+)\)$/) : null; // "Phone bill (Oct 26)" = title + moving part
+      t.title = m ? m[1] : there.title;
+      if (t.period) t.period = m ? m[2] : '';
+      renameSeries(t);
+    }
+    if (take.includes('notes')) t.notes = this.plain(x.body);
+    if (take.includes('imp')) t.priority = there.imp === 'high' ? 'high' : 'med';
+    if (take.includes('due')) {
+      t.due = there.due ? `${there.due}T${t.due ? t.due.slice(11, 16) : ALL_DAY}` : ''; // To Do has no time: keep ours
+      t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); // as when the due date is changed here
+      syncRepeatAnchor(t);
+    }
+    if (take.includes('rem')) {
+      // To Do holds one reminder (the next one we sent): changed or turned off there, that one is done with.
+      for (const r of t.reminders) { const ms = reminderTime(t, r); if (ms != null && String(Math.round(ms / 60000)) === was.rem) r.fired = true; }
+      const ms = there.rem ? Number(there.rem) * 60000 : null;
+      if (ms != null) t.reminders.push({ id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= Date.now() });
+    }
+    if (take.includes('done')) {
+      if (there.done && !t.done) {
+        // To Do gives the day it was done; ticked today counts as now, an earlier day as that day.
+        const at = graphMs(x.completedDateTime);
+        const earlier = at != null && toISO(new Date(at)) < todayISO();
+        completeTask(t, earlier ? new Date(`${toISO(new Date(at))}T12:00`) : new Date(), earlier);
+      } else if (!there.done && t.done) uncompleteTask(t, true);
+    }
+  },
+  // A task added to the list in To Do: make it here and mark it as ours, so it's kept in step from now on.
+  async adopt(x, list) {
+    const there = this.fields(x);
+    const ms = there.rem ? Number(there.rem) * 60000 : null;
+    const t = normalizeTask({
+      id: uid(), title: there.title || 'Untitled', notes: this.plain(x.body), priority: there.imp === 'high' ? 'high' : 'low',
+      due: there.due ? `${there.due}T${ALL_DAY}` : '', created: Date.parse(x.createdDateTime) || Date.now(),
+      reminders: ms != null ? [{ id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= Date.now() }] : [],
+    });
+    t.todo = { id: x.id };
+    DB.tasks.push(t);
+    await this.mark(x, t, list);
+    DB.persist('tasks');
+    return t;
+  },
+  async mark(x, t, list) {
+    await this.graph('POST', `/me/todo/lists/${list}/tasks/${x.id}/linkedResources`, this.link(t));
+    x.linkedResources = [...(x.linkedResources || []), this.link(t)];
+  },
 
   soon() {
     if (state.readOnly || !this.connected()) return;
@@ -2912,7 +2997,7 @@ const TD = {
     if (this.busy) { this.again = true; return; }
     if (DF.handle && DF.status !== 'ok') return; // the data file needs reconnecting or a decision first
     this.busy = true;
-    let sent = 0;
+    let sent = 0, cameIn = false;
     try {
       let list = await this.listId();
       let remote;
@@ -2933,29 +3018,57 @@ const TD = {
       if (gone.length) toast(`${gone.length} task${gone.length === 1 ? ' was' : 's were'} deleted in To Do — kept here, not sent again`);
       sent = gone.length;
 
+      // Changed in To Do (ticked, renamed, notes, Important, due date, reminder): bring it here. A field changed
+      // on both sides since the last sync keeps this app's version, which is then sent.
+      let got = 0;
+      for (const t of [...DB.tasks]) {
+        if (!DB.tasks.includes(t) || !t.todo || !t.todo.id || !remote.has(t.todo.id)) continue;
+        const x = remote.get(t.todo.id);
+        const there = this.fields(x);
+        const here = this.fields(this.payload(t));
+        // Linked before changes came back (only a fingerprint kept): unchanged here means To Do's differences are new.
+        const was = t.todo.base || (t.todo.sig && t.todo.sig === shortHash(JSON.stringify(this.payload(t))) ? here : there);
+        const take = Object.keys(there).filter((k) => there[k] !== was[k] && here[k] === was[k]);
+        if (!take.length) continue;
+        this.apply(t, x, take, was);
+        t.todo.base = { ...was, ...Object.fromEntries(take.map((k) => [k, there[k]])) };
+        delete t.todo.sig;
+        got++;
+      }
+      // Added to the list in To Do (not made by this app, not linked to a task here, not already done).
+      const linked = new Set(DB.tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
+      const fresh = [...remote.values()].filter((x) => !this.ourId(x) && !linked.has(x.id) && x.status !== 'completed');
+      for (const x of fresh) { await this.adopt(x, list); got++; }
+      sent += got;
+      if (got) {
+        cameIn = true;
+        const added = fresh.length, edited = got - added;
+        toast([edited && `${edited} change${edited === 1 ? '' : 's'}`, added && `${added} new task${added === 1 ? '' : 's'}`].filter(Boolean).join(' and ') + ' from To Do');
+      }
+
       for (const t of [...DB.tasks]) {
         if (!DB.tasks.includes(t) || (t.todo && t.todo.removed)) continue;
         if (!t.todo && t.done) continue; // only open tasks go; a done one only finishes off its phone copy
         const body = this.payload(t);
-        const sig = shortHash(JSON.stringify(body));
+        const here = this.fields(body);
         if (!t.todo) {
           const had = byOurId.get(t.id); // sent before, but the link was lost: use that one, never a second copy
-          if (had) t.todo = { id: had.id, sig: '' };
+          if (had) t.todo = { id: had.id };
           else {
-            const made = await this.graph('POST', `/me/todo/lists/${list}/tasks`, {
-              ...body, linkedResources: [{ applicationName: this.APP_NAME, displayName: 'PA App', externalId: t.id, webUrl: location.href.split('?')[0] }],
-            });
-            t.todo = { id: made.id, sig };
+            const made = await this.graph('POST', `/me/todo/lists/${list}/tasks`, { ...body, linkedResources: [this.link(t)] });
+            t.todo = { id: made.id, base: here };
             sent++;
             DB.persist('tasks'); // keep the link even if the page closes mid-sync
             continue;
           }
         }
-        if (t.todo.sig !== sig) {
+        const x = remote.get(t.todo.id);
+        if (x && !this.ourId(x)) { await this.mark(x, t, list); sent++; } // lost its mark: without it, deleting here couldn't reach it
+        if (!x || !this.same(this.fields(x), here)) {
           await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${t.todo.id}`, body);
-          t.todo.sig = sig;
           sent++;
         }
+        if (!this.same(t.todo.base, here)) { t.todo = { id: t.todo.id, base: here }; sent++; } // both sides now look like this
       }
 
       // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
@@ -2976,7 +3089,10 @@ const TD = {
       this.busy = false;
     }
     renderStatus();
-    if (state.view === 'settings' && !document.querySelector('#main :focus')) render();
+    // Show what came in — but never redraw under someone typing.
+    const typing = document.querySelector('input:focus, textarea:focus, select:focus, [contenteditable]:focus');
+    if ((cameIn || state.view === 'settings') && !typing) render();
+    if (cameIn && !typing) renderDrawer();
     if (this.again) { this.again = false; this.soon(); }
   },
   disconnect() {
@@ -2991,7 +3107,7 @@ const TD = {
 function todoCard() {
   const a = TD.auth();
   const err = TD.error ? `<p class="sub" style="color:var(--danger)">${esc(TD.error)}</p>` : '';
-  const intro = `Copies every open task, with its next reminder, to a “${TD.LIST_NAME}” list in your Microsoft To Do. To Do then reminds you on your phone, even when this computer is off.`;
+  const intro = `Copies every open task, with its next reminder, to a “${TD.LIST_NAME}” list in your Microsoft To Do. To Do then reminds you on your phone, even when this computer is off. Ticks, edits and new tasks made in that list on the phone come back here when this app next syncs (if both sides changed the same thing, this app's version wins).`;
   if (!a) {
     return `<div class="card edit-only"><h2>Phone reminders</h2><p class="sub">${intro}</p>
       <button class="btn primary" data-action="td-connect">Connect Microsoft To Do</button>${err}</div>`;

@@ -178,16 +178,25 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - The client ID is in the code. It isn't a secret: Azure only lets it return to the registered addresses, `https://usman-madni.github.io/pa-app/` and `http://localhost:8790/`.
   - Azure refuses `PA%20App.html` as a return address ("Reply url contains punycode"), so Microsoft returns to the **folder** (`redirectUri()`). On GitHub there's no page there, which doesn't matter: the app reads `?code=` from the pop-up's address (same site) and closes it. On localhost the pop-up lands on the app itself, which then doesn't start (`signInPopup`).
   - Tokens live in `dev_msAuth` only. The refresh token from a pop-up sign-in lasts about 24 hours, then a banner asks to sign in again (`needsSignIn`).
-- **What syncs** (`TD.sync`, stage 1: this computer → To Do only):
+- **What syncs** (`TD.sync`, both ways):
   - Every open task goes to a "PA App" list (made if missing). Done tasks only finish off an existing copy.
   - Sent (`payload`): full title, notes, Important for high priority, completed/not, due date as `YYYY-MM-DDT12:00:00` UTC (To Do has no due time; noon UTC is the same day here), and the **next reminder still to come** (`nextReminderAt`; To Do allows one) as an exact UTC moment. Repeats aren't sent as repeats.
-  - `t.todo = {id, sig}`: the To Do task and a hash of what was last sent; only tasks whose payload changed are sent again. Repeat copies and duplicates start with `todo: null` and get their own To Do task. `taskSig` ignores `todo`, so being sent doesn't make a next copy "changed".
-  - Deleted here → deleted in To Do (only tasks marked with a `linkedResources` entry `applicationName: 'PA App'`; tasks added on the phone are left alone).
+  - `t.todo = {id, base}`: the To Do task and how both sides looked after the last sync, as `TD.fields` (`title, notes` (a hash), `imp, done, due` (local day), `rem` (minute number)). The same `fields` is worked out for what we'd send and for what To Do has; a task is sent when they differ. Repeat copies and duplicates start with `todo: null` and get their own To Do task. `taskSig` ignores `todo`, so being sent doesn't make a next copy "changed".
+  - **Coming back** (stage 2, 29 Oct): a field that differs from `base` in To Do but not here was changed on the phone and is brought in (`TD.apply`). Changed on both sides → this app wins and is sent.
+    - Ticked → `completeTask` (now, or that day all-day if To Do says an earlier day), so a repeat's next copy is made and sent. Unticked → `uncompleteTask(t, quiet)`: an untouched next copy goes, a changed one stays (no one to ask).
+    - Renamed → title, splitting off the moving part `(…)` if the task has one; `renameSeries` renames every copy. Notes as plain text (HTML read with `DOMParser`, which runs nothing). Important on/off → high / medium.
+    - Due day → that day, keeping our time (To Do has none); reminders re-arm and the repeat anchor moves, as when edited here. The phone sends local midnight in UTC (19:00 the day before here), so `due` is read as a moment, then its local day.
+    - Reminder changed → an exact-time (`at`) reminder; the one that had been sent is marked fired. Turned off → that one is marked fired (so the next still goes).
+    - Tasks added to the list in To Do (no PA App mark, not linked to a task here, not done) come in as new tasks (`adopt`), with notes, Important, due day (all day) and reminder, and get the PA App mark (`mark`, `POST …/linkedResources`).
+    - Links from stage 1 (`{id, sig}`): if nothing changed here since, To Do's differences come in; then `base` replaces `sig`.
+  - A linked task whose To Do copy has lost the PA App mark gets it back, so deleting it here still reaches it (and it never comes in as new).
+  - Deleted here → deleted in To Do (only tasks marked with a `linkedResources` entry `applicationName: 'PA App'`).
   - Deleted in To Do → kept here as `todo: {removed: true}` and never sent again. A whole deleted list is made again with everything.
   - A lost link finds its old To Do task by `externalId` (= the task id) instead of making a second one.
   - **Safety:** over 10 removals that are also over half the list, either way, are refused with a message.
 - **When:** after the data file has loaded, 5 s after a task change (`changed()` → `TD.soon`), every 5 minutes, and **Sync now** in Settings. Never on read-only devices, and not while the data file needs reconnecting or a decision.
-- **Stage 2 (not built):** reading changes back from To Do (ticks, edits, new tasks). Steps are later still.
+- After changes come in, a toast says how many, and the page and open task panel are redrawn unless you're typing.
+- Steps (checklist) aren't synced yet.
 
 ## Read-only mode (phones)
 - Read-only when any of these is true:
@@ -221,7 +230,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-task-details` | old tasks and version 1 files load with defaults; each task gets its own arrays; drawer fields, title can't be blanked, notes typing keeps focus; checklist (add, tick, edit, turn into a task, delete); My Day (empties next day, Today quick add); tabs; Esc; delete asks when the task has notes; phone drawer is locked |
 | `test-buckets-labels` | board columns, quick add per column, moving and reordering, renaming; bucket and label filters; labels in the drawer and Settings; everything reaches the data file (version 2); deleting asks and never deletes tasks; phone can't drag |
 | `test-recurring` | date maths (daily, weekdays, weekly multi-day and every N weeks, monthly by date with month-end, monthly by weekday incl. last, yearly with Feb 29, after-completion, end date); drawer setup; one copy only; what resets; start gap; calendar previews not saved; anchor survives copy after copy |
-| `test-todo-sync` | against a fake Microsoft: pop-up sign-in (personal accounts, To Do scope only, PKCE verifier matches, returns to the folder, wrong answer refused), tokens only on the device; every open task sent with title + moving part, notes, Important, due day, next reminder; only changes sent again; next reminder after one goes off; repeat copies get their own task and unticking still removes them; deleted here → deleted there; phone-made tasks left alone; deleted in To Do → kept, not resent; lost link reused; deleted list remade; mass removal refused; token renewal and the sign-in-again banner; Disconnect; phones never sync |
+| `test-todo-sync` | against a fake Microsoft: pop-up sign-in (personal accounts, To Do scope only, PKCE verifier matches, returns to the folder, wrong answer refused), tokens only on the device; every open task sent with title + moving part, notes, Important, due day, next reminder; only changes sent again; next reminder after one goes off; repeat copies get their own task and unticking still removes them; deleted here → deleted there; changes from To Do come back (rename keeping the moving part, HTML notes as text, Important on/off, due day keeping the time, reminder, tick today/earlier day, repeat's next copy, untick), both sides changed → this app wins, no back-and-forth; tasks added in To Do come in once (even if the mark is lost), done ones don't, deleting one here deletes it there; stage 1 links upgraded; deleted in To Do → kept, not resent; lost link reused; deleted list remade; mass removal refused; token renewal and the sign-in-again banner; Disconnect; phones never sync |
 | `test-attachments` | choose folder, smart names without overwriting, contents copied, only names in the data file, open, missing file, 📌 keep vs this-one-only on repeat, renaming (all copies / this one / shared legacy file), delete only when unused, other files untouched, series history (files open, entries open), reconnect after restart, phone can't attach |
 
 ## Keeping the public repo clean
@@ -283,11 +292,11 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Renaming a title renames every copy, past and future.
   - Unticking asks before removing a next copy you changed, instead of quietly keeping it.
     - Labels, progress and start date are all kept.
-- **28 Oct 2026:** phone notifications will come from **Microsoft To Do** (stage 1, this computer → To Do, built 29 Oct; see Phone reminders). The phone's own reminder app syncs with To Do, so To Do does the notifying even when the laptop is off.
+- **28 Oct 2026:** phone notifications will come from **Microsoft To Do** (stage 1, this computer → To Do, and stage 2, changes coming back, both built 29 Oct; see Phone reminders). The phone's own reminder app syncs with To Do, so To Do does the notifying even when the laptop is off.
   - Rejected: an MCP (it connects Claude, not the app), a push service such as ntfy (only holds messages a few days ahead, task names pass through a public service) and a calendar feed (slow refresh, phones drop its alerts).
   - The app keeps a "PA App" list in To Do and never touches other lists. **Every open task** goes, dated or not.
   - Sent: full title (with the moving part), notes, due date (To Do has no due time), the next reminder that hasn't gone off (To Do allows one), high priority as Important, done with its date. Repeats are not sent as repeats, so To Do never makes its own copies; only the current copy is there.
-  - Written back: done (with its date, so the next copy is made), title (renames the series), notes, due date (the time is kept), reminder (as an exact-time one), Important, new tasks added to the list. Deleting in To Do only unlinks; it never deletes in the app.
+  - Written back: done (with its date, so the next copy is made), title (renames the series), notes, due date (the time is kept), reminder (as an exact-time one), Important, new tasks added to the list. Deleting in To Do only unlinks; it never deletes in the app. When the same thing is changed on both sides between syncs, this app's version wins; Important taken off in To Do becomes medium priority.
   - Only edit devices sync (on open, after changes, every 5 minutes, "Sync now"). The phone view stays read-only.
   - The link is stored on each task in the data file as a `todo` entry (the To Do ID plus what was last synced, to tell which side changed). Old files keep loading.
   - Sign-in is written into the app (OAuth code flow with PKCE, personal Microsoft accounts, scopes `Tasks.ReadWrite offline_access`), with no library. The client ID is not a secret. Tokens are per device and never go in the data file.
