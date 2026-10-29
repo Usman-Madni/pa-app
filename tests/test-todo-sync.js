@@ -7,7 +7,8 @@ const { loadApp, fakeFile, tick, check, done } = require('./helpers');
 // A pretend Microsoft: the sign-in token endpoint plus the To Do lists and tasks of Microsoft Graph.
 function fakeMicrosoft() {
   const g = { lists: [], tasks: new Map(), calls: [], tokenCalls: [], n: 0, failToken: false };
-  const reply = (status, j) => ({ ok: status < 300, status, json: async () => j });
+  // Answers are copies, as over the network: the app changing what it got never changes "To Do" itself.
+  const reply = (status, j) => ({ ok: status < 300, status, json: async () => (j == null ? j : JSON.parse(JSON.stringify(j))) });
   g.fetch = async (url, opts = {}) => {
     const method = (opts.method || 'GET').toUpperCase();
     if (url.startsWith('https://login.microsoftonline.com/')) {
@@ -274,6 +275,32 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   PA.DB.tasks = PA.DB.tasks.filter((x) => x !== p1);
   await PA.TD.sync();
   check(!L2.has('P1'), 'deleting it here deletes it in To Do, like any other');
+
+  // A repeat set in To Do becomes the task's repeat here and is taken off the To Do copy (else both would make next copies).
+  const weekly = { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['monday', 'wednesday'], firstDayOfWeek: 'sunday' }, range: { type: 'noEnd', startDate: day(0) } };
+  L2.set('P3', { id: 'P3', title: 'Swim', status: 'notStarted', dueDateTime: phoneDue(day(1)), recurrence: weekly, linkedResources: [] });
+  await PA.TD.sync();
+  const p3 = PA.DB.tasks.find((x) => x.todo && x.todo.id === 'P3');
+  check(p3 && p3.repeat && p3.repeat.freq === 'weekly' && p3.repeat.days.join() === '1,3' && p3.due === `${day(1)}T23:59`, 'a repeating task added in To Do comes in repeating (weekly on Mon and Wed)');
+  check(L2.get('P3').recurrence === null, 'and its repeat is taken off the To Do copy, so only this app makes next copies');
+  const q = PA.addTask({ title: 'Pay rent Nov', due: `${day(4)}T23:59` });
+  const q2 = PA.addTask({ title: 'Stand-up' });
+  const q3 = PA.addTask({ title: 'Finished thing' });
+  await PA.TD.sync();
+  R(q).recurrence = { pattern: { type: 'absoluteMonthly', interval: 1, dayOfMonth: 5 }, range: { type: 'numbered', numberOfOccurrences: 6 } };
+  R(q2).recurrence = { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['friday', 'monday', 'tuesday', 'wednesday', 'thursday'] }, range: { type: 'endDate', endDate: day(60) } };
+  R(q3).recurrence = { pattern: { type: 'daily', interval: 2 }, range: { type: 'noEnd' } };
+  PA.completeTask(q3);
+  R(q3).status = 'completed';
+  await PA.TD.sync();
+  check(q.repeat && q.repeat.freq === 'monthly' && q.repeat.monthMode === 'date' && q.repeat.endMode === 'count' && q.repeat.count === 6, 'repeat added in To Do to a synced task: monthly, ending after 6 times');
+  check(q.title === 'Pay rent' && q.period === 'Nov' && R(q).title === 'Pay rent (Nov)', 'a date in its title becomes the moving part, as when a repeat is set here');
+  check(q2.repeat && q2.repeat.freq === 'weekdays' && q2.repeat.endMode === 'date' && q2.repeat.until === day(60) && q2.due, 'Monday to Friday becomes Weekdays, with its end date (and a due date to repeat from)');
+  check(!q3.repeat && R(q3).recurrence === null && R(q).recurrence === null && R(q2).recurrence === null, 'a done task only has the repeat taken off; none stay on the To Do copies');
+  check(PA.TD.repeatFrom({ pattern: { type: 'relativeMonthly', interval: 2, daysOfWeek: ['monday'], index: 'first' } }).monthMode === 'weekday' && PA.TD.repeatFrom({ pattern: { type: 'absoluteYearly', interval: 1 } }).freq === 'yearly', 'monthly by weekday and yearly are understood too');
+  before = g.writes().length;
+  await PA.TD.sync();
+  check(g.writes().length === before, 'and nothing more is sent after that');
 
   // Linked before stage 2 (only a fingerprint kept): a change in To Do still comes in if nothing changed here.
   e.todo = { id: e.todo.id, sig: PA.TD.payload ? (() => { let s = JSON.stringify(PA.TD.payload(e)), x = 5381; for (let i = 0; i < s.length; i++) x = (x * 33 + s.charCodeAt(i)) | 0; return (x >>> 0).toString(36); })() : '' };

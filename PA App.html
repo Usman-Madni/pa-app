@@ -2971,6 +2971,33 @@ const TD = {
       } else if (!there.done && t.done) uncompleteTask(t, true);
     }
   },
+  // To Do's repeat (Graph patternedRecurrence) as ours, or null if it's a kind we don't have.
+  repeatFrom(rec) {
+    const p = (rec && rec.pattern) || {}, rg = (rec && rec.range) || {};
+    const interval = Math.max(1, Number(p.interval) || 1);
+    let r;
+    if (p.type === 'daily') r = { freq: 'daily', interval };
+    else if (p.type === 'weekly') {
+      const days = (p.daysOfWeek || []).map((d) => WEEKDAYS.findIndex((w) => w.toLowerCase() === String(d).toLowerCase())).filter((i) => i >= 0).sort();
+      r = interval === 1 && days.join() === '1,2,3,4,5' ? { freq: 'weekdays', interval: 1 } : { freq: 'weekly', interval, days };
+    } else if (p.type === 'absoluteMonthly' || p.type === 'relativeMonthly') r = { freq: 'monthly', interval, monthMode: p.type === 'relativeMonthly' ? 'weekday' : 'date' };
+    else if (p.type === 'absoluteYearly' || p.type === 'relativeYearly') r = { freq: 'yearly', interval };
+    else return null;
+    if (rg.type === 'endDate' && rg.endDate) Object.assign(r, { endMode: 'date', until: String(rg.endDate).slice(0, 10) });
+    if (rg.type === 'numbered' && rg.numberOfOccurrences) Object.assign(r, { endMode: 'count', count: Number(rg.numberOfOccurrences) });
+    return r;
+  },
+  // A repeat set in To Do becomes this task's repeat and is taken off the To Do copy, so only this app makes the
+  // next copies (both making them would give two). A done task only has it taken off.
+  async takeRepeat(t, x, list) {
+    const r = t.done ? null : this.repeatFrom(x.recurrence);
+    if (r) {
+      if (!t.repeat && !t.period) Object.assign(t, splitPeriod(t.title)); // a date in the title becomes the moving part, as when you set a repeat here
+      applyRepeat(t, r);
+    }
+    await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${x.id}`, { recurrence: null });
+    x.recurrence = null;
+  },
   // A task added to the list in To Do: make it here and mark it as ours, so it's kept in step from now on.
   async adopt(x, list) {
     const there = this.fields(x);
@@ -2983,6 +3010,7 @@ const TD = {
     t.todo = { id: x.id };
     DB.tasks.push(t);
     await this.mark(x, t, list);
+    if (x.recurrence) await this.takeRepeat(t, x, list);
     DB.persist('tasks');
     return t;
   },
@@ -3033,11 +3061,14 @@ const TD = {
         // Linked before changes came back (only a fingerprint kept): unchanged here means To Do's differences are new.
         const was = t.todo.base || (t.todo.sig && t.todo.sig === shortHash(JSON.stringify(this.payload(t))) ? here : there);
         const take = Object.keys(there).filter((k) => there[k] !== was[k] && here[k] === was[k]);
-        if (!take.length) continue;
-        this.apply(t, x, take, was);
-        t.todo.base = { ...was, ...Object.fromEntries(take.map((k) => [k, there[k]])) };
-        delete t.todo.sig;
-        got++;
+        if (take.length) {
+          this.apply(t, x, take, was);
+          t.todo.base = { ...was, ...Object.fromEntries(take.map((k) => [k, there[k]])) };
+          delete t.todo.sig;
+        }
+        const repeats = !!x.recurrence;
+        if (repeats) await this.takeRepeat(t, x, list);
+        if (take.length || repeats) got++;
       }
       // Added to the list in To Do (not made by this app, not linked to a task here, not already done).
       const linked = new Set(DB.tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
