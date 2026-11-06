@@ -39,6 +39,8 @@ const { loadApp, tick, check, done } = require('./helpers');
   check(w.repeat.freq === 'daily' && w.repeat.interval === 2 && w.title === 'Swim', 'changing the repeat replaces it; the title is only split when it starts');
   E.setDue(w, day(9));
   check(w.repeat.anchorDay === new Date(`${day(9)}T00:00`).getDate(), 'a new due date moves the anchor');
+  res = E.setDue(w, '');
+  check(!res.ok && w.due === `${day(9)}T07:00` && /repeating task needs a due date/.test(res.note), 'a repeating task keeps its due date, and says why');
   E.setRepeat(w, null);
   check(w.repeat === null, 'null stops it');
 

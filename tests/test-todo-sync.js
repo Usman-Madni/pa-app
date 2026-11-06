@@ -234,6 +234,12 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(f.title === 'Water plants (laptop)' && R(f).title === 'Water plants (laptop)', 'changed on both sides: this app\'s version wins and is sent');
   check(f.notes === 'From the phone', 'while a different field changed on the phone still comes in');
 
+  // Due date removed in To Do on a repeating task: kept here and sent back.
+  const hDue = h.due;
+  R(h).dueDateTime = null;
+  await PA.TD.sync();
+  check(h.due === hDue && R(h).dueDateTime && R(h).dueDateTime.dateTime.startsWith(hDue.slice(0, 10)), 'due date removed in To Do on a repeating task: kept here and sent back');
+
   // The moving part survives a rename in To Do.
   R(h).title = 'Gym session (Week 1)';
   await PA.TD.sync();

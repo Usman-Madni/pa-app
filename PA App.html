@@ -2099,8 +2099,10 @@ function setTaskField(field, value) {
 // to show ('' = none). Nothing here shows messages or redraws, and the caller still calls changed().
 const TaskEdit = {
   // The due date. day: 'YYYY-MM-DD', or '' for none; time: 'HH:mm', '' for all day, or left out to keep the one it has.
-  // Relative reminders count from the new date again, and a repeat keeps its anchor in step.
+  // Relative reminders count from the new date again, and a repeat keeps its anchor in step. A repeating task keeps
+  // its due date: its next copies are counted from it.
   setDue(t, day, time) {
+    if (!day && t.repeat) return { ok: false, note: 'A repeating task needs a due date — stop the repeat first' };
     const hhmm = time === undefined ? (t.due ? t.due.slice(11, 16) : ALL_DAY) : time || ALL_DAY;
     t.due = day ? `${day}T${hhmm}` : '';
     t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; });
@@ -2974,7 +2976,7 @@ const TD = {
     }
     if (take.includes('notes')) t.notes = this.plain(x.body);
     if (take.includes('imp')) t.priority = there.imp === 'high' ? 'high' : 'med';
-    if (take.includes('due')) TaskEdit.setDue(t, there.due); // To Do has no time: ours is kept
+    if (take.includes('due')) TaskEdit.setDue(t, there.due); // To Do has no time: ours is kept. Refused (a repeat's date removed there) → ours is sent back
     if (take.includes('rem')) {
       // To Do holds one reminder (the next one we sent): changed or turned off there, that one is done with.
       for (const r of t.reminders) { const ms = reminderTime(t, r); if (ms != null && String(Math.round(ms / 60000)) === was.rem) r.fired = true; }
@@ -3358,8 +3360,7 @@ document.addEventListener('click', (e) => {
     case 'clear-due': {
       const t = currentTask();
       if (!t) break;
-      if (t.repeat) { toast('A repeating task needs a due date — stop the repeat first'); break; }
-      say(TaskEdit.setDue(t, ''));
+      if (!say(TaskEdit.setDue(t, '')).ok) break;
       changed('tasks'); render(); renderDrawer();
       break;
     }
