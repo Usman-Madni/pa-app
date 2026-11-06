@@ -77,6 +77,14 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   check(bills && t.labels.includes(bills.id), 'a new #label is created and added');
   check(win.document.activeElement === bar().elements.title && bar().elements.title.value === '', 'box clears and is ready for the next task');
 
+  // A date in a repeating task's title becomes its moving part, as when the repeat is set in the panel
+  bar().elements.title.value = 'Pay rent Aug every month';
+  bar().elements.title.dispatchEvent(new win.Event('input', { bubbles: true }));
+  bar().dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  t = PA.DB.tasks.find((x) => x.title === 'Pay rent');
+  check(t && t.period === 'Aug' && t.repeat && t.repeat.freq === 'monthly', 'repeating: "Aug" in the title becomes the moving part');
+  check(/Added “Pay rent \(Aug\)”/.test(doc.querySelector('#toasts').textContent), 'and the message shows it as "Pay rent (Aug)"');
+
   // Keep words as typed
   bar().elements.title.value = 'Meeting notes for Friday';
   bar().elements.title.dispatchEvent(new win.Event('input', { bubbles: true }));

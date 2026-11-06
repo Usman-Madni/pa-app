@@ -1484,13 +1484,6 @@ function updateQuickPreview(form) {
   box.innerHTML = `<span class="qa-hint">“${esc(p.title)}”</span>${p.parts.map((x) => `<span class="qa-chip">${esc(x)}</span>`).join('')}<button type="button" class="qa-link" data-action="qa-raw">Keep words as typed</button>`;
 }
 
-function applyRepeat(t, r) {
-  if (!t.due) t.due = `${todayISO()}T${ALL_DAY}`;
-  t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...r };
-  if (t.repeat.freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
-  TaskEdit.anchor(t);
-}
-
 // Add a task from a quick-add box. Clicked choices beat typed ones; typed ones beat where you are.
 function quickAdd(form) {
   const f = form.elements;
@@ -1515,12 +1508,11 @@ function quickAdd(form) {
     if (!l) { addLabel(name, '', null); l = DB.labels[DB.labels.length - 1]; }
     if (!t.labels.includes(l.id)) t.labels.push(l.id);
   }
-  const repeatPick = f.repeat && f.repeat.value;
-  if (repeatPick) applyRepeat(t, { freq: repeatPick });
-  else if (p.repeat) applyRepeat(t, p.repeat);
+  const repeat = (f.repeat && f.repeat.value && { freq: f.repeat.value }) || p.repeat;
+  if (repeat) TaskEdit.setRepeat(t, repeat); // the message below says it all
   changed('tasks', 'labels');
   const bits = [taskDate(t) ? (taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))) + (taskTime(t) ? ' ' + fmtTime(taskTime(t)) : '') : '', t.repeat ? repeatText(t.repeat).toLowerCase() : ''].filter(Boolean);
-  toast(`Added “${t.title}”${bits.length ? ' — ' + bits.join(', ') : ''}`);
+  toast(`Added “${fullTitle(t)}”${bits.length ? ' — ' + bits.join(', ') : ''}`);
   return t;
 }
 
