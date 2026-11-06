@@ -87,7 +87,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **My Day screen** (view key `today`, first in the sidebar): tasks added to My Day, plus tasks due today or overdue, plus a few undated ones under "Anytime". Its quick add puts the new task in My Day.
 - **Due date and time:** the drawer has a date field and an optional time field. "✕" removes the time, making the task all-day.
 
-## Reminders (`reminders`, `reminderTime`, `checkReminders`)
+## Reminders (`reminders`, `Reminders`, `checkReminders`)
+- **One module owns the rules** (`Reminders`): `time` (when it goes off), `text`, `add` (relative ones need a due date), `replace`, `rearm` (after a due date change), `copy` (for a next copy or duplicate), `exact` (from To Do), `next` (the one To Do holds), `fromToDo` (To Do changed or turned off that one) and `due` (which have come, at a given moment). `checkReminders` only shows them.
 - **Several per task.** Each reminder is one of:
   - `{kind:'before', minutes}`: N minutes before the due time. For all-day tasks it counts from 9:00 on the due day.
   - `{kind:'dayof', daysBefore, time}`: a time of day, N days before the due date (0 = on the day).
@@ -96,7 +97,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **New tasks get no reminder** unless one is picked.
 - **`fired`** is set once a reminder goes off, so it never repeats. Changing the due date re-arms the relative reminders; exact-time ones keep their state.
 - **Phones** show reminders without changing the data (`state.remindedHere`).
-- **Repeat copies** bring their reminders along, re-armed. An exact-time reminder moves by as many days as the due date did.
+- **Missed ones:** a reminder over 10 minutes late when PA App checks (every 20 s; closed or the laptop asleep in between) doesn't pop up. They're named in one message instead, "3 reminders went off while PA App was closed: Pay rent, Call bank, Gym" (oldest first, up to three names, then "+N more"), with no Windows notification: the phone has rung for them already through To Do (`MISSED_MS`).
+- **Repeat copies and duplicates** bring their reminders along, re-armed (`Reminders.copy`). On a next copy an exact-time reminder moves by as many days as the due date did. An exact-time one whose time has already passed counts as gone off, so a copy never pops up a reminder the moment it's made.
 - **Sort** (`SORTS`, `sortTasks`, per device `dev_taskSort`): due date (the default), priority, name A–Z, newest added, oldest added, bucket, completion. Done tasks go last, except when sorting by completion. On the Board the cards in each column follow the sort too.
 - **Group** (List only, `groupTasks`, `dev_taskGroup`): none, by due date (Overdue / Today / Tomorrow / Next 7 days / Later / No date / Done), or by bucket.
 - **Sticky top** (`.sticky-top`): tabs, filters and sort stay put on List.
@@ -180,7 +182,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Tokens live in `dev_msAuth` only. The refresh token from a pop-up sign-in lasts about 24 hours, then a banner asks to sign in again (`needsSignIn`).
 - **What syncs** (`TD.sync`, both ways):
   - Every open task goes to a "PA App" list (made if missing). Done tasks only finish off an existing copy.
-  - Sent (`payload`): full title, notes, Important for high priority, completed/not, due date as `YYYY-MM-DDT12:00:00` UTC (To Do has no due time; noon UTC is the same day here), and the **next reminder still to come** (`nextReminderAt`; To Do allows one) as an exact UTC moment. Repeats aren't sent as repeats.
+  - Sent (`payload`): full title, notes, Important for high priority, completed/not, due date as `YYYY-MM-DDT12:00:00` UTC (To Do has no due time; noon UTC is the same day here), and the **next reminder still to come** (`Reminders.next`; To Do allows one) as an exact UTC moment. Repeats aren't sent as repeats.
   - `t.todo = {id, base}`: the To Do task and how both sides looked after the last sync, as `TD.fields` (`title, notes` (a hash), `imp, done, due` (local day), `rem` (minute number)). The same `fields` is worked out for what we'd send and for what To Do has; a task is sent when they differ. Repeat copies and duplicates start with `todo: null` and get their own To Do task. `Series.sig` ignores `todo`, so being sent doesn't make a next copy "changed".
   - **Coming back** (stage 2, 29 Oct): a field that differs from `base` in To Do but not here was changed on the phone and is brought in (`TD.apply`). Changed on both sides → this app wins and is sent.
     - Ticked → `Series.tick` (now, or that day all-day if To Do says an earlier day), so a repeat's next copy is made and sent. Unticked → `Series.untick`: an untouched next copy goes, a changed one stays (no one to ask).
@@ -220,7 +222,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 | `test-basics` | add, save and fresh-load; ID uniqueness; device settings kept out of the data |
 | `test-datafile` | create, save, load another device's save, conflicts (keep mine / use theirs), empty browser, wrong file, daily backup once per day |
 | `test-readonly` | phone can open and view, every edit path blocked, reminders don't change data, `?readonly` |
-| `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
+| `test-reminders` | `Reminders` on its own, with a given "now": add (needs a due date unless exact), replace in place, rearm, copy (new ids, shift, past exact ones count as gone off), due (time come, not shown already, not done), the To Do round trip (next → changed there → the new time is next; turned off → the one after) |
+| `test-reminders-dates` | old single reminders still load and fire; several per task, every kind at the right time (incl. evening before, 9 am on the day, all-day "before", exact time with no due date); fires only once; missed ones (over 10 minutes late) in one message, up to three names then "+N more", a fresh one still pops up; new due date re-arms; drawer presets, custom and remove; `toISO` local day; static rule against slicing `toISOString()` |
 | `test-repeat-custom` | dates moving forward (months, years, quarters, weeks, dates, "May", "may" the verb); moving part ("Oct 26" = Oct 2026, days, brackets dropped, panel box and preview, list, calendar previews, attachment names); splitting dated titles (on load once, not with keepTitle or no repeat, on switching to repeat); renaming renames every copy; Custom… screen; ends after N times (numbering, last one, calendar), on a date, never |
 | `test-private` | the private-data check catches private terms (including in old versions), emails, personal paths, forbidden files (including identical copies under another name), photos/PDFs/office files, attachments folders, private words in commit messages and personal commit emails; a clean repo passes; this project's history is clean |
 | `test-calendar-extras` | late task also on its done day (faded ✓, day list text, opens it; none for on-time or early); missed / done-on chips with "done 25th" / "due 24th" notes, long names keep the note, hover highlight; strike line drawn lower (gradient, not on missed chips); clicking a chip opens its panel, empty space only the day; tick box in the day list (none for events); legend sample chips; "after" repeats estimated from the due date (or today when overdue), stop at the count, look different, real copy follows the done day; Done pop-up has no "(optional)" |
@@ -310,8 +313,13 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - A repeating task always keeps its due date: refused in the panel's date box and the ✕ button ("A repeating task needs a due date"), and a date removed in To Do is kept and sent back. Before, the date box and To Do could clear it and the next copy got a due date with no time.
   - Quick add starts a repeat the same way as the panel and To Do: "Pay rent Aug every month" → "Pay rent (Aug)".
   - Typing a title renames every copy as you type (see Recurring tasks).
-  - Considered next, not done: a reminder module used both ways by To Do sync, and splitting To Do sync into a pure decision step and the Microsoft calls.
+  - Considered next, not done: splitting To Do sync into a pure decision step and the Microsoft calls.
 - **6 Nov 2026 (later):** ticking, unticking and the next copy in one place (`Series`), the second candidate from the review.
   - The "untouched next copy" idea was spread over nine functions sharing the `spawnSig` format; removing a next copy was written twice; unticking called `confirm()` and toasted itself, so To Do sync needed a quiet flag. Now `Series.tick / untick / removeNext / setDone / moveNext / duplicate` report `{outcome, note, question}` and the panel or To Do sync shows or asks.
   - A changed next copy of an "after I finish it" repeat now asks before moving with a new done date; Yes moves only its date (the user's choice over replacing it, which would lose their changes).
   - A duplicate goes back to Not started (stays in My Day); a next copy no longer carries over "done on a day".
+- **6 Nov 2026 (evening):** every reminder rule in one place (`Reminders`), the third candidate from the review.
+  - The rules sat in seven places, and To Do sync worked out which reminder it had sent by recomputing times: the inverse of "the next one", written separately. Now `Reminders.next` and `Reminders.fromToDo` sit side by side and are tested as a round trip.
+  - Turning a reminder off in To Do still skips just that one (the next one still goes): kept on purpose.
+  - Missed reminders (over 10 minutes late) go into one message instead of a pop-up each, since the phone already rang for them.
+  - A copied exact-time reminder already in the past counts as gone off (no instant pop-up from a duplicate).

@@ -27,6 +27,15 @@ _Avoid_: period (in conversation), date suffix
 **Anchor**:
 The day a repeat keeps coming back to ("the 31st", "the last Friday"), taken from the due date so that short months don't move it for good.
 
+## Reminders
+
+**Reminder**:
+A moment PA App reminds you about a task: a time before the due date ("1 hour before", "evening before") or an exact date and time. A task can have several; each goes off once.
+_Avoid_: alarm, notification
+
+**Missed reminder**:
+A reminder that went off more than 10 minutes before PA App could show it, because PA App was closed or the laptop asleep. Missed reminders are named together in one message rather than popping up.
+
 ## Editing
 
 **Task edit**:
