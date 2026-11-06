@@ -117,6 +117,15 @@ const { loadApp, check, done } = require('./helpers');
   const series = PA.DB.tasks.filter((x) => x.seriesId === t.seriesId);
   check(series.length === 4 && series.every((x) => x.title === 'Electricity bill') && series.map((x) => x.period).join(',') === 'Aug,Sep,Oct 26,Nov 26', 'renaming one copy renames all 4 (each keeps its moving part)');
   check(doc.querySelector('#toasts').textContent.includes('Renamed 3 other copies of this task too'), 'and says how many');
+  // While typing (before leaving the box) every copy is renamed already, so a save never has them disagree
+  doc.querySelector('#toasts').innerHTML = '';
+  const nameBox = doc.querySelector('#drawer [data-field="title"]');
+  for (const v of ['Elec', 'Elec bill']) { nameBox.value = v; nameBox.dispatchEvent(new win.Event('input', { bubbles: true })); }
+  check(series.every((x) => x.title === 'Elec bill'), 'typing a new name renames every copy as you type');
+  check(!doc.querySelector('#toasts').textContent.includes('Renamed'), 'without a message for each key');
+  nameBox.dispatchEvent(new win.Event('change', { bubbles: true }));
+  const said = doc.querySelector('#toasts').textContent;
+  check(said.split('Renamed 3 other copies').length === 2, 'leaving the box says how many, once');
 
   // --- Custom repeat screen ---
   const c = PA.addTask({ title: 'Gym', due: '2026-10-26T07:00' }); // a Monday

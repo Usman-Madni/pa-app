@@ -2056,7 +2056,11 @@ function setTaskField(field, value) {
   const t = currentTask();
   if (!t || state.readOnly) return;
   if (field === 'title') {
-    if (!say(TaskEdit.rename(t, value)).ok) { renderDrawer(); return; } // an empty title puts the old one back
+    const res = TaskEdit.rename(t, value);
+    const typed = titleTyping && titleTyping.id === t.id && titleTyping.was !== t.title; // copies renamed while typing
+    titleTyping = null;
+    if (!res.ok) { renderDrawer(); return; } // an empty title puts the old one back
+    say(res.note ? res : { note: typed ? TaskEdit.renamedNote(TaskEdit.otherCopies(t)) : '' });
   } else if (field === 'period') {
     t.period = value.trim().replace(/^\((.*)\)$/, '$1'); // typed with brackets → without
     changed('tasks');
@@ -2121,6 +2125,7 @@ const TaskEdit = {
     return { ok: true, note: this.renamedNote(renamed), renamed };
   },
   renamedNote: (n) => (n ? `Renamed ${n} other cop${n === 1 ? 'y' : 'ies'} of this task too` : ''),
+  otherCopies: (t) => (t.seriesId ? DB.tasks.filter((x) => x.seriesId === t.seriesId && x !== t).length : 0),
   // How it repeats: r = {freq, …} replaces the repeat (missing settings take their defaults); null stops it. Starting
   // to repeat moves a date in the title ("Aug bill") into the moving part, so it moves forward, and a task with no
   // due date gets today's.
@@ -3585,15 +3590,21 @@ document.addEventListener('submit', (e) => {
   }
 });
 
-// Typing in the drawer: update the task straight away, save shortly after you pause.
+// Typing in the drawer: update the task straight away, save shortly after you pause. A new title renames every
+// copy as you type, so a save never has them disagree; leaving the box says how many (titleTyping = the old title).
 let taskTimer;
+let titleTyping = null;
 document.addEventListener('input', (e) => {
   const t = currentTask();
   if (!t || state.readOnly || !e.target.closest('#drawer')) return;
   const field = e.target.dataset.field;
   const stepId = e.target.dataset.stepText;
   if (field === 'notes') t.notes = e.target.value;
-  else if (field === 'title') { if (!e.target.value.trim()) return; t.title = e.target.value; }
+  else if (field === 'title') {
+    if (!e.target.value.trim()) return;
+    if (!titleTyping || titleTyping.id !== t.id) titleTyping = { id: t.id, was: t.title };
+    TaskEdit.rename(t, e.target.value);
+  }
   else if (stepId) { const s = t.checklist.find((x) => x.id === stepId); if (!s) return; s.text = e.target.value; }
   else return;
   clearTimeout(taskTimer);
