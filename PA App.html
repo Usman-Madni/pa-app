@@ -2059,7 +2059,7 @@ function setTaskField(field, value) {
   } else if (field === 'doneDate' || field === 'doneTime') {
     const d = new Date(t.completedAt || Date.now());
     const time = t.completedAllDay ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    say(field === 'doneDate' ? Series.setDone(t, value, time) : Series.setDone(t, toISO(d), value));
+    doneDateMoved(t, field === 'doneDate' ? Series.setDone(t, value, time) : Series.setDone(t, toISO(d), value));
     changed('tasks');
     render();
     renderDrawer();
@@ -2129,6 +2129,11 @@ const TaskEdit = {
   },
 };
 const say = (res) => { if (res && res.note) toast(res.note); return res; }; // show what an edit reported
+// After a done date changed in the panel: a changed next copy is only moved if you say so.
+function doneDateMoved(t, res) {
+  if (res.outcome === 'changed' && confirm(res.question)) say(Series.moveNext(t));
+  else say(res);
+}
 
 // ===================== Series: ticking, unticking and the next copy =====================
 // Ticking a repeating task off makes its next copy; unticking takes an untouched next copy away again. A next copy
@@ -2176,7 +2181,8 @@ const Series = {
     t.spawnedNext = '';
   },
   // A done task's done date changed. For "again after I finish it" repeats the next copy is counted from it, so an
-  // untouched next copy is made again from the new date. Returns {outcome: 'moved' | 'changed' | 'none', note}.
+  // untouched next copy is made again from the new date. outcome: 'moved', 'changed' (changed since it was made, so
+  // it stays: the panel asks with `question`, then moveNext) or 'none'.
   setDone(t, date, time) {
     if (!t.done || !date) return { outcome: 'none', note: '' };
     const allDay = !time;
@@ -2185,10 +2191,27 @@ const Series = {
     t.completedAllDay = allDay;
     if (!t.repeat || t.repeat.freq !== 'after') return { outcome: 'none', note: '' };
     const next = this.nextOf(t);
-    if (!next || !this.untouched(next)) return { outcome: 'none', note: '' };
+    if (!next || next.done) return { outcome: 'none', note: '' };
+    if (!this.untouched(next)) {
+      const due = nextDue(t, doneAt);
+      if (!due || due === next.due) return { outcome: 'none', note: '' };
+      const what = this.changes(next);
+      return {
+        outcome: 'changed', next, note: 'The next copy stays',
+        question: `The next copy (${fullTitle(next)}) was changed after it was made${what ? ` (${what})` : ''}. Move it to ${fmtDay(due.slice(0, 10))} anyway?`,
+      };
+    }
     this.removeNext(t);
     const again = this.makeNext(t, doneAt);
     return { outcome: 'moved', next: again, note: again ? `Next one moved to ${fmtDay(again.due.slice(0, 10))}` : '' };
+  },
+  // Move a changed next copy to where the done date puts it: only its due date changes, so what you changed stays.
+  moveNext(t) {
+    const next = this.nextOf(t);
+    const due = next && nextDue(t, new Date(t.completedAt));
+    if (!due) return { outcome: 'none', note: '' };
+    TaskEdit.setDue(next, due.slice(0, 10), due.slice(11, 16));
+    return { outcome: 'moved', next, note: `Next one moved to ${fmtDay(due.slice(0, 10))}` };
   },
   // "Title (copy)": everything but attachments, done state and series. Returns the copy, placed after the task.
   duplicate(t) {
@@ -3355,7 +3378,7 @@ document.addEventListener('click', (e) => {
     case 'clear-repeat': setRepeat('freq', ''); break;
     case 'clear-done-time': {
       const t = currentTask();
-      if (t && t.done) { say(Series.setDone(t, toISO(new Date(t.completedAt)), '')); changed('tasks'); render(); renderDrawer(); }
+      if (t && t.done) { doneDateMoved(t, Series.setDone(t, toISO(new Date(t.completedAt)), '')); changed('tasks'); render(); renderDrawer(); }
       break;
     }
     case 'duplicate-task': {

@@ -55,6 +55,12 @@ const { loadApp, tick, check, done } = require('./helpers');
   res = S.setDone(w, '2026-10-16', '');
   const w3 = PA.DB.tasks.find((x) => x.id === w.spawnedNext);
   check(res.outcome === 'moved' && !PA.DB.tasks.includes(w2) && w3.due.startsWith('2026-10-19') && /moved to/.test(res.note), 'a new done date moves an untouched next copy');
+  w3.notes = 'big can';
+  w3.reminders = [{ id: 'wr', kind: 'before', minutes: 0, fired: true }];
+  res = S.setDone(w, '2026-10-17', '');
+  check(res.outcome === 'changed' && w3.due.startsWith('2026-10-19') && /The next copy \(Water plants\) was changed after it was made \(notes, reminders\)\. Move it to .*20.* anyway\?/.test(res.question), 'a changed next copy isn\'t moved: the question says what changed and where to');
+  res = S.moveNext(w);
+  check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-20') && w3.notes === 'big can' && !w3.reminders[0].fired && /moved to/.test(res.note), 'moving it anyway changes only its due date (changes kept, reminders count from the new date)');
 
   // --- Duplicate ---
   const d = PA.addTask({ title: 'Insurance', due: '2026-12-01T23:59', priority: 'high' });

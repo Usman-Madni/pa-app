@@ -78,13 +78,20 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   dd.dispatchEvent(new win.Event('change', { bubbles: true }));
   const w3 = PA.DB.tasks.find((x) => x.id === w.spawnedNext);
   check(w3 && w3.due.startsWith('2026-10-19') && !PA.DB.tasks.includes(w2), 'the untouched next copy moves with it (now the 19th)');
-  // If the next copy was changed, it stays put
+  // If the next copy was changed, it asks: No keeps it where it is, Yes moves only its date (the changes stay)
   w3.notes = 'bring the big can';
-  dd.value === '2026-10-16';
+  let askedMove = '';
+  win.confirm = (q) => { askedMove = q; return false; };
   const dd2 = doc.querySelector('#drawer [data-field="doneDate"]');
   dd2.value = '2026-10-17';
   dd2.dispatchEvent(new win.Event('change', { bubbles: true }));
-  check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-19'), 'a next copy you changed stays as it is');
+  check(/was changed after it was made \(notes\)\. Move it to .* anyway\?/.test(askedMove), `a changed next copy: it asks first (got "${askedMove}")`);
+  check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-19') && doc.querySelector('#toasts').textContent.includes('The next copy stays'), 'No keeps it where it is');
+  win.confirm = () => true;
+  const dd3 = doc.querySelector('#drawer [data-field="doneDate"]');
+  dd3.value = '2026-10-18';
+  dd3.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-21') && w3.notes === 'bring the big can', 'Yes moves its date and keeps the changes');
 
   // --- Unticking a repeat removes an untouched next copy ---
   doc.querySelector('[data-filter="all"]').click(); // done tasks are on the All tab
