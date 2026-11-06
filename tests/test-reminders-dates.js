@@ -52,6 +52,26 @@ const day = (d) => local(d).slice(0, 10);
   check(fired === 'ace', `each reminder fires on its own time (got ${fired})`);
   void yesterday;
 
+  // Missed while PA App was closed (or the laptop asleep): over 10 minutes late → one message, not a pop-up each
+  const wipe = () => { doc.querySelector('#toasts').innerHTML = ''; };
+  const ago = (min) => local(new Date(now - min * 60000));
+  const exactTask = (title, min) => { const x = PA.addTask({ title }); x.reminders = [{ id: 'm', kind: 'at', at: ago(min), fired: false }]; return x; };
+  wipe();
+  const m1 = exactTask('Pay rent', 180);
+  const m2 = exactTask('Call bank', 120);
+  const fresh = exactTask('Take medicine', 2);
+  PA.checkReminders();
+  const said = [...doc.querySelectorAll('.toast')].map((x) => x.textContent);
+  check(said.some((s) => s === '2 reminders went off while PA App was closed: Pay rent, Call bank'), `missed ones: one message naming them (got ${JSON.stringify(said)})`);
+  check(!said.some((s) => s.startsWith('🔔 Pay rent') || s.startsWith('🔔 Call bank')), 'no separate pop-up for each missed one');
+  check(said.some((s) => s.startsWith('🔔 Take medicine')), 'one due in the last 10 minutes pops up as before');
+  check(m1.reminders[0].fired && m2.reminders[0].fired && fresh.reminders[0].fired, 'all of them count as gone off');
+  wipe();
+  for (const [i, name] of ['A1', 'A2', 'A3', 'A4', 'A5'].entries()) exactTask(name, 60 + i);
+  PA.checkReminders();
+  check(doc.querySelector('#toasts').textContent.includes('5 reminders went off while PA App was closed: A5, A4, A3 +2 more'), 'up to three names, then "+N more"');
+  wipe();
+
   // Times worked out correctly
   const rt = (r, due) => PA.Reminders.time({ due }, r);
   const T = (s) => new Date(s).getTime();
