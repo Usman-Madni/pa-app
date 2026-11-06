@@ -98,6 +98,7 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   check(copy.reminders.length === 2 && copy.reminders.every((r) => !r.fired && !['r1', 'r2'].includes(r.id)), 'reminders come along, ready to go off again');
   check(copy.reminders[1].at === `${iso(new Date(expected.getFullYear(), expected.getMonth(), expected.getDate() - 1))}T20:00`, 'an exact-time reminder moves with the due date');
   check(copy.myDay === '' && copy.progress === 'not', 'My Day and progress reset on the new one');
+  check(t.completedAllDay && copy.completedAllDay === false, 'done "on a day" isn\'t carried over to the new one');
   check(copy.seriesId === t.id && t.spawnedNext === copy.id, 'both belong to the same series');
   check(t.done && t.completedAt > 0, 'the original is done');
 

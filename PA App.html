@@ -2239,7 +2239,7 @@ function spawnNext(t, doneAt = new Date()) {
   if (!due) return null; // the repeat's end date has passed
   const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
   Object.assign(copy, {
-    id: uid(), due, done: false, completedAt: 0, progress: 'not', myDay: '',
+    id: uid(), due, done: false, completedAt: 0, completedAllDay: false, progress: 'not', myDay: '',
     spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id, seriesIndex: index + 1,
     todo: null, // gets its own To Do task; it must never update the previous one's
   });
