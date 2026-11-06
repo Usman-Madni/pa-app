@@ -53,7 +53,7 @@ const day = (d) => local(d).slice(0, 10);
   void yesterday;
 
   // Times worked out correctly
-  const rt = (r, due) => win.eval('reminderTime')({ due }, r);
+  const rt = (r, due) => PA.Reminders.time({ due }, r);
   const T = (s) => new Date(s).getTime();
   check(rt({ kind: 'dayof', daysBefore: 1, time: '21:00' }, '2026-11-05T23:59') === T('2026-11-04T21:00'), '"evening before" = 9:00 pm the day before');
   check(rt({ kind: 'dayof', daysBefore: 0, time: '09:00' }, '2026-11-05T23:59') === T('2026-11-05T09:00'), '"9:00 am on the day"');

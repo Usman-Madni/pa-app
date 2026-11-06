@@ -504,7 +504,7 @@ const TASK_DEFAULTS = {
   start: '',          // 'YYYY-MM-DD' or ''
   priority: 'low',    // 'low' | 'med' | 'high'
   progress: 'not',    // 'not' | 'doing' (done is the separate `done` flag)
-  reminders: [],      // see reminderTime(): {id, kind:'before'|'dayof'|'at', minutes, daysBefore, time, at, fired}
+  reminders: [],      // see Reminders: {id, kind:'before'|'dayof'|'at', minutes, daysBefore, time, at, fired}
   done: false,
   completedAt: 0,     // ms
   completedAllDay: false, // done "on a day" without a time
@@ -1202,38 +1202,88 @@ const presetReminder = (key) => {
   return p ? { id: uid(), ...p[2], fired: false } : null;
 };
 
-function reminderTime(t, r) {
-  if (r.kind === 'at') return r.at ? new Date(r.at).getTime() : null;
-  if (!t.due) return null;
-  if (r.kind === 'dayof') {
-    const d = addDays(parseISO(t.due.slice(0, 10)), -(r.daysBefore || 0));
-    const [h, m] = (r.time || '09:00').split(':').map(Number);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
-  }
-  const base = taskTime(t) ? new Date(t.due) : new Date(`${t.due.slice(0, 10)}T09:00`);
-  return base.getTime() - (r.minutes || 0) * 60000;
-}
+const localStamp = (ms) => { const d = new Date(ms); return `${toISO(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'YYYY-MM-DDTHH:mm', as tasks keep times
+const sameMinute = (a, b) => a != null && b != null && Math.round(a / 60000) === Math.round(b / 60000);
 
-function reminderText(t, r) {
-  if (r.kind === 'at') return r.at ? `${fmtDay(r.at.slice(0, 10))} ${fmtTime(r.at.slice(11, 16))}` : 'Exact time';
-  if (r.kind === 'dayof') {
-    const at = fmtTime(r.time || '09:00');
-    if (!r.daysBefore) return `${at} on the day`;
-    if (r.daysBefore === 1) return r.time === '21:00' ? 'Evening before (9:00 pm)' : `${at} the day before`;
-    return `${r.daysBefore} days before, ${at}`;
-  }
-  const m = r.minutes || 0;
-  if (!m) return taskTime(t) ? 'At due time' : '9:00 am on the day';
-  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'} before`;
-  return m % 1440 === 0 ? plural(m / 1440, 'day') : m % 60 === 0 ? plural(m / 60, 'hour') : `${m} min before`;
-}
-
-function addReminder(t, r) {
-  if (r.kind !== 'at' && !t.due) { toast('Set a due date first — or use "On a date and time"'); return false; }
-  t.reminders.push(r);
-  askNotifications();
-  return true;
-}
+// Every rule about a task's reminders: when each goes off, its wording, which are due, the next one still to come
+// (the one To Do holds), and what happens to them when the due date changes or the task is copied. Nothing here
+// shows anything; changes report {ok, note} like TaskEdit, and the caller calls changed().
+const Reminders = {
+  // When it goes off (ms), or null: a relative one needs a due date.
+  time(t, r) {
+    if (r.kind === 'at') return r.at ? new Date(r.at).getTime() : null;
+    if (!t.due) return null;
+    if (r.kind === 'dayof') {
+      const d = addDays(parseISO(t.due.slice(0, 10)), -(r.daysBefore || 0));
+      const [h, m] = (r.time || '09:00').split(':').map(Number);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
+    }
+    const base = taskTime(t) ? new Date(t.due) : new Date(`${t.due.slice(0, 10)}T09:00`);
+    return base.getTime() - (r.minutes || 0) * 60000;
+  },
+  text(t, r) {
+    if (r.kind === 'at') return r.at ? `${fmtDay(r.at.slice(0, 10))} ${fmtTime(r.at.slice(11, 16))}` : 'Exact time';
+    if (r.kind === 'dayof') {
+      const at = fmtTime(r.time || '09:00');
+      if (!r.daysBefore) return `${at} on the day`;
+      if (r.daysBefore === 1) return r.time === '21:00' ? 'Evening before (9:00 pm)' : `${at} the day before`;
+      return `${r.daysBefore} days before, ${at}`;
+    }
+    const m = r.minutes || 0;
+    if (!m) return taskTime(t) ? 'At due time' : '9:00 am on the day';
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'} before`;
+    return m % 1440 === 0 ? plural(m / 1440, 'day') : m % 60 === 0 ? plural(m / 60, 'hour') : `${m} min before`;
+  },
+  // A new reminder ({kind, …}); one counting from the due date needs a due date.
+  add(t, r) {
+    if (r.kind !== 'at' && !t.due) return { ok: false, note: 'Set a due date first — or use "On a date and time"' };
+    t.reminders.push({ ...r, id: uid(), fired: false });
+    return { ok: true, note: '' };
+  },
+  // New settings for one, keeping its place in the list; it's ready to go off again.
+  replace(t, id, r) {
+    const was = t.reminders.find((x) => x.id === id);
+    if (!was) return { ok: false, note: '' };
+    for (const key of ['minutes', 'daysBefore', 'time', 'at']) delete was[key];
+    Object.assign(was, r, { fired: false });
+    return { ok: true, note: '' };
+  },
+  // The due date changed: those counting from it go off again; exact-time ones stay as they were.
+  rearm(t) { t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); },
+  // For a new copy of a task: new ids, all ready again; exact-time ones move by shiftDays (a repeat's next copy).
+  copy(list, shiftDays = 0) {
+    return list.map((r) => ({
+      ...r, id: uid(), fired: false,
+      ...(r.kind === 'at' && r.at && shiftDays ? { at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : {}),
+    }));
+  },
+  // An exact-time reminder at ms, as To Do gives them; one already past counts as gone off.
+  exact(ms, now = Date.now()) { return { id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= now }; },
+  // The next one still to come (ms) or null. To Do holds one reminder per task: this is the one it's sent.
+  next(t, now = Date.now()) {
+    const times = t.reminders.filter((r) => !r.fired).map((r) => this.time(t, r)).filter((x) => x != null && x > now);
+    return times.length ? Math.min(...times) : null;
+  },
+  // To Do changed or turned off the one it held (sent = its time, ms): that one is done with, and a new time there
+  // becomes an exact-time reminder here. The next one here still goes to To Do after it.
+  fromToDo(t, sent, newTime) {
+    for (const r of t.reminders) if (sameMinute(this.time(t, r), sent)) r.fired = true;
+    if (newTime != null) t.reminders.push(this.exact(newTime));
+  },
+  // [{t, r, at}] whose time has come (not gone off yet, not in `shown`: the keys a read-only device has shown).
+  due(tasks, now = Date.now(), shown = new Set()) {
+    const out = [];
+    for (const t of tasks) {
+      if (t.done) continue;
+      for (const r of t.reminders) {
+        if (r.fired || shown.has(`${t.id}:${r.id}`)) continue;
+        const at = this.time(t, r);
+        if (at != null && at <= now) out.push({ t, r, at });
+      }
+    }
+    return out;
+  },
+};
 
 // Title line + the small details under it; shared by list rows and board cards.
 function taskSummary(t) {
@@ -1244,7 +1294,7 @@ function taskSummary(t) {
   }
   if (lateText(t)) meta.push(`<span class="late">${lateText(t)}</span>`);
   if (t.start && t.start > todayISO() && !t.done) meta.push(`<span>Starts ${esc(fmtDay(t.start))}</span>`);
-  if (t.reminders.length && !t.done) meta.push(`<span>🔔 ${esc(reminderText(t, t.reminders[0]))}${t.reminders.length > 1 ? ` +${t.reminders.length - 1}` : ''}</span>`);
+  if (t.reminders.length && !t.done) meta.push(`<span>🔔 ${esc(Reminders.text(t, t.reminders[0]))}${t.reminders.length > 1 ? ` +${t.reminders.length - 1}` : ''}</span>`);
   if (t.repeat) meta.push(`<span title="Repeats">↻ ${esc(repeatText(t.repeat))}</span>`);
   if (t.progress === 'doing' && !t.done) meta.push('<span class="pill doing">In progress</span>');
   if (inMyDay(t)) meta.push('<span>☀ My Day</span>');
@@ -1861,7 +1911,7 @@ const fileIcon = (a) => (/^image\//.test(a.type) ? '🖼' : /pdf/.test(a.type) |
 function reminderBlock(t) {
   const list = t.reminders.map((r) => `
     <div class="p-row">
-      <span class="p-ico">🔔</span><span class="p-text">${esc(reminderText(t, r))}</span>
+      <span class="p-ico">🔔</span><span class="p-text">${esc(Reminders.text(t, r))}</span>
       ${r.fired ? '<span class="meta">done</span>' : ''}
       <button class="icon-btn edit-only" data-action="edit-reminder" data-rem="${esc(r.id)}" title="Change reminder">✎</button>
       <button class="icon-btn edit-only" data-action="delete-reminder" data-rem="${esc(r.id)}" title="Remove reminder">✕</button>
@@ -2082,7 +2132,7 @@ const TaskEdit = {
     if (!day && t.repeat) return { ok: false, note: 'A repeating task needs a due date — stop the repeat first' };
     const hhmm = time === undefined ? (t.due ? t.due.slice(11, 16) : ALL_DAY) : time || ALL_DAY;
     t.due = day ? `${day}T${hhmm}` : '';
-    t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; });
+    Reminders.rearm(t);
     this.anchor(t);
     return { ok: true, note: '' };
   },
@@ -2249,7 +2299,7 @@ const Series = {
     delete c.spawnSig;
     Object.assign(c, { id: uid(), done: false, completedAt: 0, completedAllDay: false, progress: 'not', spawnedNext: '', created: Date.now(), todo: null }, extra);
     c.checklist = c.checklist.map((s) => ({ ...s, id: uid(), done: false }));
-    c.reminders = c.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
+    c.reminders = Reminders.copy(c.reminders);
     return c;
   },
   makeNext(t, doneAt) {
@@ -2263,7 +2313,7 @@ const Series = {
     if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
     // An exact-time reminder moves by as many days as the due date did.
     const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
-    copy.reminders = copy.reminders.map((r) => (r.kind === 'at' && r.at ? { ...r, at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : r));
+    copy.reminders = Reminders.copy(t.reminders, shiftDays);
     // Only 📌 kept attachments carry over (same file, shared); this-one-only files stay with this copy.
     copy.attachments = copy.attachments.filter((a) => a.keep).map((a) => ({ ...a, id: uid() }));
     if (t.start && t.due) {
@@ -2805,7 +2855,6 @@ function renderSettings() {
 // edits) come back here; a field changed on both sides keeps this app's version. Tasks added to the list in To Do
 // come in as new tasks. {removed: true} = deleted in To Do; it stays here and isn't sent again.
 const utcStamp = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`; };
-const localStamp = (ms) => { const d = new Date(ms); return `${toISO(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'YYYY-MM-DDTHH:mm', as tasks keep times
 // A Graph date {dateTime: '2026-10-29T19:00:00.0000000', timeZone: 'UTC'} as an exact moment (ms), or null.
 const graphMs = (d) => {
   if (!d || !d.dateTime) return null;
@@ -2814,11 +2863,6 @@ const graphMs = (d) => {
 };
 const shortHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-// To Do allows one reminder per task: send the next one still to come. Once it goes off, the next sync sends the one after.
-function nextReminderAt(t, now = Date.now()) {
-  const times = t.reminders.filter((r) => !r.fired).map((r) => reminderTime(t, r)).filter((x) => x != null && x > now);
-  return times.length ? Math.min(...times) : null;
-}
 
 const TD = {
   CLIENT_ID: '011c6ecd-2984-4293-a6be-c83ebba20855', // not a secret; only works from the addresses registered in Azure
@@ -2922,7 +2966,7 @@ const TD = {
 
   // What a task looks like in To Do.
   payload(t) {
-    const next = t.done ? null : nextReminderAt(t);
+    const next = t.done ? null : Reminders.next(t); // To Do allows one: the next still to come; once it goes off, the one after
     return {
       title: fullTitle(t),
       body: { content: t.notes || '', contentType: 'text' },
@@ -2987,12 +3031,7 @@ const TD = {
     if (take.includes('notes')) t.notes = this.plain(x.body);
     if (take.includes('imp')) t.priority = there.imp === 'high' ? 'high' : 'med';
     if (take.includes('due')) TaskEdit.setDue(t, there.due); // To Do has no time: ours is kept. Refused (a repeat's date removed there) → ours is sent back
-    if (take.includes('rem')) {
-      // To Do holds one reminder (the next one we sent): changed or turned off there, that one is done with.
-      for (const r of t.reminders) { const ms = reminderTime(t, r); if (ms != null && String(Math.round(ms / 60000)) === was.rem) r.fired = true; }
-      const ms = there.rem ? Number(there.rem) * 60000 : null;
-      if (ms != null) t.reminders.push({ id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= Date.now() });
-    }
+    if (take.includes('rem')) Reminders.fromToDo(t, was.rem ? Number(was.rem) * 60000 : null, there.rem ? Number(there.rem) * 60000 : null);
     if (take.includes('done')) {
       if (there.done && !t.done) {
         // To Do gives the day it was done; ticked today counts as now, an earlier day as that day.
@@ -3033,7 +3072,7 @@ const TD = {
     const t = normalizeTask({
       id: uid(), title: there.title || 'Untitled', notes: this.plain(x.body), priority: there.imp === 'high' ? 'high' : 'low',
       due: there.due ? `${there.due}T${ALL_DAY}` : '', created: Date.parse(x.createdDateTime) || Date.now(),
-      reminders: ms != null ? [{ id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= Date.now() }] : [],
+      reminders: ms != null ? [Reminders.exact(ms)] : [],
     });
     t.todo = { id: x.id };
     DB.tasks.push(t);
@@ -3287,20 +3326,12 @@ function notify(title, body) {
 }
 
 function checkReminders() {
-  const now = Date.now();
   let changedAny = false;
-  for (const t of DB.tasks) {
-    if (t.done) continue;
-    for (const r of t.reminders) {
-      const key = `${t.id}:${r.id}`;
-      if (r.fired || state.remindedHere.has(key)) continue;
-      const at = reminderTime(t, r);
-      if (at == null || now < at) continue;
-      const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
-      notify(fullTitle(t), when);
-      if (state.readOnly) state.remindedHere.add(key);
-      else { r.fired = true; changedAny = true; }
-    }
+  for (const { t, r } of Reminders.due(DB.tasks, Date.now(), state.remindedHere)) {
+    const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
+    notify(fullTitle(t), when);
+    if (state.readOnly) state.remindedHere.add(`${t.id}:${r.id}`);
+    else { r.fired = true; changedAny = true; }
   }
   if (changedAny) {
     changed('tasks');
@@ -3570,16 +3601,12 @@ document.addEventListener('submit', (e) => {
       : k === 'dayof' ? { kind: 'dayof', daysBefore: Math.max(0, Number(data.days) || 0), time: data.time || '09:00' }
       : { kind: 'at', at: data.at };
     if (k === 'at' && !data.at) return;
-    const editing = t && state.remEdit && t.reminders.find((x) => x.id === state.remEdit);
-    if (editing) {
-      // Replace its settings, keep its place in the list; it's ready to go off again.
-      for (const key of ['minutes', 'daysBefore', 'time', 'at']) delete editing[key];
-      Object.assign(editing, r, { fired: false });
+    if (t && state.remEdit && Reminders.replace(t, state.remEdit, r).ok) {
       state.remCustom = null;
       state.remEdit = null;
       changed('tasks');
       render();
-    } else if (t && addReminder(t, { id: uid(), ...r, fired: false })) { state.remCustom = null; changed('tasks'); render(); }
+    } else if (t && say(Reminders.add(t, r)).ok) { askNotifications(); state.remCustom = null; changed('tasks'); render(); }
     renderDrawer();
     return;
   }
@@ -3722,7 +3749,7 @@ document.addEventListener('change', (e) => {
     const v = e.target.value;
     if (!t || !v) return;
     if (v.startsWith('custom-')) { state.remCustom = v.slice(7); state.remEdit = null; renderDrawer(); return; }
-    if (addReminder(t, presetReminder(v))) { changed('tasks'); render(); }
+    if (say(Reminders.add(t, presetReminder(v))).ok) { askNotifications(); changed('tasks'); render(); }
     renderDrawer();
     return;
   }
@@ -3765,7 +3792,7 @@ else {
 }
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, TD, TaskEdit, Series, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
+window.PA = { DB, DF, RO, AT, TD, TaskEdit, Series, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, Reminders };
 </script>
 </body>
 </html>
