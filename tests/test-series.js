@@ -68,7 +68,10 @@ const { loadApp, tick, check, done } = require('./helpers');
   d.checklist = [{ id: 'c1', text: 'quotes', done: true }];
   d.attachments = [{ id: 'f1', name: 'p.pdf', file: 'p.pdf', size: 1, type: 'application/pdf' }];
   d.todo = { id: 'T9', base: {} };
+  d.progress = 'doing';
+  d.myDay = PA.toISO(new Date());
   const c = S.duplicate(d);
+  check(c.progress === 'not' && c.myDay === d.myDay, 'a duplicate starts as Not started, and stays in My Day');
   check(PA.DB.tasks[PA.DB.tasks.indexOf(d) + 1] === c && c.title === 'Insurance (copy)' && c.notes === 'Policy' && c.priority === 'high', 'duplicate: next to it, "(copy)", details kept');
   check(c.attachments.length === 0 && !c.checklist[0].done && c.todo === null && c.seriesId === '' && c.id !== d.id, 'no files, steps unticked, no To Do link, its own series');
 

@@ -2213,7 +2213,8 @@ const Series = {
     TaskEdit.setDue(next, due.slice(0, 10), due.slice(11, 16));
     return { outcome: 'moved', next, note: `Next one moved to ${fmtDay(due.slice(0, 10))}` };
   },
-  // "Title (copy)": everything but attachments, done state and series. Returns the copy, placed after the task.
+  // "Title (copy)": everything but attachments, done state, progress and series; it stays in My Day, since you're
+  // likely working on it today. Returns the copy, placed after the task.
   duplicate(t) {
     const copy = this.fresh(t, { title: `${t.title} (copy)`, attachments: [], seriesId: '', seriesIndex: 1 });
     DB.tasks.splice(DB.tasks.indexOf(t) + 1, 0, copy);
@@ -2241,11 +2242,12 @@ const Series = {
     const { spawnSig, todo, ...rest } = x;
     return JSON.stringify({ ...rest, reminders: x.reminders.map(({ fired, ...r }) => r) });
   },
-  // A new task from t: not done, steps unticked, reminders ready to go off again, no To Do link; `extra` on top.
+  // A new task from t: not done and not started, steps unticked, reminders ready to go off again, no To Do link;
+  // `extra` on top.
   fresh(t, extra) {
     const c = normalizeTask(JSON.parse(JSON.stringify(t)));
     delete c.spawnSig;
-    Object.assign(c, { id: uid(), done: false, completedAt: 0, completedAllDay: false, spawnedNext: '', created: Date.now(), todo: null }, extra);
+    Object.assign(c, { id: uid(), done: false, completedAt: 0, completedAllDay: false, progress: 'not', spawnedNext: '', created: Date.now(), todo: null }, extra);
     c.checklist = c.checklist.map((s) => ({ ...s, id: uid(), done: false }));
     c.reminders = c.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
     return c;
@@ -2257,7 +2259,7 @@ const Series = {
     const due = nextDue(t, doneAt);
     if (!due) return null; // the repeat's end date has passed
     // Its own To Do task comes with it (todo: null): it must never update the previous one's.
-    const copy = this.fresh(t, { due, progress: 'not', myDay: '', seriesId: t.seriesId || t.id, seriesIndex: index + 1 });
+    const copy = this.fresh(t, { due, myDay: '', seriesId: t.seriesId || t.id, seriesIndex: index + 1 });
     if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
     // An exact-time reminder moves by as many days as the due date did.
     const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
