@@ -12,6 +12,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - **Read-only devices** (any phone or tablet, browsers without the File System Access API, or `?readonly`) must never change data. New edit actions go in `EDIT_ACTIONS` and get the `edit-only` class.
 - **New records** get IDs from `uid()`, never `Date.now()` alone.
 - **Due date, rename and repeat changes go through `TaskEdit`** (`setDue`, `rename`, `setRepeat`), wherever they come from. It does the follow-up steps and returns a note for the caller to show. Words for things are in `GLOSSARY.md`.
+- **Ticking, unticking, done dates and duplicates go through `Series`** (`tick`, `untick`, `setDone`, `duplicate`). It owns the next copy and its `spawnSig` snapshot, and reports what it found; the caller asks or shows the message.
 
 ## Running commands (keeps permission prompts down)
 - Commands already run in the project folder. **Don't start them with `cd "…" &&`**, and don't set shell variables (`F="…"; …`) or chain several steps. Compound commands can't match the allow-list in `.claude/settings.json`, so each one asks for approval.

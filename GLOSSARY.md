@@ -16,6 +16,10 @@ _Avoid_: instance, occurrence
 The copy made when the current one is ticked off, due on the repeat's next date. There is at most one open copy of a series at a time.
 _Avoid_: spawned task, child
 
+**Untouched**:
+A next copy that is still exactly as it was made. Reminders going off and a series rename don't count as touching it. Unticking takes an untouched next copy away without asking.
+_Avoid_: unchanged, pristine
+
 **Moving part**:
 The part of a repeating task's name that moves forward with each copy, shown in brackets after the title: "Rent (Nov 26)" then "Rent (Dec 26)".
 _Avoid_: period (in conversation), date suffix
