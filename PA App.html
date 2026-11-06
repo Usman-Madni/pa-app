@@ -1488,7 +1488,7 @@ function applyRepeat(t, r) {
   if (!t.due) t.due = `${todayISO()}T${ALL_DAY}`;
   t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...r };
   if (t.repeat.freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
-  syncRepeatAnchor(t);
+  TaskEdit.anchor(t);
 }
 
 // Add a task from a quick-add box. Clicked choices beat typed ones; typed ones beat where you are.
@@ -2064,22 +2064,20 @@ function setTaskField(field, value) {
   const t = currentTask();
   if (!t || state.readOnly) return;
   if (field === 'title') {
-    if (!value.trim()) { renderDrawer(); return; } // never leave a task without a title
-    t.title = value.trim();
-    renameSeries(t);
+    if (!say(TaskEdit.rename(t, value)).ok) { renderDrawer(); return; } // an empty title puts the old one back
   } else if (field === 'period') {
     t.period = value.trim().replace(/^\((.*)\)$/, '$1'); // typed with brackets → without
     changed('tasks');
     render();
     renderDrawer(); // updates the "next one" preview
     return;
-  } else if (field === 'dueDate') {
-    t.due = value ? `${value}T${taskTime(t) || ALL_DAY}` : '';
-    field = 'due';
-  } else if (field === 'dueTime') {
-    if (!t.due) return;
-    t.due = `${taskDate(t)}T${value || ALL_DAY}`;
-    field = 'due';
+  } else if (field === 'dueDate' || field === 'dueTime') {
+    if (field === 'dueTime' && !t.due) return;
+    say(field === 'dueDate' ? TaskEdit.setDue(t, value) : TaskEdit.setDue(t, taskDate(t), value));
+    changed('tasks');
+    render();
+    renderDrawer(); // date/time fields and the "next one is due…" line depend on it
+    return;
   } else if (field === 'doneDate' || field === 'doneTime') {
     const d = new Date(t.completedAt || Date.now());
     const time = t.completedAllDay ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -2092,30 +2090,70 @@ function setTaskField(field, value) {
   }
   else if (['bucket', 'progress', 'priority', 'start', 'notes'].includes(field)) t[field] = value;
   else return;
-  afterTaskEdit(t, field);
   changed('tasks');
   render();
 }
-// A title belongs to the whole repeating task: renaming one copy renames every copy, done ones too (each
-// keeps its own moving part). It doesn't count as changing a copy, so unticking can still tidy one away.
-function renameSeries(t) {
-  if (!t.seriesId) return;
-  const series = DB.tasks.filter((x) => x.seriesId === t.seriesId);
-  const others = series.filter((x) => x !== t && x.title !== t.title);
-  for (const x of series) {
-    let untouched = false;
-    try { const was = JSON.parse(x.spawnSig); was.title = x.title; untouched = JSON.stringify(was) === taskSig(x); } catch { /* no signature */ }
-    x.title = t.title;
-    if (untouched) x.spawnSig = taskSig(x);
-  }
-  if (others.length) toast(`Renamed ${others.length} other cop${others.length === 1 ? 'y' : 'ies'} of this task too`);
-}
-function afterTaskEdit(t, field) {
-  if (field !== 'due') return;
-  t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); // they count from the new due date
-  syncRepeatAnchor(t);
-  renderDrawer(); // date/time fields and the "next one is due…" line depend on it
-}
+// ===================== Task edits =====================
+// The edits that bring follow-up steps with them, for every place a task is edited: the panel, its buttons,
+// quick add and To Do. Each changes the task and returns {ok, note}: note is a message for whoever made the edit
+// to show ('' = none). Nothing here shows messages or redraws, and the caller still calls changed().
+const TaskEdit = {
+  // The due date. day: 'YYYY-MM-DD', or '' for none; time: 'HH:mm', '' for all day, or left out to keep the one it has.
+  // Relative reminders count from the new date again, and a repeat keeps its anchor in step.
+  setDue(t, day, time) {
+    const hhmm = time === undefined ? (t.due ? t.due.slice(11, 16) : ALL_DAY) : time || ALL_DAY;
+    t.due = day ? `${day}T${hhmm}` : '';
+    t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; });
+    this.anchor(t);
+    return { ok: true, note: '' };
+  },
+  // A new title (and moving part, if given) for the task. A title belongs to the whole repeating task: every copy is
+  // renamed, done ones too, each keeping its own moving part. That doesn't count as changing a copy, so unticking can
+  // still tidy an untouched one away.
+  rename(t, title, period) {
+    title = title.trim();
+    if (!title) return { ok: false, note: '' }; // never a task without a title
+    t.title = title;
+    if (period !== undefined) t.period = period;
+    if (!t.seriesId) return { ok: true, note: '', renamed: 0 };
+    const series = DB.tasks.filter((x) => x.seriesId === t.seriesId);
+    const renamed = series.filter((x) => x !== t && x.title !== title).length;
+    for (const x of series) {
+      let untouched = false;
+      try { const was = JSON.parse(x.spawnSig); was.title = x.title; untouched = JSON.stringify(was) === taskSig(x); } catch { /* no signature */ }
+      x.title = title;
+      if (untouched) x.spawnSig = taskSig(x);
+    }
+    return { ok: true, note: this.renamedNote(renamed), renamed };
+  },
+  renamedNote: (n) => (n ? `Renamed ${n} other cop${n === 1 ? 'y' : 'ies'} of this task too` : ''),
+  // How it repeats: r = {freq, …} replaces the repeat (missing settings take their defaults); null stops it. Starting
+  // to repeat moves a date in the title ("Aug bill") into the moving part, so it moves forward, and a task with no
+  // due date gets today's.
+  setRepeat(t, r) {
+    if (!r) { t.repeat = null; return { ok: true, note: '' }; }
+    const notes = [];
+    if (!t.repeat && !t.period) {
+      const s = splitPeriod(t.title);
+      if (s.period) { Object.assign(t, s); notes.push(`"${s.period}" is now the moving part — it moves forward with each repeat`); }
+    }
+    if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; notes.push('Repeating tasks need a due date, so it is set to today — change it if you like'); }
+    t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...r };
+    if (t.repeat.freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
+    this.anchor(t);
+    return { ok: true, note: notes.join('. ') };
+  },
+  // The repeat's anchor (anchorDay/weekday/nth) comes from the due date, so "the 31st" stays the 31st after a short month.
+  anchor(t) {
+    const r = t.repeat;
+    if (!r || !t.due) return;
+    const d = parseISO(t.due.slice(0, 10));
+    r.anchorDay = d.getDate();
+    r.weekday = d.getDay();
+    r.nth = d.getDate() + 7 > daysInMonth(d.getFullYear(), d.getMonth()) ? -1 : Math.ceil(d.getDate() / 7);
+  },
+};
+const say = (res) => { if (res && res.note) toast(res.note); return res; }; // show what an edit reported
 
 // Ticking a task off. doneAt = when it was done (the pop-up lets you pick; default now); allDay = no time given.
 // A repeating task then gets its next copy (once — re-ticking never makes a second).
@@ -2303,14 +2341,6 @@ function nextDue(t, doneOn = new Date()) {
   return key + time;
 }
 
-function syncRepeatAnchor(t) {
-  const r = t.repeat;
-  if (!r || !t.due) return;
-  const d = parseISO(t.due.slice(0, 10));
-  r.anchorDay = d.getDate();
-  r.weekday = d.getDay();
-  r.nth = d.getDate() + 7 > daysInMonth(d.getFullYear(), d.getMonth()) ? -1 : Math.ceil(d.getDate() / 7);
-}
 
 function repeatText(r) {
   if (!r) return '';
@@ -2417,20 +2447,15 @@ function setRepeat(key, value) {
   const t = currentTask();
   if (!t || state.readOnly) return;
   if (key === 'freq' || key === 'unitFreq') {
-    if (!value) t.repeat = null;
+    if (!value) say(TaskEdit.setRepeat(t, null));
     else {
-      // Starting to repeat: a date in the title ("Aug bill") becomes the moving part, so it moves forward.
-      if (!t.repeat && !t.period) {
-        const s = splitPeriod(t.title);
-        if (s.period) { Object.assign(t, s); toast(`"${s.period}" is now the moving part — it moves forward with each repeat`); }
-      }
       const freq = value === 'custom' ? (t.repeat && t.repeat.freq !== 'weekdays' && t.repeat.freq !== 'after' ? t.repeat.freq : 'weekly') : value;
-      if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; toast('Repeating tasks need a due date, so it is set to today — change it if you like'); }
-      t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...(t.repeat || {}), freq };
-      if (key === 'freq' && value !== 'custom') t.repeat.interval = 1; // a quick choice means "every 1"
-      if (freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
-      if (freq === 'weekly' && key === 'freq' && value !== 'custom') t.repeat.days = t.repeat.days.slice(0, 1);
-      syncRepeatAnchor(t);
+      const r = { ...(t.repeat || {}), freq }; // other settings stay when only the kind changes
+      if (key === 'freq' && value !== 'custom') {
+        r.interval = 1; // a quick choice means "every 1"
+        if (freq === 'weekly' && r.days) r.days = r.days.slice(0, 1); // …on one day
+      }
+      say(TaskEdit.setRepeat(t, r));
     }
   } else if (t.repeat) {
     const r = t.repeat;
@@ -2945,17 +2970,11 @@ const TD = {
     const there = this.fields(x);
     if (take.includes('title') && there.title) {
       const m = t.period ? there.title.match(/^(.*\S)\s*\(([^()]+)\)$/) : null; // "Phone bill (Oct 26)" = title + moving part
-      t.title = m ? m[1] : there.title;
-      if (t.period) t.period = m ? m[2] : '';
-      renameSeries(t);
+      say(TaskEdit.rename(t, m ? m[1] : there.title, t.period ? (m ? m[2] : '') : undefined));
     }
     if (take.includes('notes')) t.notes = this.plain(x.body);
     if (take.includes('imp')) t.priority = there.imp === 'high' ? 'high' : 'med';
-    if (take.includes('due')) {
-      t.due = there.due ? `${there.due}T${t.due ? t.due.slice(11, 16) : ALL_DAY}` : ''; // To Do has no time: keep ours
-      t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); // as when the due date is changed here
-      syncRepeatAnchor(t);
-    }
+    if (take.includes('due')) TaskEdit.setDue(t, there.due); // To Do has no time: ours is kept
     if (take.includes('rem')) {
       // To Do holds one reminder (the next one we sent): changed or turned off there, that one is done with.
       for (const r of t.reminders) { const ms = reminderTime(t, r); if (ms != null && String(Math.round(ms / 60000)) === was.rem) r.fired = true; }
@@ -2991,10 +3010,7 @@ const TD = {
   // next copies (both making them would give two). A done task only has it taken off.
   async takeRepeat(t, x, list) {
     const r = t.done ? null : this.repeatFrom(x.recurrence);
-    if (r) {
-      if (!t.repeat && !t.period) Object.assign(t, splitPeriod(t.title)); // a date in the title becomes the moving part, as when you set a repeat here
-      applyRepeat(t, r);
-    }
+    if (r) TaskEdit.setRepeat(t, r); // its notes aren't shown: the sync says "N changes from To Do"
     await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${x.id}`, { recurrence: null });
     x.recurrence = null;
   },
@@ -3343,9 +3359,8 @@ document.addEventListener('click', (e) => {
       const t = currentTask();
       if (!t) break;
       if (t.repeat) { toast('A repeating task needs a due date — stop the repeat first'); break; }
-      t.due = '';
-      afterTaskEdit(t, 'due');
-      changed('tasks'); render();
+      say(TaskEdit.setDue(t, ''));
+      changed('tasks'); render(); renderDrawer();
       break;
     }
     case 'clear-repeat': setRepeat('freq', ''); break;
@@ -3401,7 +3416,7 @@ document.addEventListener('click', (e) => {
     }
     case 'clear-time': {
       const t = currentTask();
-      if (t && t.due) { t.due = `${taskDate(t)}T${ALL_DAY}`; afterTaskEdit(t, 'due'); changed('tasks'); render(); }
+      if (t && t.due) { say(TaskEdit.setDue(t, taskDate(t), '')); changed('tasks'); render(); renderDrawer(); }
       break;
     }
     case 'qa-raw': {
@@ -3729,7 +3744,7 @@ else {
 }
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, TD, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, uncompleteTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
+window.PA = { DB, DF, RO, AT, TD, TaskEdit, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, uncompleteTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
 </script>
 </body>
 </html>
