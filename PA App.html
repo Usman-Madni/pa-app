@@ -1250,12 +1250,16 @@ const Reminders = {
   },
   // The due date changed: those counting from it go off again; exact-time ones stay as they were.
   rearm(t) { t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); },
-  // For a new copy of a task: new ids, all ready again; exact-time ones move by shiftDays (a repeat's next copy).
-  copy(list, shiftDays = 0) {
-    return list.map((r) => ({
-      ...r, id: uid(), fired: false,
-      ...(r.kind === 'at' && r.at && shiftDays ? { at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : {}),
-    }));
+  // For a new copy of a task: new ids, all ready again; exact-time ones move by shiftDays (a repeat's next copy), and
+  // one whose time has already passed counts as gone off, so a copy never pops up a reminder the moment it's made.
+  copy(list, shiftDays = 0, now = Date.now()) {
+    return list.map((r) => {
+      const c = { ...r, id: uid(), fired: false };
+      if (c.kind !== 'at' || !c.at) return c;
+      if (shiftDays) c.at = `${toISO(addDays(parseISO(c.at.slice(0, 10)), shiftDays))}${c.at.slice(10)}`;
+      c.fired = new Date(c.at).getTime() <= now;
+      return c;
+    });
   },
   // An exact-time reminder at ms, as To Do gives them; one already past counts as gone off.
   exact(ms, now = Date.now()) { return { id: uid(), kind: 'at', at: localStamp(ms), fired: ms <= now }; },

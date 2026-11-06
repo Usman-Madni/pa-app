@@ -28,8 +28,10 @@ const { loadApp, tick, check, done } = require('./helpers');
   t.reminders.forEach((r) => { r.fired = true; });
   R.rearm(t);
   check(!t.reminders[0].fired && t.reminders[1].fired, 'rearm: relative ones go again, exact-time ones don\'t');
-  const moved = R.copy(t.reminders, 7);
+  const moved = R.copy(t.reminders, 7, at('2026-11-06T12:00'));
   check(moved.length === 2 && moved.every((r) => !r.fired && !t.reminders.some((x) => x.id === r.id)) && moved[1].at === '2026-11-25T08:00' && moved[0].daysBefore === 1, 'copy: new ids, ready again, exact times moved by the shift');
+  const late = R.copy([{ id: 'x', kind: 'at', at: '2026-11-01T08:00', fired: false }], 3, at('2026-11-06T12:00'));
+  check(late[0].at === '2026-11-04T08:00' && late[0].fired, 'an exact time still in the past after moving counts as gone off');
 
   // --- Which are due ---
   const u = PA.addTask({ title: 'Call bank', due: '2026-11-10T15:00' });
