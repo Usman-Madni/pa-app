@@ -21,7 +21,7 @@ const { loadApp, check, done } = require('./helpers');
   // --- Shown on Tasks, in the panel and History ---
   const t = PA.addTask({ title: 'Pay water bill', due: '2026-10-01T23:59' });
   t.repeat = { freq: 'weekly', interval: 1, days: [4], monthMode: 'date', unit: 'days', until: '' };
-  PA.completeTask(t, new Date(2026, 9, 20, 12), true);
+  PA.Series.tick(t, new Date(2026, 9, 20, 12), true);
   doc.querySelector('[data-view="tasks"]').click();
   doc.querySelector('[data-filter="all"]').click();
   const row = doc.querySelector(`#main [data-action="open-task"][data-id="${t.id}"]`).closest('.item');

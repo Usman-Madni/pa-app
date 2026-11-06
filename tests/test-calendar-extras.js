@@ -12,15 +12,15 @@ const { loadApp, check, done } = require('./helpers');
 
   // --- Late task: chip on its due date AND a faded ✓ on the day it was done ---
   const t = PA.addTask({ title: 'Pay water bill', due: '2026-10-01T23:59' });
-  PA.completeTask(t, new Date(2026, 9, 20, 18, 30), false);
+  PA.Series.tick(t, new Date(2026, 9, 20, 18, 30), false);
   const onDue = items('2026-10-01').filter((i) => i.id === t.id);
   const onDone = items('2026-10-20').filter((i) => i.id === t.id);
   check(onDue.length === 1 && onDue[0].kind === 'task' && onDue[0].late, 'still on its due date (done late)');
   check(onDone.length === 1 && onDone[0].kind === 'doneon' && onDone[0].time === '18:30', 'and on the day it was done (20 Oct, 6:30 pm)');
   const onTime = PA.addTask({ title: 'Return book', due: '2026-10-05T23:59' });
-  PA.completeTask(onTime, new Date(2026, 9, 5, 12), true);
+  PA.Series.tick(onTime, new Date(2026, 9, 5, 12), true);
   const early = PA.addTask({ title: 'Renew licence', due: '2026-10-10T23:59' });
-  PA.completeTask(early, new Date(2026, 9, 3, 12), true);
+  PA.Series.tick(early, new Date(2026, 9, 3, 12), true);
   check(!items('2026-10-05').some((i) => i.kind === 'doneon') && !items('2026-10-03').some((i) => i.kind === 'doneon'), 'tasks done on time or early get no extra chip');
 
   PA.state.calMonth = new Date(2026, 9, 1);
@@ -35,11 +35,11 @@ const { loadApp, check, done } = require('./helpers');
   check(doc.querySelector('.cal-legend').textContent.includes('Done late, on this day') && doc.querySelector('.cal-legend').textContent.includes('Missed, done later') && doc.querySelector('.cal-legend').textContent.includes('Estimated repeat'), 'legend explains the late and estimate chips');
   // --- Late task: orange "missed" chip on the due day, done chip with orange outline on the done day ---
   const m = PA.addTask({ title: 'm', due: '2026-10-24T23:59' });
-  PA.completeTask(m, new Date(2026, 9, 25, 12), true);
+  PA.Series.tick(m, new Date(2026, 9, 25, 12), true);
   const longOne = PA.addTask({ title: 'Pay the quarterly electricity and water bill at the office', due: '2026-10-12T23:59' });
-  PA.completeTask(longOne, new Date(2026, 9, 14, 12), true);
+  PA.Series.tick(longOne, new Date(2026, 9, 14, 12), true);
   const ok = PA.addTask({ title: 'On time', due: '2026-10-16T23:59' });
-  PA.completeTask(ok, new Date(2026, 9, 16, 12), true);
+  PA.Series.tick(ok, new Date(2026, 9, 16, 12), true);
   PA.render();
   check(!doc.querySelector('.late-seg') && !doc.querySelector('.legend-bar'), 'no late bars any more');
   const dueChip = doc.querySelector('.cal-day[data-day="2026-10-24"] .chip[data-late]');
@@ -124,7 +124,7 @@ const { loadApp, check, done } = require('./helpers');
   const erow = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Water plants'));
   check(!erow || erow.textContent.includes('Estimated repeat'), 'day list calls it an estimated repeat');
   // The real copy follows the actual done day
-  const copy = PA.completeTask(w, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 12), true);
+  const copy = PA.Series.tick(w, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 12), true).next;
   check(copy.due.startsWith(plus(5)), 'ticked off a day late → the real next one is 3 days after that (+5), not the estimate');
 
   // --- Done pop-up: no "(optional)" ---

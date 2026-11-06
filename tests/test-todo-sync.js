@@ -140,14 +140,14 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(L.get(b.todo.id).body.content === 'Semi-skimmed', 'an edit is sent');
 
   // --- Repeats ---
-  PA.completeTask(a, new Date());
+  PA.Series.tick(a, new Date());
   const next = PA.DB.tasks.find((x) => x.id === a.spawnedNext);
   check(next && next.todo === null, 'the next repeat copy doesn\'t take over the old copy\'s To Do task');
   await PA.TD.sync();
   check(L.get(a.todo.id).status === 'completed' && L.get(a.todo.id).isReminderOn === false, 'ticked off here: completed in To Do');
   check(next.todo && next.todo.id !== a.todo.id && L.get(next.todo.id).title === PA.fullTitle(next) && L.get(next.todo.id).status === 'notStarted', 'the next copy is sent as a new task');
   const nextTodo = next.todo.id;
-  PA.uncompleteTask(a);
+  PA.Series.untick(a);
   check(!PA.DB.tasks.includes(next), 'unticking still removes the untouched next copy, though it was sent to To Do');
   await PA.TD.sync();
   check(!L.has(nextTodo) && L.get(a.todo.id).status === 'notStarted', 'its To Do copy is deleted, and the unticked one is open again');
@@ -296,7 +296,7 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   R(q).recurrence = { pattern: { type: 'absoluteMonthly', interval: 1, dayOfMonth: 5 }, range: { type: 'numbered', numberOfOccurrences: 6 } };
   R(q2).recurrence = { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['friday', 'monday', 'tuesday', 'wednesday', 'thursday'] }, range: { type: 'endDate', endDate: day(60) } };
   R(q3).recurrence = { pattern: { type: 'daily', interval: 2 }, range: { type: 'noEnd' } };
-  PA.completeTask(q3);
+  PA.Series.tick(q3);
   R(q3).status = 'completed';
   await PA.TD.sync();
   check(q.repeat && q.repeat.freq === 'monthly' && q.repeat.monthMode === 'date' && q.repeat.endMode === 'count' && q.repeat.count === 6, 'repeat added in To Do to a synced task: monthly, ending after 6 times');

@@ -91,17 +91,16 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   const m = PA.addTask({ title: 'Elec bill', due: '2026-09-05T23:59' });
   m.period = 'Aug';
   m.repeat = { freq: 'monthly', interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', anchorDay: 5 };
-  PA.completeTask(m);
+  m.reminders = [{ id: 'r', kind: 'before', minutes: 0, fired: false }];
+  PA.Series.tick(m);
   const sep = PA.DB.tasks.find((x) => x.id === m.spawnedNext);
   check(sep && PA.fullTitle(sep) === 'Elec bill (Sep)', 'ticking makes the next copy');
-  sep.reminders = [{ id: 'r', kind: 'before', minutes: 0, fired: false }];
-  sep.spawnSig = win.eval('taskSig')(sep); // as if made with that reminder
   sep.reminders[0].fired = true; // a reminder going off isn't "changing" it
   PA.render();
   tickBox(m.id); // untick
   check(!m.done && !PA.DB.tasks.includes(sep) && m.spawnedNext === '', 'unticking removes the untouched next copy');
   check(doc.querySelector('#toasts').textContent.includes('Removed the next copy'), 'and says so');
-  PA.completeTask(m);
+  PA.Series.tick(m);
   const sep2 = PA.DB.tasks.find((x) => x.id === m.spawnedNext);
   check(sep2 && PA.DB.tasks.filter((x) => PA.fullTitle(x) === 'Elec bill (Sep)').length === 1, 'ticking again makes just one new copy');
   sep2.checklist.push({ id: 's', text: 'check meter', done: false }); // changed
@@ -111,14 +110,14 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   tickBox(m.id);
   check(/The next copy \(Elec bill \(Sep\)\) was changed after it was made \(steps\)\. Remove it anyway\?/.test(asked), `a changed next copy: it asks first, saying what changed (got "${asked}")`);
   check(PA.DB.tasks.includes(sep2) && doc.querySelector('#toasts').textContent.includes('The next copy stays'), 'No keeps it (and says so)');
-  PA.completeTask(m);
+  PA.Series.tick(m);
   check(m.spawnedNext === sep2.id && PA.DB.tasks.filter((x) => x.seriesId === m.seriesId).length === 2, 'ticking again reuses it (no second copy)');
   win.confirm = () => true;
   PA.render();
   tickBox(m.id);
   check(!PA.DB.tasks.includes(sep2) && m.spawnedNext === '', 'Yes removes it');
   // Renaming the series isn't "changing" the next copy: unticking removes it without asking
-  PA.completeTask(m);
+  PA.Series.tick(m);
   const sep3 = PA.DB.tasks.find((x) => x.id === m.spawnedNext);
   PA.state.openTask = sep3.id;
   PA.renderDrawer();

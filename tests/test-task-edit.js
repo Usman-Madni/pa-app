@@ -47,11 +47,11 @@ const { loadApp, tick, check, done } = require('./helpers');
   // --- Renaming a repeating task ---
   const c = PA.addTask({ title: 'Gym', due: `${day(0)}T23:59` });
   E.setRepeat(c, { freq: 'daily' });
-  PA.completeTask(c);
+  PA.Series.tick(c);
   const c2 = PA.DB.tasks.find((x) => x.id === c.spawnedNext);
   res = E.rename(c2, '  Gym session ');
   check(c.title === 'Gym session' && c2.title === 'Gym session' && res.renamed === 1 && /Renamed 1 other copy/.test(res.note), 'every copy is renamed, and it says how many');
-  PA.uncompleteTask(c);
+  PA.Series.untick(c);
   check(!PA.DB.tasks.includes(c2), 'a rename doesn\'t count as changing the next copy');
   res = E.rename(c, '   ');
   check(!res.ok && c.title === 'Gym session', 'an empty title is refused');

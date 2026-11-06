@@ -104,7 +104,7 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
 
   // Untick and tick again → no second copy
   t.done = false;
-  PA.completeTask(t);
+  PA.Series.tick(t);
   check(PA.DB.tasks.length === before + 1, 're-ticking never makes a second copy');
 
   // Calendar shows upcoming repeats (not saved as tasks)
@@ -131,8 +131,8 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   const m = PA.addTask({ title: 'Rent', due: '2027-01-31T10:00' });
   m.repeat = { freq: 'monthly', interval: 1, monthMode: 'date', days: [], unit: 'days', until: '' };
   m.repeat.anchorDay = 31;
-  const feb = PA.completeTask(m);
-  const mar = PA.completeTask(feb);
+  const feb = PA.Series.tick(m).next;
+  const mar = PA.Series.tick(feb).next;
   check(feb.due === '2027-02-28T10:00' && mar.due === '2027-03-31T10:00', 'the 31st comes back after February, copy after copy');
   app.close();
   done();

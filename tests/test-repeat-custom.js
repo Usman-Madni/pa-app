@@ -91,9 +91,9 @@ const { loadApp, check, done } = require('./helpers');
   check(field && field.value === 'Aug', 'the moving part has its own box');
   check(doc.querySelector('#drawer .period-hint').textContent === 'Shows as Elec bill (Aug) · next: Elec bill (Sep)', 'it shows how it looks now and next time');
   check(doc.querySelector(`#main [data-id="${t.id}"]`).closest('.item').querySelector('.tt').textContent === 'Elec bill (Aug)', 'the list shows "Elec bill (Aug)"');
-  let next = PA.completeTask(t);
+  let next = PA.Series.tick(t).next;
   check(next.title === 'Elec bill' && next.period === 'Sep' && next.due === '2026-10-05T23:59', 'ticking it off makes "Elec bill (Sep)"');
-  next = PA.completeTask(next);
+  next = PA.Series.tick(next).next;
   check(PA.fullTitle(next) === 'Elec bill (Oct)', '…then "Elec bill (Oct)"');
   // Typing a moving part
   PA.state.openTask = next.id;
@@ -106,7 +106,7 @@ const { loadApp, check, done } = require('./helpers');
   PA.state.calMonth = new Date(2026, 11, 1);
   const prev = win.eval('repeatPreviews')('2026-12-01', '2027-01-31');
   check((prev['2026-12-05'] || []).some((i) => i.title === 'Elec bill (Nov 26)') && (prev['2027-01-05'] || []).some((i) => i.title === 'Elec bill (Dec 26)'), 'calendar previews move it on too (5 Dec: Nov 26, 5 Jan: Dec 26)');
-  const same = PA.completeTask(next);
+  const same = PA.Series.tick(next).next;
   check(PA.fullTitle(same) === 'Elec bill (Nov 26)', 'and the real next copy is "Elec bill (Nov 26)"');
   // Renaming renames every copy, done ones too
   PA.state.openTask = same.id;
@@ -153,13 +153,13 @@ const { loadApp, check, done } = require('./helpers');
   set('count', '3');
   check(n.repeat.endMode === 'count' && n.repeat.count === 3, 'ends after 3 times');
   check(doc.querySelector('#drawer').textContent.includes('(2 of 3)'), 'drawer counts: next one is 2 of 3');
-  const n2 = PA.completeTask(n);
-  const n3 = PA.completeTask(n2);
+  const n2 = PA.Series.tick(n).next;
+  const n3 = PA.Series.tick(n2).next;
   check(n2.seriesIndex === 2 && n3.seriesIndex === 3, 'copies are numbered');
   PA.state.openTask = n3.id;
   PA.renderDrawer();
   check(doc.querySelector('#drawer').textContent.includes('This is the last one (3 of 3)'), 'the third says it is the last');
-  check(PA.completeTask(n3) === null, 'ticking the last one makes no more');
+  check(PA.Series.tick(n3).next === null, 'ticking the last one makes no more');
   // Calendar preview also stops
   const m = PA.addTask({ title: 'Course', due: '2026-11-02T18:00' });
   m.repeat = { freq: 'weekly', interval: 1, days: [1], monthMode: 'date', unit: 'days', until: '', endMode: 'count', count: 2 };

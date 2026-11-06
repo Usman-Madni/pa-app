@@ -60,7 +60,7 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   click(`#drawer [data-action="toggle-keep"][data-att="${a2.id}"]`);
   check(a2.keep === true && a1.keep === false, '📌 marks one file to keep on every repeat');
 
-  const next = PA.completeTask(t);
+  const next = PA.Series.tick(t).next;
   check(PA.fullTitle(next) === 'Elec bill (Sep)', 'next copy is "Elec bill (Sep)"');
   check(next.attachments.length === 1 && next.attachments[0].file === a2.file && next.attachments[0].keep === true, 'only the 📌 file carries over');
   check(t.attachments.length === 2, "the bill stays with August's (done) copy");
@@ -117,7 +117,7 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   drawer().querySelector(`[data-action="open-history"][data-id="${next.id}"]`).click();
   check(PA.state.openTask === next.id, 'the link opens the current copy');
   // A third copy: September's done, October is current → October's history: Sep then Aug; Sep's history: only Aug
-  const oct = PA.completeTask(next);
+  const oct = PA.Series.tick(next).next;
   PA.state.openTask = oct.id;
   PA.renderDrawer();
   const titles = [...drawer().querySelectorAll('.history-item .link-btn')].map((b) => b.textContent);

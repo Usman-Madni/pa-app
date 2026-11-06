@@ -2012,30 +2012,12 @@ function finishDonePrompt(data) {
   if (!t || t.done || !data.date) return;
   const allDay = !data.time; // time left empty = just the date
   const doneAt = new Date(`${data.date}T${allDay ? '12:00' : data.time}`); // midday for a date-only "done"
-  completeTask(t, doneAt, allDay);
+  say(Series.tick(t, doneAt, allDay));
   changed('tasks');
   render();
   renderDrawer();
 }
 
-// Changing the done date of a done task. For "again after I finish it" repeats the next copy is counted
-// from it, so an untouched next copy is made again from the new date.
-function setDoneDate(t, date, time) {
-  if (!t.done || !date) return;
-  const allDay = !time;
-  const doneAt = new Date(`${date}T${allDay ? '12:00' : time}`);
-  t.completedAt = doneAt.getTime();
-  t.completedAllDay = allDay;
-  if (t.repeat && t.repeat.freq === 'after') {
-    const next = nextCopyIfUntouched(t);
-    if (next) {
-      DB.tasks = DB.tasks.filter((x) => x !== next);
-      t.spawnedNext = '';
-      const again = spawnNext(t, doneAt);
-      if (again) toast(`Next one moved to ${fmtDay(again.due.slice(0, 10))}`);
-    }
-  }
-}
 
 // "+ New task" opens the panel on a blank task; if you leave without giving it a name, it's thrown away.
 function newTaskInPanel() {
@@ -2077,8 +2059,7 @@ function setTaskField(field, value) {
   } else if (field === 'doneDate' || field === 'doneTime') {
     const d = new Date(t.completedAt || Date.now());
     const time = t.completedAllDay ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    if (field === 'doneDate') setDoneDate(t, value, time);
-    else setDoneDate(t, toISO(d), value);
+    say(field === 'doneDate' ? Series.setDone(t, value, time) : Series.setDone(t, toISO(d), value));
     changed('tasks');
     render();
     renderDrawer();
@@ -2116,12 +2097,7 @@ const TaskEdit = {
     if (!t.seriesId) return { ok: true, note: '', renamed: 0 };
     const series = DB.tasks.filter((x) => x.seriesId === t.seriesId);
     const renamed = series.filter((x) => x !== t && x.title !== title).length;
-    for (const x of series) {
-      let untouched = false;
-      try { const was = JSON.parse(x.spawnSig); was.title = x.title; untouched = JSON.stringify(was) === taskSig(x); } catch { /* no signature */ }
-      x.title = title;
-      if (untouched) x.spawnSig = taskSig(x);
-    }
+    for (const x of series) Series.quietly(x, 'title', title);
     return { ok: true, note: this.renamedNote(renamed), renamed };
   },
   renamedNote: (n) => (n ? `Renamed ${n} other cop${n === 1 ? 'y' : 'ies'} of this task too` : ''),
@@ -2154,117 +2130,129 @@ const TaskEdit = {
 };
 const say = (res) => { if (res && res.note) toast(res.note); return res; }; // show what an edit reported
 
-// Ticking a task off. doneAt = when it was done (the pop-up lets you pick; default now); allDay = no time given.
-// A repeating task then gets its next copy (once — re-ticking never makes a second).
-function completeTask(t, doneAt = new Date(), allDay = false) {
-  t.done = true;
-  t.completedAt = doneAt.getTime();
-  t.completedAllDay = !!allDay;
-  return spawnNext(t, doneAt);
-}
-
-// A copy is "untouched" while it still matches what was made (reminders going off and being sent to To Do don't count).
-function taskSig(x) {
-  const { spawnSig, todo, ...rest } = x;
-  return JSON.stringify({ ...rest, reminders: x.reminders.map(({ fired, ...r }) => r) });
-}
-function nextCopyIfUntouched(t) {
-  const next = t.spawnedNext && DB.tasks.find((x) => x.id === t.spawnedNext);
-  return next && !next.done && next.spawnSig && taskSig(next) === next.spawnSig ? next : null;
-}
-
-// What was changed on a copy since it was made, in words ("renamed, notes").
-const CHANGE_WORDS = {
-  title: 'renamed', period: 'moving part', due: 'due date', notes: 'notes', checklist: 'steps', attachments: 'attachments',
-  reminders: 'reminders', priority: 'priority', bucket: 'bucket', labels: 'labels', start: 'start date', progress: 'progress', repeat: 'repeat',
-};
-function whatChanged(x) {
-  let was;
-  try { was = JSON.parse(x.spawnSig); } catch { return ''; }
-  const now = JSON.parse(taskSig(x));
-  const words = Object.keys(CHANGE_WORDS).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k])).map((k) => CHANGE_WORDS[k]);
-  return words.join(', ');
-}
-
-// Unticking: back to not done. If the next copy hasn't been touched, it goes away again; if it has, ask
-// (quiet = unticked in To Do, with nobody to ask: a changed next copy stays).
-function uncompleteTask(t, quiet = false) {
-  t.done = false;
-  t.completedAt = 0;
-  t.completedAllDay = false;
-  if (!t.spawnedNext) return;
-  const remove = (next) => {
-    DB.tasks = DB.tasks.filter((x) => x !== next);
+// ===================== Series: ticking, unticking and the next copy =====================
+// Ticking a repeating task off makes its next copy; unticking takes an untouched next copy away again. A next copy
+// keeps a snapshot of how it was made (spawnSig), so it can tell whether you've changed it since. Like TaskEdit,
+// nothing here asks, shows messages or redraws: each call returns what happened ({outcome, note, …}) for the
+// caller to show or ask about, and the caller calls changed().
+const Series = {
+  CHANGE_WORDS: {
+    title: 'renamed', period: 'moving part', due: 'due date', notes: 'notes', checklist: 'steps', attachments: 'attachments',
+    reminders: 'reminders', priority: 'priority', bucket: 'bucket', labels: 'labels', start: 'start date', progress: 'progress', repeat: 'repeat',
+  },
+  // Tick off. doneAt = when it was done (default now); allDay = no time given. A repeating task gets its next copy,
+  // once: ticking again never makes a second. Returns {next, note}.
+  tick(t, doneAt = new Date(), allDay = false) {
+    t.done = true;
+    t.completedAt = doneAt.getTime();
+    t.completedAllDay = !!allDay;
+    const next = this.makeNext(t, doneAt);
+    return { next, note: next ? `↻ Next one created: ${fmtDay(next.due.slice(0, 10))}` : '' };
+  },
+  // Back to not done. outcome: 'removed' (an untouched next copy went), 'done' (it's done already, so it stays),
+  // 'changed' (changed since it was made, so it stays: the panel asks with `question`, then removeNext), or 'none'.
+  untick(t) {
+    t.done = false;
+    t.completedAt = 0;
+    t.completedAllDay = false;
+    const next = this.nextOf(t);
+    if (!next) { t.spawnedNext = ''; return { outcome: 'none', note: '' }; }
+    const name = fullTitle(next);
+    if (this.untouched(next)) {
+      this.removeNext(t);
+      return { outcome: 'removed', next, note: `Removed the next copy (${name}) — it hadn't been changed` };
+    }
+    if (next.done) return { outcome: 'done', next, note: 'The next copy stays — it\'s already done' };
+    const what = this.changes(next);
+    return {
+      outcome: 'changed', next, note: `The next copy (${name}) stays — it was changed after it was made`,
+      question: `The next copy (${name}) was changed after it was made${what ? ` (${what})` : ''}. Remove it anyway?`,
+    };
+  },
+  removeNext(t) {
+    const next = this.nextOf(t);
+    if (next) DB.tasks = DB.tasks.filter((x) => x !== next);
+    if (next && state.openTask === next.id) state.openTask = null;
     t.spawnedNext = '';
-    if (state.openTask === next.id) state.openTask = null;
-  };
-  const next = nextCopyIfUntouched(t);
-  const other = DB.tasks.find((x) => x.id === t.spawnedNext);
-  if (next) {
-    remove(next);
-    toast(`Removed the next copy (${fullTitle(next)}) — it hadn't been changed`);
-  } else if (other && other.done) {
-    toast('The next copy stays — it\'s already done');
-  } else if (other && quiet) {
-    toast(`The next copy (${fullTitle(other)}) stays — it was changed after it was made`);
-  } else if (other) {
-    const what = whatChanged(other);
-    if (confirm(`The next copy (${fullTitle(other)}) was changed after it was made${what ? ` (${what})` : ''}. Remove it anyway?`)) {
-      remove(other);
-      toast(`Removed the next copy (${fullTitle(other)})`);
-    } else toast('The next copy stays');
-  } else t.spawnedNext = '';
-}
+  },
+  // A done task's done date changed. For "again after I finish it" repeats the next copy is counted from it, so an
+  // untouched next copy is made again from the new date. Returns {outcome: 'moved' | 'changed' | 'none', note}.
+  setDone(t, date, time) {
+    if (!t.done || !date) return { outcome: 'none', note: '' };
+    const allDay = !time;
+    const doneAt = new Date(`${date}T${allDay ? '12:00' : time}`);
+    t.completedAt = doneAt.getTime();
+    t.completedAllDay = allDay;
+    if (!t.repeat || t.repeat.freq !== 'after') return { outcome: 'none', note: '' };
+    const next = this.nextOf(t);
+    if (!next || !this.untouched(next)) return { outcome: 'none', note: '' };
+    this.removeNext(t);
+    const again = this.makeNext(t, doneAt);
+    return { outcome: 'moved', next: again, note: again ? `Next one moved to ${fmtDay(again.due.slice(0, 10))}` : '' };
+  },
+  // "Title (copy)": everything but attachments, done state and series. Returns the copy, placed after the task.
+  duplicate(t) {
+    const copy = this.fresh(t, { title: `${t.title} (copy)`, attachments: [], seriesId: '', seriesIndex: 1 });
+    DB.tasks.splice(DB.tasks.indexOf(t) + 1, 0, copy);
+    return copy;
+  },
+  // Change one field of a copy without it counting as changing the copy (renaming the series).
+  quietly(x, key, value) {
+    let untouched = false;
+    try { const was = JSON.parse(x.spawnSig); was[key] = x[key]; untouched = JSON.stringify(was) === this.sig(x); } catch { /* not a next copy */ }
+    x[key] = value;
+    if (untouched) x.spawnSig = this.sig(x);
+  },
+  // What was changed on a copy since it was made, in words ("renamed, notes").
+  changes(x) {
+    let was;
+    try { was = JSON.parse(x.spawnSig); } catch { return ''; }
+    const now = JSON.parse(this.sig(x));
+    return Object.keys(this.CHANGE_WORDS).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k])).map((k) => this.CHANGE_WORDS[k]).join(', ');
+  },
 
-// "Title (copy)": everything but attachments, done state and series; checklist unticked, reminders re-armed.
-function duplicateTask(t) {
-  const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
-  delete copy.spawnSig;
-  Object.assign(copy, {
-    id: uid(), title: `${t.title} (copy)`, done: false, completedAt: 0, completedAllDay: false, created: Date.now(),
-    attachments: [], seriesId: '', seriesIndex: 1, spawnedNext: '', todo: null,
-  });
-  copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
-  copy.reminders = copy.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
-  DB.tasks.splice(DB.tasks.indexOf(t) + 1, 0, copy);
-  changed('tasks');
-  return copy;
-}
-
-function spawnNext(t, doneAt = new Date()) {
-  if (!t.repeat || t.spawnedNext) return null;
-  const index = t.seriesIndex || 1;
-  if (endModeOf(t.repeat) === 'count' && index >= (t.repeat.count || 1)) return null; // that was the last one
-  const due = nextDue(t, doneAt);
-  if (!due) return null; // the repeat's end date has passed
-  const copy = normalizeTask(JSON.parse(JSON.stringify(t)));
-  Object.assign(copy, {
-    id: uid(), due, done: false, completedAt: 0, completedAllDay: false, progress: 'not', myDay: '',
-    spawnedNext: '', created: Date.now(), seriesId: t.seriesId || t.id, seriesIndex: index + 1,
-    todo: null, // gets its own To Do task; it must never update the previous one's
-  });
-  if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
-  copy.checklist = copy.checklist.map((s) => ({ ...s, id: uid(), done: false }));
-  // Reminders come along; an exact-time one moves by as many days as the due date did.
-  const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
-  copy.reminders = copy.reminders.map((r) => ({
-    ...r, id: uid(), fired: false,
-    ...(r.kind === 'at' && r.at ? { at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : {}),
-  }));
-  // Only 📌 kept attachments carry over (same file, shared); this-one-only files stay with this copy.
-  copy.attachments = copy.attachments.filter((a) => a.keep).map((a) => ({ ...a, id: uid() }));
-  if (t.start && t.due) {
-    // Keep the same gap between start and due.
-    const gap = Math.round((parseISO(t.due.slice(0, 10)) - parseISO(t.start)) / DAY_MS);
-    copy.start = toISO(addDays(parseISO(due.slice(0, 10)), -gap));
-  } else copy.start = '';
-  t.seriesId = copy.seriesId;
-  t.spawnedNext = copy.id;
-  copy.spawnSig = taskSig(copy); // so unticking can tell whether it's been changed since
-  DB.tasks.push(copy);
-  toast(`↻ Next one created: ${fmtDay(due.slice(0, 10))}`);
-  return copy;
-}
+  nextOf(t) { return (t.spawnedNext && DB.tasks.find((x) => x.id === t.spawnedNext)) || null; },
+  // Untouched = still as it was made (reminders going off and being sent to To Do don't count).
+  untouched(x) { return !x.done && !!x.spawnSig && this.sig(x) === x.spawnSig; },
+  sig(x) {
+    const { spawnSig, todo, ...rest } = x;
+    return JSON.stringify({ ...rest, reminders: x.reminders.map(({ fired, ...r }) => r) });
+  },
+  // A new task from t: not done, steps unticked, reminders ready to go off again, no To Do link; `extra` on top.
+  fresh(t, extra) {
+    const c = normalizeTask(JSON.parse(JSON.stringify(t)));
+    delete c.spawnSig;
+    Object.assign(c, { id: uid(), done: false, completedAt: 0, completedAllDay: false, spawnedNext: '', created: Date.now(), todo: null }, extra);
+    c.checklist = c.checklist.map((s) => ({ ...s, id: uid(), done: false }));
+    c.reminders = c.reminders.map((r) => ({ ...r, id: uid(), fired: false }));
+    return c;
+  },
+  makeNext(t, doneAt) {
+    if (!t.repeat || t.spawnedNext) return null;
+    const index = t.seriesIndex || 1;
+    if (endModeOf(t.repeat) === 'count' && index >= (t.repeat.count || 1)) return null; // that was the last one
+    const due = nextDue(t, doneAt);
+    if (!due) return null; // the repeat's end date has passed
+    // Its own To Do task comes with it (todo: null): it must never update the previous one's.
+    const copy = this.fresh(t, { due, progress: 'not', myDay: '', seriesId: t.seriesId || t.id, seriesIndex: index + 1 });
+    if (t.period && t.due) copy.period = rollPeriod(t.period, parseISO(t.due.slice(0, 10)), parseISO(due.slice(0, 10))); // the title never changes
+    // An exact-time reminder moves by as many days as the due date did.
+    const shiftDays = t.due ? Math.round((parseISO(due.slice(0, 10)) - parseISO(t.due.slice(0, 10))) / DAY_MS) : 0;
+    copy.reminders = copy.reminders.map((r) => (r.kind === 'at' && r.at ? { ...r, at: `${toISO(addDays(parseISO(r.at.slice(0, 10)), shiftDays))}${r.at.slice(10)}` } : r));
+    // Only 📌 kept attachments carry over (same file, shared); this-one-only files stay with this copy.
+    copy.attachments = copy.attachments.filter((a) => a.keep).map((a) => ({ ...a, id: uid() }));
+    if (t.start && t.due) {
+      // Keep the same gap between start and due.
+      const gap = Math.round((parseISO(t.due.slice(0, 10)) - parseISO(t.start)) / DAY_MS);
+      copy.start = toISO(addDays(parseISO(due.slice(0, 10)), -gap));
+    } else copy.start = '';
+    t.seriesId = copy.seriesId;
+    t.spawnedNext = copy.id;
+    copy.spawnSig = this.sig(copy); // so unticking can tell whether it's been changed since
+    DB.tasks.push(copy);
+    return copy;
+  },
+};
 
 // ===================== Recurring tasks =====================
 // repeat = {
@@ -2985,8 +2973,8 @@ const TD = {
         // To Do gives the day it was done; ticked today counts as now, an earlier day as that day.
         const at = graphMs(x.completedDateTime);
         const earlier = at != null && toISO(new Date(at)) < todayISO();
-        completeTask(t, earlier ? new Date(`${toISO(new Date(at))}T12:00`) : new Date(), earlier);
-      } else if (!there.done && t.done) uncompleteTask(t, true);
+        say(Series.tick(t, earlier ? new Date(`${toISO(new Date(at))}T12:00`) : new Date(), earlier));
+      } else if (!there.done && t.done) say(Series.untick(t)); // nobody to ask here: a changed next copy stays
     }
   },
   // To Do's repeat (Graph patternedRecurrence) as ours, or null if it's a kind we don't have.
@@ -3339,7 +3327,10 @@ document.addEventListener('click', (e) => {
       const t = DB.tasks.find((x) => x.id === id);
       if (!t) break;
       if (t.done) {
-        uncompleteTask(t);
+        const res = Series.untick(t);
+        if (res.outcome !== 'changed') say(res);
+        else if (confirm(res.question)) { Series.removeNext(t); toast(`Removed the next copy (${fullTitle(res.next)})`); }
+        else toast('The next copy stays');
         changed('tasks');
         setTimeout(() => { render(); renderDrawer(); }, 150); // let the tick show before the list re-sorts
       } else openDonePrompt(t); // ask when it was done, then tick it off
@@ -3364,13 +3355,14 @@ document.addEventListener('click', (e) => {
     case 'clear-repeat': setRepeat('freq', ''); break;
     case 'clear-done-time': {
       const t = currentTask();
-      if (t && t.done) { setDoneDate(t, toISO(new Date(t.completedAt)), ''); changed('tasks'); render(); renderDrawer(); }
+      if (t && t.done) { say(Series.setDone(t, toISO(new Date(t.completedAt)), '')); changed('tasks'); render(); renderDrawer(); }
       break;
     }
     case 'duplicate-task': {
       const t = currentTask();
       if (!t) break;
-      const copy = duplicateTask(t);
+      const copy = Series.duplicate(t);
+      changed('tasks');
       render();
       openTaskDrawer(copy.id);
       toast(`Made “${fullTitle(copy)}”`);
@@ -3748,7 +3740,7 @@ else {
 }
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, TD, TaskEdit, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, completeTask, uncompleteTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
+window.PA = { DB, DF, RO, AT, TD, TaskEdit, Series, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, nextReminderAt };
 </script>
 </body>
 </html>
