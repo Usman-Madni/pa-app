@@ -1,5 +1,5 @@
 // Buckets, board view and labels: create, assign, filter, move, rename, delete, and they reach the data file.
-const { loadApp, fakeFile, submitForm, check, done } = require('./helpers');
+const { loadApp, fakeFile, submitForm, answer, check, done } = require('./helpers');
 
 const $ = (win, sel) => win.document.querySelector(sel);
 const $$ = (win, sel) => [...win.document.querySelectorAll(sel)];
@@ -52,8 +52,8 @@ function pick(win, sel, value, type = 'input') {
   check($$(win, '[data-bucket-col]').map((c) => c.dataset.bucketCol)[0] === bills.id, 'bucket moved left');
 
   // Rename
-  win.prompt = () => 'Monthly bills';
   $(win, `[data-action="rename-bucket"][data-id="${bills.id}"]`).click();
+  await answer(win, true, 'Monthly bills');
   check(bills.name === 'Monthly bills', 'bucket renamed');
 
   // --- Filters & list view ---
@@ -95,8 +95,8 @@ function pick(win, sel, value, type = 'input') {
   check($(win, '#main').textContent.includes('Monthly bills') && $(win, '#main').textContent.includes('Urgent call'), 'Settings lists buckets and labels');
   pick(win, `[data-label-color="${urgent.id}"]`, '#3b82f6', 'change');
   check(urgent.color === '#3b82f6', 'label colour can be changed');
-  win.prompt = () => 'Call back';
   $(win, `[data-action="rename-label"][data-id="${urgent.id}"]`).click();
+  await answer(win, true, 'Call back');
   check(urgent.name === 'Call back', 'label renamed');
 
   // --- Everything reaches the data file ---
@@ -106,11 +106,11 @@ function pick(win, sel, value, type = 'input') {
   check(file.json().version === 2, 'data file says version 2');
 
   // --- Deleting ---
-  let asked = '';
-  win.confirm = (m) => { asked = m; return true; };
   $(win, `[data-action="delete-label"][data-id="${urgent.id}"]`).click();
+  let asked = await answer(win, true);
   check(PA.DB.labels.length === 0 && elec.labels.length === 0 && /1 task/.test(asked), 'deleting a label takes it off its tasks (after asking)');
   $(win, `[data-action="delete-bucket"][data-id="${bills.id}"]`).click();
+  asked = await answer(win, true);
   check(PA.DB.buckets.length === 1 && elec.bucket === '' && /move to No bucket/.test(asked), 'deleting a bucket moves its tasks to No bucket (after asking)');
   check(PA.DB.tasks.some((t) => t.id === elec.id), 'deleting a bucket never deletes tasks');
   app.close();

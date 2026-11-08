@@ -1,7 +1,7 @@
 // Notifications: every message is kept with its time for 30 days (in the data file), a count of unread ones in the
 // sidebar, a screen listing them newest first by day, a reminder opens its task, Clear all, old data files still
 // load, an empty browser stays "empty", and the read-only phone view reads them but never adds or changes any.
-const { loadApp, tick, check, done } = require('./helpers');
+const { loadApp, answer, tick, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp();
@@ -50,6 +50,7 @@ const { loadApp, tick, check, done } = require('./helpers');
 
   // --- Clear all ---
   main.querySelector('[data-action="clear-notices"]').click();
+  await answer(win, true);
   const cleared = PA.DB.notices.length;
   check(cleared === 0 && doc.querySelector('#main .empty')?.textContent === 'No notifications yet', 'Clear all empties the list');
 

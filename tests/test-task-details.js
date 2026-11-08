@@ -1,5 +1,5 @@
 // Task details drawer: old data still loads, fields save, checklist, notes, My Day, tabs, read-only drawer.
-const { loadApp, submitForm, confirmDone, tick, check, done } = require('./helpers');
+const { loadApp, submitForm, confirmDone, answer, tick, check, done } = require('./helpers');
 
 const pad = (n) => String(n).padStart(2, '0');
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -131,12 +131,11 @@ const click = (win, sel) => win.document.querySelector(sel).click();
   check(!doc.body.classList.contains('drawer-open'), 'Esc closes the drawer');
 
   // Delete a task with notes asks first
-  let asked = '';
-  win.confirm = (m) => { asked = m; return false; };
   win.document.querySelector('[data-view="tasks"]').click();
   win.document.querySelector('[data-filter="active"]').click();
   click(win, `[data-action="open-task"][data-id="${t.id}"]`);
   click(win, '#drawer [data-action="delete-task"]');
+  const asked = await answer(win, false);
   check(asked.includes('Renamed task') && PA.DB.tasks.includes(t), 'deleting a task with notes asks first (and No keeps it)');
   app.close();
 

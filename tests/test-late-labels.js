@@ -1,7 +1,7 @@
 // Done late (tasks, panel, history, calendar), late repeats keep their missed copies, no 23:59 on repeat
 // previews, managing labels from the panel, the board keeps its scroll after an edit, and the wheel over
 // the dimmed area scrolls the board.
-const { loadApp, check, done } = require('./helpers');
+const { loadApp, answer, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp({ storage: { dev_taskLayout: '"list"' } });
@@ -56,16 +56,15 @@ const { loadApp, check, done } = require('./helpers');
   PA.renderDrawer();
   doc.querySelector('#drawer [data-action="manage-labels"]').click();
   check(doc.querySelectorAll('#drawer [data-action="delete-label"]').length === 2, '✎ Manage lists the labels with rename, colour and delete');
-  win.prompt = () => 'Waiting on someone';
   doc.querySelector('#drawer [data-action="rename-label"][data-id="l1"]').click();
+  await answer(win, true, 'Waiting on someone');
   check(PA.DB.labels[0].name === 'Waiting on someone' && doc.querySelector('#drawer').textContent.includes('Waiting on someone'), 'rename from the panel');
   const colour = doc.querySelector('#drawer [data-label-color="l2"]');
   colour.value = '#22c55e';
   colour.dispatchEvent(new win.Event('change', { bubbles: true }));
   check(PA.DB.labels[1].color === '#22c55e', 'recolour from the panel');
-  let asked = '';
-  win.confirm = (m) => { asked = m; return true; };
   doc.querySelector('#drawer [data-action="delete-label"][data-id="l2"]').click();
+  const asked = await answer(win, true);
   check(PA.DB.labels.length === 1 && !next.labels.includes('l2') && PA.DB.tasks.includes(next) && /Delete label "Call"/.test(asked), 'delete from the panel (asks first, keeps the task)');
   doc.querySelector('#drawer [data-action="manage-labels"]').click();
   check(!doc.querySelector('#drawer [data-action="delete-label"]'), '"Done" closes the label list');

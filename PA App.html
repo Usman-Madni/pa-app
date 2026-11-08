@@ -370,6 +370,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 }
 .modal h3 { margin: 0; font-size: 17px; }
 .modal .field { flex: 1; min-width: 130px; }
+.modal .ask-q { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
 
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -483,6 +484,40 @@ function toast(msg, task) {
   $('#toasts').append(el);
   setTimeout(() => el.remove(), 5000);
   Notices.add(msg, task);
+}
+
+// ===================== Questions =====================
+// The app's own question box, in its style, instead of the browser's grey one. ask() answers true/false;
+// askText() answers the text typed, or null if cancelled. Enter = yes; Esc, Cancel or a click outside = no.
+let asking = null; // {resolve, withText} while a question is open
+const ask = (question, opts) => openAsk(question, opts, false);
+const askText = (question, value = '', opts) => openAsk(question, opts, true, value);
+function openAsk(question, { yes = 'OK', no = 'Cancel', danger = false } = {}, withText = false, value = '') {
+  if (asking) answerAsk(false); // only one at a time
+  return new Promise((resolve) => {
+    asking = { resolve, withText };
+    $('#modal').innerHTML = `
+      <div class="modal-back" data-action="ask-no"></div>
+      <form class="modal" data-form="ask" role="alertdialog" aria-label="${esc(question)}">
+        <p class="ask-q">${esc(question)}</p>
+        ${withText ? `<input class="input" name="answer" value="${esc(value)}" autocomplete="off" aria-label="${esc(question)}">` : ''}
+        <div class="row" style="justify-content:flex-end">
+          <button type="button" class="btn" data-action="ask-no">${esc(no)}</button>
+          <button class="btn ${danger ? 'danger' : 'primary'}" data-ask-yes>${esc(yes)}</button>
+        </div>
+      </form>`;
+    const first = $(withText ? '#modal [name="answer"]' : '#modal [data-ask-yes]');
+    first.focus();
+    if (withText) first.select();
+  });
+}
+function answerAsk(yes) {
+  if (!asking) return;
+  const { resolve, withText } = asking;
+  const text = withText ? $('#modal [name="answer"]').value : '';
+  asking = null;
+  $('#modal').innerHTML = '';
+  resolve(withText ? (yes ? text : null) : yes);
 }
 
 // ===================== Per-device settings =====================
@@ -927,7 +962,7 @@ const AT = {
 
   async pickFolder() {
     const inUse = DB.tasks.some((t) => t.attachments.length);
-    if (this.dir && inUse && !confirm('Files already attached stay in the current folder — move them into the new folder yourself, or they will show as missing. Change folder?')) return;
+    if (this.dir && inUse && !(await ask('Files already attached stay in the current folder — move them into the new folder yourself, or they will show as missing. Change folder?', { yes: 'Change folder' }))) return;
     try {
       this.dir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'pa-attachments' });
       await idb.set('attachments', this.dir);
@@ -1048,7 +1083,7 @@ const AT = {
   async remove(task, attId) {
     const att = task && task.attachments.find((a) => a.id === attId);
     if (!att || state.readOnly) return;
-    if (!confirm(`Remove "${att.name}" from this task?`)) return;
+    if (!(await ask(`Remove "${att.name}" from this task?`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed('tasks');
     // Delete the file only when no other task (e.g. another copy of a repeating task) still uses it.
@@ -1767,18 +1802,18 @@ function addBucket(name) {
   DB.buckets.push({ id: uid(), name: name.trim(), order });
   changed('buckets');
 }
-function renameBucket(id) {
+async function renameBucket(id) {
   const b = DB.buckets.find((x) => x.id === id);
-  const name = b && prompt('Rename bucket', b.name);
+  const name = b && (await askText('Rename bucket', b.name, { yes: 'Rename' }));
   if (!name || !name.trim()) return;
   b.name = name.trim();
   changed('buckets');
 }
-function deleteBucket(id) {
+async function deleteBucket(id) {
   const b = DB.buckets.find((x) => x.id === id);
   if (!b) return;
   const inIt = DB.tasks.filter((t) => t.bucket === id);
-  if (!confirm(`Delete bucket "${b.name}"?${inIt.length ? ` Its ${inIt.length} task(s) move to No bucket.` : ''}`)) return;
+  if (!(await ask(`Delete bucket "${b.name}"?${inIt.length ? ` Its ${inIt.length} task(s) move to No bucket.` : ''}`, { yes: 'Delete', danger: true }))) return;
   inIt.forEach((t) => { t.bucket = ''; });
   DB.buckets = DB.buckets.filter((x) => x.id !== id);
   changed('buckets', 'tasks');
@@ -1806,18 +1841,18 @@ function addLabel(name, color, task) {
   if (task) task.labels.push(l.id);
   changed('labels', 'tasks');
 }
-function renameLabel(id) {
+async function renameLabel(id) {
   const l = DB.labels.find((x) => x.id === id);
-  const name = l && prompt('Rename label', l.name);
+  const name = l && (await askText('Rename label', l.name, { yes: 'Rename' }));
   if (!name || !name.trim()) return;
   l.name = name.trim();
   changed('labels');
 }
-function deleteLabel(id) {
+async function deleteLabel(id) {
   const l = DB.labels.find((x) => x.id === id);
   if (!l) return;
   const used = DB.tasks.filter((t) => t.labels.includes(id));
-  if (!confirm(`Delete label "${l.name}"?${used.length ? ` It comes off ${used.length} task(s).` : ''}`)) return;
+  if (!(await ask(`Delete label "${l.name}"?${used.length ? ` It comes off ${used.length} task(s).` : ''}`, { yes: 'Delete', danger: true }))) return;
   used.forEach((t) => { t.labels = t.labels.filter((x) => x !== id); });
   DB.labels = DB.labels.filter((x) => x.id !== id);
   changed('labels', 'tasks');
@@ -2164,10 +2199,7 @@ function setTaskField(field, value) {
   } else if (field === 'doneDate' || field === 'doneTime') {
     const d = new Date(t.completedAt || Date.now());
     const time = t.completedAllDay ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    doneDateMoved(t, field === 'doneDate' ? Series.setDone(t, value, time) : Series.setDone(t, toISO(d), value));
-    changed('tasks');
-    render();
-    renderDrawer();
+    doneDateMoved(t, field === 'doneDate' ? Series.setDone(t, value, time) : Series.setDone(t, toISO(d), value)); // saves and redraws
     return;
   }
   else if (['bucket', 'progress', 'priority', 'start', 'notes'].includes(field)) t[field] = value;
@@ -2234,10 +2266,13 @@ const TaskEdit = {
   },
 };
 const say = (res) => { if (res && res.note) toast(res.note); return res; }; // show what an edit reported
-// After a done date changed in the panel: a changed next copy is only moved if you say so.
-function doneDateMoved(t, res) {
-  if (res.outcome === 'changed' && confirm(res.question)) say(Series.moveNext(t));
+// After a done date changed in the panel: a changed next copy is only moved if you say so. Then save and redraw.
+async function doneDateMoved(t, res) {
+  if (res.outcome === 'changed' && (await ask(res.question, { yes: 'Move it', no: 'Keep it' }))) say(Series.moveNext(t));
   else say(res);
+  changed('tasks');
+  render();
+  renderDrawer();
 }
 
 // ===================== Series: ticking, unticking and the next copy =====================
@@ -3417,7 +3452,7 @@ async function importData(file) {
     const parsed = JSON.parse(await file.text());
     const data = parsed.app === 'PA App' ? parsed.data : parsed; // older exports were the bare data
     if (!data || !REQUIRED_KEYS.every((k) => Array.isArray(data[k]))) throw new Error();
-    if (!confirm(`Replace everything here with ${data.tasks.length} tasks, ${data.notes.length} notes and ${data.events.length} events?`)) return;
+    if (!(await ask(`Replace everything here with ${data.tasks.length} tasks, ${data.notes.length} notes and ${data.events.length} events?`, { yes: 'Replace', danger: true }))) return;
     DB.importAll(data);
     changed(...DATA_KEYS);
     toast('Backup imported');
@@ -3526,15 +3561,20 @@ document.addEventListener('click', (e) => {
       if (!t) break;
       if (t.done) {
         const res = Series.untick(t);
-        if (res.outcome !== 'changed') say(res);
-        else if (confirm(res.question)) { Series.removeNext(t); toast(`Removed the next copy (${fullTitle(res.next)})`); }
-        else toast('The next copy stays');
         changed('tasks');
         setTimeout(() => { render(); renderDrawer(); }, 150); // let the tick show before the list re-sorts
+        if (res.outcome !== 'changed') say(res);
+        else {
+          ask(res.question, { yes: 'Remove it', no: 'Keep it', danger: true }).then((yes) => {
+            if (yes) { Series.removeNext(t); toast(`Removed the next copy (${fullTitle(res.next)})`); changed('tasks'); render(); renderDrawer(); }
+            else toast('The next copy stays');
+          });
+        }
       } else openDonePrompt(t); // ask when it was done, then tick it off
       break;
     }
     case 'done-cancel': closeDonePrompt(); render(); renderDrawer(); break;
+    case 'ask-no': answerAsk(false); break;
     case 'done-quick': {
       // Today (no time), or on the due date (with its time, if it has one) — which counts as on time.
       const t = DB.tasks.find((x) => x.id === state.donePrompt);
@@ -3553,7 +3593,7 @@ document.addEventListener('click', (e) => {
     case 'clear-repeat': setRepeat('freq', ''); break;
     case 'clear-done-time': {
       const t = currentTask();
-      if (t && t.done) { doneDateMoved(t, Series.setDone(t, toISO(new Date(t.completedAt)), '')); changed('tasks'); render(); renderDrawer(); }
+      if (t && t.done) doneDateMoved(t, Series.setDone(t, toISO(new Date(t.completedAt)), ''));
       break;
     }
     case 'duplicate-task': {
@@ -3570,16 +3610,20 @@ document.addEventListener('click', (e) => {
       const t = DB.tasks.find((x) => x.id === id);
       if (!t) break;
       const rich = t.notes.trim() || t.checklist.length || t.attachments.length;
-      if (rich && !confirm(`Delete "${fullTitle(t)}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`)) break;
-      DB.tasks = DB.tasks.filter((x) => x.id !== id);
-      changed('tasks');
-      if (state.openTask === id) closeTaskDrawer();
-      render();
+      const remove = () => {
+        DB.tasks = DB.tasks.filter((x) => x.id !== id);
+        changed('tasks');
+        if (state.openTask === id) closeTaskDrawer();
+        render();
+      };
+      if (!rich) { remove(); break; }
+      ask(`Delete "${fullTitle(t)}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`, { yes: 'Delete', danger: true })
+        .then((yes) => { if (yes) remove(); });
       break;
     }
     case 'open-task': openTaskDrawer(id); break;
     case 'clear-notices':
-      if (confirm('Clear all notifications? This can\'t be undone.')) { Notices.clear(); render(); }
+      ask('Clear all notifications? This can\'t be undone.', { yes: 'Clear all', danger: true }).then((yes) => { if (yes) { Notices.clear(); render(); } });
       break;
     case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
     case 'board-add':
@@ -3635,8 +3679,8 @@ document.addEventListener('click', (e) => {
       const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
       if (!a) break;
       const dot = a.name.lastIndexOf('.');
-      const name = prompt(`Rename attachment${a.keep ? ' (kept on every repeat — renames it for all of them)' : ''}`, dot > 0 ? a.name.slice(0, dot) : a.name);
-      if (name != null) AT.rename(t, a.id, name);
+      askText(`Rename attachment${a.keep ? ' (kept on every repeat — renames it for all of them)' : ''}`, dot > 0 ? a.name.slice(0, dot) : a.name, { yes: 'Rename' })
+        .then((name) => { if (name != null) AT.rename(t, a.id, name); });
       break;
     }
     case 'toggle-keep': {
@@ -3668,13 +3712,13 @@ document.addEventListener('click', (e) => {
       changed('tasks'); render(); renderDrawer();
       break;
     }
-    case 'rename-bucket': renameBucket(id); render(); renderDrawer(); break;
-    case 'delete-bucket': deleteBucket(id); render(); renderDrawer(); break;
+    case 'rename-bucket': renameBucket(id).then(() => { render(); renderDrawer(); }); break;
+    case 'delete-bucket': deleteBucket(id).then(() => { render(); renderDrawer(); }); break;
     case 'bucket-left': moveBucket(id, -1); render(); break;
     case 'bucket-right': moveBucket(id, 1); render(); break;
-    case 'rename-label': renameLabel(id); render(); renderDrawer(); break;
+    case 'rename-label': renameLabel(id).then(() => { render(); renderDrawer(); }); break;
     case 'manage-labels': state.labelManage = !state.labelManage; renderDrawer(); break;
-    case 'delete-label': deleteLabel(id); render(); renderDrawer(); break;
+    case 'delete-label': deleteLabel(id).then(() => { render(); renderDrawer(); }); break;
     case 'close-task': closeTaskDrawer(); break;
     case 'toggle-myday': {
       const t = currentTask();
@@ -3705,16 +3749,17 @@ document.addEventListener('click', (e) => {
     case 'cal-today': state.calMonth = monthStart(new Date()); state.selectedDay = todayISO(); render(); break;
     case 'new-note': newNote(); break;
     case 'delete-note':
-      if (confirm('Delete this note?')) {
+      ask('Delete this note?', { yes: 'Delete', danger: true }).then((yes) => {
+        if (!yes) return;
         DB.notes = DB.notes.filter((n) => n.id !== state.activeNote);
         state.activeNote = null;
         changed('notes');
         render();
-      }
+      });
       break;
     case 'df-create': DF.createNew().then(render); break;
     case 'df-open': DF.openExisting().then(render); break;
-    case 'df-unlink': if (confirm('Stop saving to this data file? The file itself is kept.')) DF.unlink(); break;
+    case 'df-unlink': ask('Stop saving to this data file? The file itself is kept.', { yes: 'Stop saving' }).then((yes) => { if (yes) DF.unlink(); }); break;
     case 'df-reconnect': DF.reconnect().then(render); break;
     case 'df-retry': DF.status = 'ok'; DF.save(); break;
     case 'df-keep-mine': DF.keepMine(); break;
@@ -3724,7 +3769,7 @@ document.addEventListener('click', (e) => {
     case 'td-sync':
       if (TD.waitingForFile()) { toast('Reconnect the data file first — then it syncs straight away'); break; }
       TD.sync(); render(); break;
-    case 'td-disconnect': if (confirm('Stop sending tasks to Microsoft To Do on this computer?')) TD.disconnect(); break;
+    case 'td-disconnect': ask('Stop sending tasks to Microsoft To Do on this computer?', { yes: 'Disconnect', danger: true }).then((yes) => { if (yes) TD.disconnect(); }); break;
     case 'cycle-theme': cycleTheme(); break;
     case 'enable-notifications': askNotifications(); break;
     case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
@@ -3736,6 +3781,7 @@ document.addEventListener('submit', (e) => {
   const form = e.target.closest('[data-form]');
   if (!form) return;
   e.preventDefault();
+  if (form.dataset.form === 'ask') return answerAsk(true);
   if (state.readOnly) return toast('Read-only on this device');
   const data = Object.fromEntries(new FormData(form));
   if (form.dataset.form === 'done-date') { finishDonePrompt(data); return; }
@@ -3801,6 +3847,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (state.openTask) closeTaskDrawer();

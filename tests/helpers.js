@@ -87,7 +87,9 @@ function loadApp(opts = {}) {
         win.showSaveFilePicker = async () => opts.pickFile || fakeFile();
         win.showDirectoryPicker = async () => opts.pickFolder || fakeFolder();
       }
-      win.confirm = () => true;
+      // The app asks in its own box (answer() below); the browser's would mean a question was missed.
+      win.confirm = () => { throw new Error('the browser\'s confirm() was used'); };
+      win.prompt = () => { throw new Error('the browser\'s prompt() was used'); };
       win.scrollTo = () => {};
       if (opts.fetch) win.fetch = opts.fetch; // a fake Microsoft (see test-todo-sync)
       if (!win.TextEncoder) win.TextEncoder = require('util').TextEncoder;
@@ -121,6 +123,20 @@ function confirmDone(win, values = {}) {
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
+// Answer the app's own question box: yes or no, with text typed first for one that asks for a name.
+// Returns the question that was asked.
+async function answer(win, yes = true, text) {
+  await tick(0);
+  const form = win.document.querySelector('#modal form[data-form="ask"]');
+  if (!form) throw new Error('no question is open');
+  const question = form.querySelector('.ask-q').textContent;
+  if (text != null) form.elements.answer.value = text;
+  if (yes) form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  else win.document.querySelector('#modal [data-action="ask-no"]').click();
+  await tick(0);
+  return question;
+}
+
 let failures = 0;
 function check(cond, label) {
   if (cond) console.log('  ok   ' + label);
@@ -131,4 +147,4 @@ function done() {
   process.exit(0);
 }
 
-module.exports = { DEPS_DIR, APP_FILE, loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, done };
+module.exports = { DEPS_DIR, APP_FILE, loadApp, fakeFile, fakeFolder, submitForm, confirmDone, answer, tick, check, done };

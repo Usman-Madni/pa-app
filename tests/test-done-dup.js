@@ -1,6 +1,6 @@
 // Ticking asks "Done on…", unticking a repeat removes an untouched next copy, the done date can be changed
 // (and moves an untouched "after I finish" copy), duplicating, years in "after", and the 999 limit.
-const { loadApp, confirmDone, check, done } = require('./helpers');
+const { loadApp, confirmDone, answer, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp({ storage: { dev_taskLayout: '"list"' } });
@@ -80,17 +80,17 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   check(w3 && w3.due.startsWith('2026-10-19') && !PA.DB.tasks.includes(w2), 'the untouched next copy moves with it (now the 19th)');
   // If the next copy was changed, it asks: No keeps it where it is, Yes moves only its date (the changes stay)
   w3.notes = 'bring the big can';
-  let askedMove = '';
-  win.confirm = (q) => { askedMove = q; return false; };
   const dd2 = doc.querySelector('#drawer [data-field="doneDate"]');
   dd2.value = '2026-10-17';
   dd2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(doc.querySelector('#modal form[data-form="ask"]') && !doc.querySelector('#modal').textContent.includes('Chrome'), 'it asks in the app\'s own box');
+  const askedMove = await answer(win, false);
   check(/was changed after it was made \(notes\)\. Move it to .* anyway\?/.test(askedMove), `a changed next copy: it asks first (got "${askedMove}")`);
   check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-19') && doc.querySelector('#toasts').textContent.includes('The next copy stays'), 'No keeps it where it is');
-  win.confirm = () => true;
   const dd3 = doc.querySelector('#drawer [data-field="doneDate"]');
   dd3.value = '2026-10-18';
   dd3.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await answer(win, true);
   check(PA.DB.tasks.includes(w3) && w3.due.startsWith('2026-10-21') && w3.notes === 'bring the big can', 'Yes moves its date and keeps the changes');
 
   // --- Unticking a repeat removes an untouched next copy ---
@@ -112,16 +112,15 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   check(sep2 && PA.DB.tasks.filter((x) => PA.fullTitle(x) === 'Elec bill (Sep)').length === 1, 'ticking again makes just one new copy');
   sep2.checklist.push({ id: 's', text: 'check meter', done: false }); // changed
   PA.render();
-  let asked = '';
-  win.confirm = (q) => { asked = q; return false; };
   tickBox(m.id);
+  let asked = await answer(win, false);
   check(/The next copy \(Elec bill \(Sep\)\) was changed after it was made \(steps\)\. Remove it anyway\?/.test(asked), `a changed next copy: it asks first, saying what changed (got "${asked}")`);
   check(PA.DB.tasks.includes(sep2) && doc.querySelector('#toasts').textContent.includes('The next copy stays'), 'No keeps it (and says so)');
   PA.Series.tick(m);
   check(m.spawnedNext === sep2.id && PA.DB.tasks.filter((x) => x.seriesId === m.seriesId).length === 2, 'ticking again reuses it (no second copy)');
-  win.confirm = () => true;
   PA.render();
   tickBox(m.id);
+  await answer(win, true);
   check(!PA.DB.tasks.includes(sep2) && m.spawnedNext === '', 'Yes removes it');
   // Renaming the series isn't "changing" the next copy: unticking removes it without asking
   PA.Series.tick(m);
@@ -133,14 +132,11 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   title.dispatchEvent(new win.Event('input', { bubbles: true }));
   title.dispatchEvent(new win.Event('change', { bubbles: true }));
   check(m.title === 'Electricity bill' && m.period === 'Aug' && sep3.period === 'Sep', 'renaming one copy renames the others (each keeps its moving part)');
-  asked = '';
-  win.confirm = (q) => { asked = q; return true; };
   PA.state.openTask = null;
   PA.renderDrawer();
   PA.render();
   tickBox(m.id);
-  check(!asked && !PA.DB.tasks.includes(sep3), 'a rename alone doesn\'t count as a change');
-  win.confirm = () => true;
+  check(!doc.querySelector('#modal form[data-form="ask"]') && !PA.DB.tasks.includes(sep3), 'a rename alone doesn\'t count as a change');
 
   // --- Duplicate ---
   const d = PA.addTask({ title: 'Renew car insurance', due: '2026-12-01T23:59', priority: 'high' });

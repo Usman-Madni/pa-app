@@ -1,6 +1,6 @@
 // Attachments: folder, smart names, never overwriting, only names in the data file, open, 📌 kept-on-every-repeat
 // vs this-one-only, renaming (and its real file), deleting only unused files, series history, reconnect, phone.
-const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers');
+const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./helpers');
 
 (async () => {
   const folder = fakeFolder('PA Attachments');
@@ -12,7 +12,6 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   win.open = (url) => { opened.push(url); };
   win.URL.createObjectURL = (f) => { opened.push(f); return 'blob:fake'; };
   win.URL.revokeObjectURL = () => {};
-  win.confirm = () => true;
   const drawer = () => doc.querySelector('#drawer');
   const click = (sel) => doc.querySelector(sel).click();
 
@@ -68,8 +67,8 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   // Rename a 📌 kept file → every copy and the real file
   PA.state.openTask = next.id;
   PA.renderDrawer();
-  win.prompt = () => 'Meter photo';
   click(`#drawer [data-action="rename-attach"][data-att="${next.attachments[0].id}"]`);
+  await answer(win, true, 'Meter photo');
   await tick(20);
   check(next.attachments[0].name === 'Meter photo.jpg' && t.attachments[1].name === 'Meter photo.jpg', 'renaming a 📌 file renames it in every copy');
   check(folder.files['Meter photo.jpg'] && !folder.files['Aug elec bill 2026.jpg'], 'and renames the real file');
@@ -77,8 +76,8 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   // Rename a this-one-only file → just this task, and the real file
   PA.state.openTask = t.id;
   PA.renderDrawer();
-  win.prompt = () => 'August electricity bill';
   click(`#drawer [data-action="rename-attach"][data-att="${a1.id}"]`);
+  await answer(win, true, 'August electricity bill');
   await tick(20);
   check(a1.name === 'August electricity bill.pdf' && folder.files['August electricity bill.pdf'] && !folder.files['Aug elec bill 2026 (2).pdf'], 'renaming a this-one-only file renames it and its real file');
   check(folder.files['Aug elec bill 2026.pdf'], "someone else's file in the folder is untouched");
@@ -93,14 +92,18 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   check(legacyA.attachments[0].file === 'A only.pdf' && legacyB.attachments[0].file === 'shared.pdf' && folder.files['shared.pdf'] && folder.files['A only.pdf'], 'a shared this-one-only file: this task gets its own renamed copy');
 
   // Remove: file deleted only when no task uses it
-  await PA.AT.remove(next, next.attachments[0].id);
+  let removing = PA.AT.remove(next, next.attachments[0].id);
+  check(/Remove "Meter photo\.jpg" from this task\?/.test(await answer(win, true)), 'removing asks first');
+  await removing;
   check(folder.files['Meter photo.jpg'], 'removing from one copy keeps the file while another copy uses it');
-  await PA.AT.remove(t, t.attachments[1].id);
+  removing = PA.AT.remove(t, t.attachments[1].id);
+  await answer(win, true);
+  await removing;
   check(!folder.files['Meter photo.jpg'], 'removing it from the last task deletes the file');
-  win.confirm = () => false;
-  await PA.AT.remove(t, t.attachments[0].id);
+  removing = PA.AT.remove(t, t.attachments[0].id);
+  await answer(win, false);
+  await removing;
   check(t.attachments.length === 1, 'saying No keeps the attachment');
-  win.confirm = () => true;
 
   // Series history on the new copy: August with its bill
   PA.state.openTask = next.id;

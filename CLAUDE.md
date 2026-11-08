@@ -11,6 +11,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - **Every edit goes through `changed(key)`.** That saves in the browser and queues the data-file save. Don't write `localStorage` directly for data.
 - **Read-only devices** (any phone or tablet, browsers without the File System Access API, or `?readonly`) must never change data. New edit actions go in `EDIT_ACTIONS` and get the `edit-only` class.
 - **New records** get IDs from `uid()`, never `Date.now()` alone.
+- **Questions use the app's own box:** `await ask(question, {yes, danger})` or `askText(question, value)`, never the browser's `confirm()` / `prompt()` / `alert()` (a test checks). In tests, answer it with `answer(win, yes, text)`.
 - **Due date, rename and repeat changes go through `TaskEdit`** (`setDue`, `rename`, `setRepeat`), wherever they come from. It does the follow-up steps and returns a note for the caller to show. Words for things are in `GLOSSARY.md`.
 - **Ticking, unticking, done dates and duplicates go through `Series`** (`tick`, `untick`, `setDone`, `duplicate`). It owns the next copy and its `spawnSig` snapshot, and reports what it found; the caller asks or shows the message.
 - **To Do sync rules live in `TD.decideIn` / `TD.decideOut`**, which change nothing and talk to nothing; `TD.sync` only carries out their plan. A new rule goes there, with a test in `test-todo-decide.js`.
