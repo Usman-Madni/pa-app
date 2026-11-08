@@ -131,5 +131,8 @@ const day = (d) => local(d).slice(0, 10);
   const src = fs.readFileSync(APP_FILE, 'utf8');
   const bad = src.split('\n').filter((l) => /toISOString\(\)\s*\.(slice|substring|substr|split)/.test(l));
   check(bad.length === 0, 'no toISOString() sliced into a date' + (bad.length ? ': ' + bad[0].trim() : ''));
+  // Static rule: times always show on the 12-hour clock ("1:52 PM"), whatever the computer's region says.
+  const clocks = src.split('\n').filter((l) => /toLocale(Time)?String\(/.test(l) && /hour|timeStyle/.test(l));
+  check(clocks.length >= 2 && clocks.every((l) => /hour12: true/.test(l)), 'every time is shown on the 12-hour clock' + (clocks.find((l) => !/hour12: true/.test(l)) ? ': ' + clocks.find((l) => !/hour12: true/.test(l)).trim() : ''));
   done();
 })();
