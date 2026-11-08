@@ -1,6 +1,7 @@
 # PA App — how to work here
 
 Personal assistant (tasks, reminders, notes, calendar) in **one file: `PA App.html`**. Vanilla JS, no build step, no framework.
+The user's guide is its own file, `PA App Guide.html`, opened from the app (sidebar and Settings). When a feature changes what the user sees, update the guide in the same commit; it's public, so nothing personal.
 Background, data model and past decisions: **read `PA_APP_CONTEXT.md` before changing data, saving or the read-only mode.**
 Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This repo is public**: nothing personal goes in tracked files or commit messages.
 

@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PA App Guide</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='system-ui' font-weight='700'>?</text></svg>">
+<style>
+/* Same colours as PA App; follows its 🌓 setting (dev_theme) when opened from it. */
+:root {
+  --bg: #f6f7fb; --panel: #ffffff; --panel-2: #f1f3f9; --text: #1c2030; --muted: #6b7185; --border: #e3e6ef;
+  --accent: #4f46e5; --accent-soft: #eceafd; --danger: #dc2626; --ok: #16a34a; --warn: #d97706; --late: #ea580c; --event: #0d9488;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
+    --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --late: #fb923c; --event: #2dd4bf;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
+  --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --late: #fb923c; --event: #2dd4bf;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+code, kbd { background: var(--panel-2); border: 1px solid var(--border); padding: 0 6px; border-radius: 6px; font-size: 13.5px; font-family: inherit; }
+kbd { font-weight: 600; }
+
+/* Layout: sidebar of chapters on the left, reading column on the right */
+.layout { display: flex; min-height: 100vh; }
+.side {
+  width: 270px; flex: none; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  background: var(--panel); border-right: 1px solid var(--border); padding: 18px 12px 24px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 16px; font-weight: 700; font-size: 17px; text-decoration: none; color: var(--text); }
+.logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
+.chap > a { display: flex; gap: 10px; padding: 7px 10px; border-radius: 9px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 14px; }
+.chap > a .n { width: 20px; flex: none; color: var(--accent); }
+.chap.on > a { background: var(--accent-soft); color: var(--accent); }
+.chap ol { list-style: none; margin: 2px 0 8px; padding: 0 0 0 30px; display: none; }
+.chap.on ol { display: block; }
+.chap ol a { display: block; padding: 3px 10px; border-radius: 7px; text-decoration: none; color: var(--muted); font-size: 13.5px; }
+.chap ol a.on { color: var(--text); background: var(--panel-2); font-weight: 600; }
+.side .foot { margin: 18px 10px 0; font-size: 12.5px; color: var(--muted); }
+
+.main { flex: 1; min-width: 0; }
+.bar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: baseline; gap: 14px; padding: 12px 40px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+}
+.bar .c { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.bar .s { font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .back { margin-left: auto; font-size: 13.5px; white-space: nowrap; }
+.content { max-width: 760px; padding: 28px 40px 120px; }
+h1 { font-size: 30px; margin: 4px 0 6px; letter-spacing: -.01em; }
+.lede { color: var(--muted); font-size: 16.5px; margin: 0 0 8px; }
+.chapter { margin-top: 56px; }
+.chapter > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 0 0 4px; }
+.chapter > .title { font-size: 25px; font-weight: 750; margin: 0 0 6px; letter-spacing: -.01em; }
+section { margin-top: 30px; }
+h3 { font-size: 19px; margin: 0 0 8px; }
+h3 .num { color: var(--accent); margin-right: 8px; font-variant-numeric: tabular-nums; }
+p { margin: 0 0 12px; }
+ul, ol.steps { margin: 0 0 14px; padding-left: 22px; }
+li { margin: 3px 0; }
+
+/* Visual bits */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 12px 0 16px; }
+.tip, .note, .warn { border-radius: 10px; padding: 10px 14px; margin: 12px 0 16px; font-size: 14.5px; }
+.tip { background: var(--accent-soft); }
+.note { background: var(--panel-2); }
+.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.tip b:first-child, .note b:first-child, .warn b:first-child { margin-right: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.grid .card { margin: 0; }
+.grid .card b { display: block; margin-bottom: 2px; }
+.grid .card span { color: var(--muted); font-size: 14px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 14.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.chip { display: inline-block; padding: 1px 9px; border-radius: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.c-over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.c-today { background: var(--accent-soft); color: var(--accent); }
+.c-up { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #3b82f6; }
+.c-done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.c-event { background: color-mix(in srgb, var(--event) 18%, transparent); color: var(--event); }
+.c-late { background: color-mix(in srgb, var(--late) 18%, transparent); color: var(--late); }
+.c-rep { border: 1.5px dashed var(--muted); color: var(--muted); }
+.qa { font-family: ui-monospace, Consolas, monospace; font-size: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin: 8px 0; }
+.qa .arrow { color: var(--muted); }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 16px; }
+.flow .step { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.flow .to { color: var(--muted); }
+
+/* Phone: contents become a strip at the top */
+.toggle { display: none; }
+@media (max-width: 860px) {
+  .layout { display: block; }
+  .side { position: fixed; inset: 0 30% 0 0; z-index: 20; transform: translateX(-105%); transition: transform .2s; box-shadow: 0 0 40px rgba(0, 0, 0, .3); width: auto; }
+  body.menu .side { transform: none; }
+  .toggle { display: inline-block; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
+  .bar { padding: 10px 16px; gap: 10px; }
+  .bar .c { display: none; }
+  .content { padding: 20px 16px 100px; }
+  h1 { font-size: 25px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side" aria-label="Contents">
+    <a class="brand" href="#top"><span class="logo">?</span><span>PA App Guide</span></a>
+    <div id="toc"></div>
+    <div class="foot">Examples are made up. Times show as on your own clock.</div>
+  </nav>
+  <div class="main">
+    <div class="bar">
+      <button class="toggle" type="button" aria-label="Contents">☰</button>
+      <span class="c" id="bar-chap">Start here</span>
+      <span class="s" id="bar-sec">PA App Guide</span>
+      <a class="back" href="PA App.html">← Back to PA App</a>
+    </div>
+    <div class="content">
+      <h1 id="top">PA App Guide</h1>
+      <p class="lede">Tasks, reminders, notes and a calendar in one place, with reminders on your phone through Microsoft To Do. Everything here is what's in the app today.</p>
+
+      <!-- ===================== 1 ===================== -->
+      <div class="chapter" data-chap="Start here">
+        <h2>Chapter 1</h2><div class="title">Start here</div>
+        <section id="what" data-title="What PA App is">
+          <h3>What PA App is</h3>
+          <p>PA App keeps your tasks, notes and events in <b>one data file</b> on your computer, saved a couple of seconds after every change. Your laptop is where you edit. Your phone can open the same file to read it, and Microsoft To Do puts your tasks on the phone with their reminders.</p>
+          <div class="grid">
+            <div class="card"><b>☀ My Day</b><span>Today's tasks, what's overdue, and today's events.</span></div>
+            <div class="card"><b>☑ Tasks</b><span>Every task, on a board or in a list.</span></div>
+            <div class="card"><b>▦ Calendar</b><span>The month, with tasks, events and coming repeats.</span></div>
+            <div class="card"><b>✎ Notes</b><span>Free-form notes, saved as you type.</span></div>
+            <div class="card"><b>🔔 Notifications</b><span>Every message from the last 30 days.</span></div>
+            <div class="card"><b>⚙ Settings</b><span>The data file, backups, phone reminders, buckets and labels.</span></div>
+          </div>
+        </section>
+        <section id="install" data-title="Install it on the laptop">
+          <h3>Install it on the laptop</h3>
+          <p>Open PA App's web address in Chrome, then install it so it opens in its own window like any other program:</p>
+          <ol class="steps">
+            <li>Open PA App in Chrome.</li>
+            <li>Click <b>⋮</b> (top right) › <b>Cast, save, and share</b> › <b>Install page as app</b>.</li>
+            <li>From then on, open it from the Start menu or the taskbar.</li>
+          </ol>
+          <div class="note"><b>Needs internet to open.</b> The installed app loads from the web each time, so it won't open offline yet. Your data never leaves your computer, apart from the copy of your tasks sent to To Do.</div>
+        </section>
+        <section id="first" data-title="The first time">
+          <h3>The first time</h3>
+          <ol class="steps">
+            <li><b>Settings › Create new data file</b>, or <b>Open existing data file</b> if you have one. Put it in a synced folder such as OneDrive so the phone can see it.</li>
+            <li><b>Settings › Choose backup folder</b>: one dated copy a day, automatically.</li>
+            <li>Open any task › <b>Choose attachments folder</b> for files you attach.</li>
+            <li><b>Settings › Phone reminders › Connect Microsoft To Do</b>, to get reminders on your phone (see chapter 5).</li>
+          </ol>
+          <div class="tip"><b>The sidebar says where you stand.</b> At the bottom left, "Saved to file" means you're safe. "Browser only" means no data file is linked yet.</div>
+        </section>
+      </div>
+
+      <!-- ===================== 2 ===================== -->
+      <div class="chapter" data-chap="Tasks">
+        <h2>Chapter 2</h2><div class="title">Tasks</div>
+        <section id="quickadd" data-title="Quick add">
+          <h3>Quick add</h3>
+          <p>Type a task the way you'd say it. PA App picks out the date, time, repeat, label, bucket and priority, and shows what it understood before you press <kbd>Enter</kbd>.</p>
+          <div class="qa">Pay utilities bill Friday 6pm #bills @home every month !high</div>
+          <div class="qa"><span class="arrow">→</span> "Pay utilities bill", due Friday 6:00 pm, monthly, label <b>bills</b>, bucket <b>home</b>, high priority</div>
+          <table>
+            <tr><th>Type</th><th>Means</th></tr>
+            <tr><td><code>tomorrow 10am</code>, <code>Friday</code>, <code>5 Nov 4:30pm</code>, <code>in 2 weeks</code></td><td>Due date and time</td></tr>
+            <tr><td><code>every Monday</code>, <code>every 3 days</code>, <code>weekdays</code>, <code>monthly</code></td><td>Repeat</td></tr>
+            <tr><td><code>#bills</code></td><td>A label (made if it's new)</td></tr>
+            <tr><td><code>@home</code></td><td>A bucket that already exists</td></tr>
+            <tr><td><code>!</code> or <code>!high</code>, <code>!med</code>, <code>!low</code></td><td>Priority</td></tr>
+          </table>
+          <p>If it got the words wrong (say, "Meeting notes for Friday" isn't due Friday), click <b>Keep words as typed</b> before pressing <kbd>Enter</kbd>.</p>
+        </section>
+        <section id="views" data-title="Board, list, tabs and sorting">
+          <h3>Board, list, tabs and sorting</h3>
+          <ul>
+            <li><b>Board</b> shows one column per bucket; drag a card to move it. <b>List</b> is one long list that can be grouped by due date or bucket.</li>
+            <li>Tabs: <b>All</b>, <b>Open</b> (the default), <b>Overdue</b>, <b>Done</b>. Filter by bucket or label next to them.</li>
+            <li><b>Sort</b> by due date, priority, name, newest, oldest, bucket or completion; the board follows it too.</li>
+          </ul>
+        </section>
+        <section id="panel" data-title="The task panel">
+          <h3>The task panel</h3>
+          <p>Click a task to open its panel on the right. Everything saves as you go.</p>
+          <div class="grid">
+            <div class="card"><b>Steps</b><span>A checklist; a step can become its own task.</span></div>
+            <div class="card"><b>Add to My Day</b><span>Shows it on My Day today only.</span></div>
+            <div class="card"><b>Due</b><span>A date, with or without a time. No time = any time that day.</span></div>
+            <div class="card"><b>Remind me</b><span>One or more reminders (chapter 4).</span></div>
+            <div class="card"><b>Repeat</b><span>Daily, weekly, monthly… (chapter 3).</span></div>
+            <div class="card"><b>Bucket, priority, progress, start date, labels</b><span>Sort and group by these.</span></div>
+            <div class="card"><b>Files</b><span>Attach bills or photos; they're copied into your attachments folder.</span></div>
+            <div class="card"><b>Note</b><span>Anything else about the task.</span></div>
+          </div>
+          <p>At the bottom: <b>⧉ Duplicate</b> makes "Title (copy)", not started, with steps unticked. <b>Delete</b> asks first if the task has notes, steps or files.</p>
+        </section>
+        <section id="done" data-title="Ticking a task off">
+          <h3>Ticking a task off</h3>
+          <p>Ticking asks <b>when</b> it was done: <b>Today</b> (just press <kbd>Enter</kbd>), <b>On the due date</b> if it was due earlier, or another date and time. A task done after its due date shows <span class="chip c-late">Done 3 days late</span>.</p>
+          <p>Untick to open it again. You can change a done date later in the panel.</p>
+        </section>
+      </div>
+
+      <!-- ===================== 3 ===================== -->
+      <div class="chapter" data-chap="Repeating tasks">
+        <h2>Chapter 3</h2><div class="title">Repeating tasks</div>
+        <section id="repeat" data-title="How repeats work">
+          <h3>How repeats work</h3>
+          <p>A repeating task has one open <b>copy</b> at a time. Tick it off and its <b>next copy</b> appears, due on the next date, with the same steps (unticked), reminders, labels and 📌 files.</p>
+          <div class="flow"><span class="step">Rent (Nov) · due 1 Nov</span><span class="to">✓ tick →</span><span class="step">Rent (Dec) · due 1 Dec</span></div>
+          <ul>
+            <li>Kinds: daily, weekdays, weekly on chosen days, monthly (by date, or "the last Friday"), yearly, every N of any of these, and <b>again after I finish it</b>, counted from the day you tick it.</li>
+            <li><b>Ends</b>: never, on a date, or after a number of times.</li>
+            <li>A repeating task always keeps a due date: its next copies are counted from it.</li>
+            <li>If you miss some, the missed copies stay as overdue. To catch up instead, use "again after I finish it".</li>
+          </ul>
+        </section>
+        <section id="moving" data-title="The moving part">
+          <h3>The moving part</h3>
+          <p>The part in brackets moves forward with each copy, while the title stays the same: <b>Rent (Nov 26)</b>, then <b>Rent (Dec 26)</b>. Starting a repeat on "Pay rent Nov" turns "Nov" into the moving part for you, in the panel and in quick add.</p>
+          <p>Renaming a repeating task renames <b>every copy</b>, done ones too; each keeps its own moving part.</p>
+        </section>
+        <section id="untick" data-title="Unticking and changed copies">
+          <h3>Unticking and changed copies</h3>
+          <p>Unticking takes the next copy away again, unless you've changed it since it was made (notes, steps, its date…). Then PA App asks <b>"Remove it anyway?"</b> and says what you changed.</p>
+          <p>For "again after I finish it" repeats, changing the done date moves the next copy too. If you've changed that copy, it asks <b>"Move it anyway?"</b>: Yes moves only its date and keeps your changes.</p>
+        </section>
+        <section id="files" data-title="Files on repeats">
+          <h3>Files on repeats</h3>
+          <p>A file attached to a repeating task stays with that copy only, like this month's bill. Click <b>📌</b> on a file to keep it on every copy instead, like an account-details sheet. A copy's <b>History</b> shows the earlier copies with their files.</p>
+        </section>
+      </div>
+
+      <!-- ===================== 4 ===================== -->
+      <div class="chapter" data-chap="Reminders and notifications">
+        <h2>Chapter 4</h2><div class="title">Reminders and notifications</div>
+        <section id="reminders" data-title="Reminders">
+          <h3>Reminders</h3>
+          <p>A task can have several reminders. Pick one from <b>Remind me</b>, or a custom one:</p>
+          <table>
+            <tr><th>Kind</th><th>Example</th></tr>
+            <tr><td>Before the due time</td><td>At due time · 10 min · 1 hour · 1 day before. For a task with no time, counted from 9:00 am that day.</td></tr>
+            <tr><td>A time of day</td><td>9:00 am on the day · Evening before (9:00 pm) · 2 days before at 6:00 pm</td></tr>
+            <tr><td>An exact date and time</td><td>Works even with no due date.</td></tr>
+          </table>
+          <p>Each reminder goes off once. Changing the due date makes the ones counting from it go off again.</p>
+        </section>
+        <section id="where" data-title="Where they ring">
+          <h3>Where they ring</h3>
+          <ul>
+            <li><b>With To Do connected</b> (chapter 5): your phone, and To Do on the laptop, ring for them. PA App just shows its own 🔔 message inside the app, so nothing rings twice.</li>
+            <li><b>Without To Do</b>: PA App rings on the laptop while it's open.</li>
+            <li><b>Missed</b>: reminders that went off while PA App was closed (or the laptop slept) don't all pop up when you open it. You get one message instead: "3 reminders went off while PA App was closed: …".</li>
+          </ul>
+        </section>
+        <section id="notices" data-title="Notifications">
+          <h3>Notifications</h3>
+          <p>Messages fade after 5 seconds. <b>🔔 Notifications</b> in the sidebar keeps every one for 30 days, newest first and grouped by day, with a count of unread ones. Click a reminder there to open its task. <b>Clear all</b> empties the list.</p>
+        </section>
+      </div>
+
+      <!-- ===================== 5 ===================== -->
+      <div class="chapter" data-chap="Phone reminders (To Do)">
+        <h2>Chapter 5</h2><div class="title">Phone reminders (Microsoft To Do)</div>
+        <section id="connect" data-title="Connecting">
+          <h3>Connecting</h3>
+          <ol class="steps">
+            <li><b>Settings › Phone reminders › Connect Microsoft To Do</b>.</li>
+            <li>Sign in with your Microsoft account in the pop-up and allow access to your tasks.</li>
+            <li>A <b>"PA App"</b> list appears in To Do with every open task. Your phone's own reminder app shows it too, if it's linked to To Do.</li>
+          </ol>
+          <div class="note"><b>About once a day</b> Microsoft asks you to sign in again. A banner says "Phone reminders are paused"; click <b>Sign in</b>.</div>
+        </section>
+        <section id="both" data-title="What goes where">
+          <h3>What goes where</h3>
+          <table>
+            <tr><th>Done in PA App</th><th>Done in To Do</th></tr>
+            <tr><td>New task → appears in To Do</td><td>New task in the "PA App" list → comes into PA App</td></tr>
+            <tr><td>Edit, tick, untick → follows</td><td>Tick, untick, rename, notes, Important, due date, reminder → come back</td></tr>
+            <tr><td>Delete → deleted in To Do</td><td>Delete → kept in PA App, not sent again</td></tr>
+            <tr><td>Repeat → To Do gets each copy as it comes</td><td>A repeat set there → becomes PA App's repeat</td></tr>
+          </table>
+          <ul>
+            <li>If the same thing was changed on both sides between syncs, <b>PA App's version wins</b>.</li>
+            <li>To Do holds one reminder per task: the next one still to come. Turning it off there skips that one.</li>
+            <li>It syncs when PA App opens, a few seconds after a change, every 5 minutes, and on <b>Sync now</b>.</li>
+          </ul>
+          <div class="warn"><b>After restarting Chrome</b>, click <b>Reconnect</b> by the data file first. Syncing waits for it, and the Phone reminders card says "Paused — reconnect the data file first".</div>
+        </section>
+      </div>
+
+      <!-- ===================== 6 ===================== -->
+      <div class="chapter" data-chap="Your data">
+        <h2>Chapter 6</h2><div class="title">Your data</div>
+        <section id="file" data-title="The data file">
+          <h3>The data file</h3>
+          <p>Every change is saved to the data file about two seconds later. Only the laptop changes it. Settings per computer (theme, which screen is open) stay out of it.</p>
+          <ul>
+            <li><b>Reconnect</b>: after Chrome restarts it asks permission again; one click.</li>
+            <li><b>Both changed?</b> If the file changed elsewhere while this browser also has unsaved changes, PA App stops and asks: <b>Keep this device's version</b> or <b>Use the file's version</b>.</li>
+            <li><b>Backups</b>: one dated copy a day in your backup folder. <b>Export</b> saves a copy any time; <b>Import</b> replaces everything (it asks first).</li>
+          </ul>
+        </section>
+        <section id="phone" data-title="On the phone">
+          <h3>On the phone</h3>
+          <p>Open PA App's address on the phone and <b>Open data file</b> from your synced folder. The phone shows everything (tasks with their details, notes, the calendar, notifications) but can't change anything. Tap <b>Open newer file</b> to see the latest.</p>
+        </section>
+        <section id="files2" data-title="Attachments">
+          <h3>Attachments</h3>
+          <p>Files you attach are copied into your attachments folder and named after the task. The data file only stores their names. Removing a file from a task deletes it from the folder only when no other task uses it.</p>
+        </section>
+      </div>
+
+      <!-- ===================== 7 ===================== -->
+      <div class="chapter" data-chap="When something's wrong">
+        <h2>Chapter 7</h2><div class="title">When something's wrong</div>
+        <section id="faq" data-title="Common questions">
+          <h3>Common questions</h3>
+          <table>
+            <tr><th>What you see</th><th>What to do</th></tr>
+            <tr><td>Changes from the phone don't come in</td><td>Settings › Phone reminders: if it says Paused, reconnect the data file or sign in again, then <b>Sync now</b>.</td></tr>
+            <tr><td>Red text on the Phone reminders card</td><td>It says what went wrong. "Missing from the To Do list" means most tasks vanished there at once: check the "PA App" list in To Do before syncing again.</td></tr>
+            <tr><td>"Reconnect data file" banner</td><td>Click it. Chrome asks again after every restart.</td></tr>
+            <tr><td>The phone shows old tasks</td><td>Tap <b>Open newer file</b>; give OneDrive a minute to bring the latest over.</td></tr>
+            <tr><td>A message went by too fast</td><td>🔔 Notifications keeps it.</td></tr>
+          </table>
+        </section>
+        <section id="calendar" data-title="Calendar colours">
+          <h3>Calendar colours</h3>
+          <p><span class="chip c-over">Overdue</span> <span class="chip c-today">Today</span> <span class="chip c-up">Upcoming</span> <span class="chip c-done">Done</span> <span class="chip c-event">Event</span> <span class="chip c-late">Done late</span> <span class="chip c-rep">Coming repeat</span></p>
+          <p>Coming repeats are previews, not tasks yet; "again after I finish it" ones are estimates (↻≈). Click a task on the calendar to open it.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+// Follow PA App's 🌓 setting when it has one (same site), otherwise the system's.
+try {
+  const t = JSON.parse(localStorage.getItem('dev_theme') || '"auto"');
+  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+} catch { /* no saved theme */ }
+
+// Contents in the sidebar, numbered: chapter N, sections N.M.
+const chapters = [...document.querySelectorAll('.chapter')];
+const toc = document.getElementById('toc');
+chapters.forEach((ch, i) => {
+  const secs = [...ch.querySelectorAll('section')];
+  secs.forEach((s, j) => {
+    const h = s.querySelector('h3');
+    h.insertAdjacentHTML('afterbegin', `<span class="num">${i + 1}.${j + 1}</span>`);
+    s.dataset.num = `${i + 1}.${j + 1}`;
+  });
+  const div = document.createElement('div');
+  div.className = 'chap';
+  div.innerHTML = `<a href="#${secs[0].id}"><span class="n">${i + 1}</span><span>${ch.dataset.chap}</span></a>
+    <ol>${secs.map((s) => `<li><a href="#${s.id}" data-sec="${s.id}">${s.dataset.num} ${s.dataset.title}</a></li>`).join('')}</ol>`;
+  toc.append(div);
+});
+
+// As you scroll: the section you're reading lights up, only its chapter is open, and the bar names both.
+const sections = [...document.querySelectorAll('section')];
+const barChap = document.getElementById('bar-chap');
+const barSec = document.getElementById('bar-sec');
+function spy() {
+  let cur = sections[0];
+  for (const s of sections) if (s.getBoundingClientRect().top < 120) cur = s;
+  const ch = cur.closest('.chapter');
+  const i = chapters.indexOf(ch);
+  document.querySelectorAll('.chap').forEach((c, k) => c.classList.toggle('on', k === i));
+  document.querySelectorAll('[data-sec]').forEach((a) => a.classList.toggle('on', a.dataset.sec === cur.id));
+  barChap.textContent = `Chapter ${i + 1} · ${ch.dataset.chap}`;
+  barSec.textContent = `${cur.dataset.num} ${cur.dataset.title}`;
+}
+addEventListener('scroll', spy, { passive: true });
+spy();
+
+// Phone: ☰ opens the contents; picking a section closes them.
+document.querySelector('.toggle').addEventListener('click', () => document.body.classList.toggle('menu'));
+toc.addEventListener('click', (e) => { if (e.target.closest('a')) document.body.classList.remove('menu'); });
+</script>
+</body>
+</html>
