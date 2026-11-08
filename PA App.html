@@ -3164,6 +3164,67 @@ const TD = {
     x.linkedResources = [...(x.linkedResources || []), this.link(t)];
   },
 
+  // ----- Deciding (changes nothing, talks to nothing: tasks here + To Do's tasks in, a plan out) -----
+  // What comes in from To Do. gone: linked tasks no longer there (deleted on the phone). take: tasks with fields changed
+  // there and not here since the last sync, or a repeat set there. fresh: tasks added to the list there. error: refused.
+  decideIn(tasks, remote) {
+    const gone = tasks.filter((t) => t.todo && t.todo.id && !remote.has(t.todo.id));
+    const linkedCount = tasks.filter((t) => t.todo && t.todo.id).length;
+    // Tasks deleted in To Do stay here and aren't sent again — unless it's most of them, which smells of a mistake.
+    if (gone.length > this.MASS && gone.length > linkedCount / 2) {
+      return { gone: [], take: [], fresh: [], error: `${gone.length} tasks are missing from the To Do list — nothing was changed. Check the "${this.LIST_NAME}" list in To Do.` };
+    }
+    const take = [];
+    for (const t of tasks) {
+      if (!t.todo || !t.todo.id || !remote.has(t.todo.id)) continue;
+      const x = remote.get(t.todo.id);
+      const there = this.fields(x);
+      const here = this.fields(this.payload(t));
+      // Linked before changes came back (only a fingerprint kept): unchanged here means To Do's differences are new.
+      const was = t.todo.base || (t.todo.sig && t.todo.sig === shortHash(JSON.stringify(this.payload(t))) ? here : there);
+      // A field changed on both sides since the last sync keeps this app's version, which is then sent.
+      const fields = Object.keys(there).filter((k) => there[k] !== was[k] && here[k] === was[k]);
+      if (fields.length || x.recurrence) take.push({ t, x, take: fields, was, there });
+    }
+    // Added to the list in To Do: not made by this app, not linked to a task here, not already done.
+    const linked = new Set(tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
+    const fresh = [...remote.values()].filter((x) => !this.ourId(x) && !linked.has(x.id) && x.status !== 'completed');
+    return { gone, take, fresh, error: '' };
+  },
+  // What goes out. send: per task, create it (no id), use a lost link again (relink), put back a lost PA App mark,
+  // update it (patch), and/or record how both sides now look (rebase). remove: To Do tasks this app made whose task is
+  // gone here. error: refused.
+  decideOut(tasks, remote) {
+    const byOurId = new Map([...remote.values()].filter((x) => this.ourId(x)).map((x) => [this.ourId(x), x]));
+    const send = [];
+    const keep = new Set();
+    for (const t of tasks) {
+      if (t.todo && t.todo.removed) continue;
+      if (!t.todo && t.done) continue; // only open tasks go; a done one only finishes off its phone copy
+      const body = this.payload(t);
+      const here = this.fields(body);
+      const had = !t.todo && byOurId.get(t.id); // sent before, but the link was lost: use that one, never a second copy
+      const id = t.todo ? t.todo.id : had ? had.id : '';
+      if (!id) { send.push({ t, body, here }); continue; }
+      keep.add(id);
+      const x = remote.get(id);
+      const base = had ? null : t.todo.base;
+      send.push({
+        t, id, x, body, here, relink: !!had,
+        mark: !!x && !this.ourId(x), // lost its mark: without it, deleting here couldn't reach it
+        patch: !x || !this.same(this.fields(x), here),
+        rebase: !this.same(base, here),
+      });
+    }
+    // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
+    for (const t of tasks) if (t.todo && t.todo.id) keep.add(t.todo.id);
+    const remove = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id));
+    if (remove.length > this.MASS && remove.length > remote.size / 2) {
+      return { send, remove: [], error: `Not removing ${remove.length} tasks from To Do at once — check that your tasks look right here.` };
+    }
+    return { send, remove, error: '' };
+  },
+
   soon() {
     if (state.readOnly || !this.connected()) return;
     clearTimeout(this.timer);
@@ -3186,76 +3247,48 @@ const TD = {
         list = await this.listId();
         remote = await this.remoteTasks(list);
       }
-      const byOurId = new Map([...remote.values()].filter((x) => this.ourId(x)).map((x) => [this.ourId(x), x]));
-      // Tasks deleted in To Do stay here and aren't sent again — unless it's most of them, which smells of a mistake.
-      const gone = DB.tasks.filter((t) => t.todo && t.todo.id && !remote.has(t.todo.id));
-      const linkedCount = DB.tasks.filter((t) => t.todo && t.todo.id).length;
-      if (gone.length > this.MASS && gone.length > linkedCount / 2) throw new Error(`${gone.length} tasks are missing from the To Do list — nothing was changed. Check the "${this.LIST_NAME}" list in To Do.`);
-      for (const t of gone) t.todo = t.done ? null : { removed: true };
-      if (gone.length) toast(`${gone.length} task${gone.length === 1 ? ' was' : 's were'} deleted in To Do — kept here, not sent again`);
-      sent = gone.length;
-
-      // Changed in To Do (ticked, renamed, notes, Important, due date, reminder): bring it here. A field changed
-      // on both sides since the last sync keeps this app's version, which is then sent.
-      let got = 0;
-      for (const t of [...DB.tasks]) {
-        if (!DB.tasks.includes(t) || !t.todo || !t.todo.id || !remote.has(t.todo.id)) continue;
-        const x = remote.get(t.todo.id);
-        const there = this.fields(x);
-        const here = this.fields(this.payload(t));
-        // Linked before changes came back (only a fingerprint kept): unchanged here means To Do's differences are new.
-        const was = t.todo.base || (t.todo.sig && t.todo.sig === shortHash(JSON.stringify(this.payload(t))) ? here : there);
-        const take = Object.keys(there).filter((k) => there[k] !== was[k] && here[k] === was[k]);
+      // 1. What comes in from To Do (decided first, then carried out here).
+      const inn = this.decideIn(DB.tasks, remote);
+      if (inn.error) throw new Error(inn.error);
+      for (const t of inn.gone) t.todo = t.done ? null : { removed: true };
+      if (inn.gone.length) toast(`${inn.gone.length} task${inn.gone.length === 1 ? ' was' : 's were'} deleted in To Do — kept here, not sent again`);
+      sent = inn.gone.length;
+      for (const { t, x, take, was, there } of inn.take) {
+        if (!DB.tasks.includes(t)) continue; // taken away meanwhile (an untick from the phone removed this next copy)
         if (take.length) {
           this.apply(t, x, take, was);
           t.todo.base = { ...was, ...Object.fromEntries(take.map((k) => [k, there[k]])) };
           delete t.todo.sig;
         }
-        const repeats = !!x.recurrence;
-        if (repeats) await this.takeRepeat(t, x, list);
-        if (take.length || repeats) got++;
+        if (x.recurrence) await this.takeRepeat(t, x, list);
       }
-      // Added to the list in To Do (not made by this app, not linked to a task here, not already done).
-      const linked = new Set(DB.tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
-      const fresh = [...remote.values()].filter((x) => !this.ourId(x) && !linked.has(x.id) && x.status !== 'completed');
-      for (const x of fresh) { await this.adopt(x, list); got++; }
+      for (const x of inn.fresh) await this.adopt(x, list);
+      const got = inn.take.length + inn.fresh.length;
       sent += got;
       if (got) {
         cameIn = true;
-        const added = fresh.length, edited = got - added;
+        const added = inn.fresh.length, edited = inn.take.length;
         toast([edited && `${edited} change${edited === 1 ? '' : 's'}`, added && `${added} new task${added === 1 ? '' : 's'}`].filter(Boolean).join(' and ') + ' from To Do');
       }
 
-      for (const t of [...DB.tasks]) {
-        if (!DB.tasks.includes(t) || (t.todo && t.todo.removed)) continue;
-        if (!t.todo && t.done) continue; // only open tasks go; a done one only finishes off its phone copy
-        const body = this.payload(t);
-        const here = this.fields(body);
-        if (!t.todo) {
-          const had = byOurId.get(t.id); // sent before, but the link was lost: use that one, never a second copy
-          if (had) t.todo = { id: had.id };
-          else {
-            const made = await this.graph('POST', `/me/todo/lists/${list}/tasks`, { ...body, linkedResources: [this.link(t)] });
-            t.todo = { id: made.id, base: here };
-            sent++;
-            DB.persist('tasks'); // keep the link even if the page closes mid-sync
-            continue;
-          }
-        }
-        const x = remote.get(t.todo.id);
-        if (x && !this.ourId(x)) { await this.mark(x, t, list); sent++; } // lost its mark: without it, deleting here couldn't reach it
-        if (!x || !this.same(this.fields(x), here)) {
-          await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${t.todo.id}`, body);
+      // 2. What goes out to To Do, decided on the tasks as they are now (a tick from the phone may have made a next copy).
+      const out = this.decideOut(DB.tasks, remote);
+      for (const s of out.send) {
+        const { t } = s;
+        if (!s.id) {
+          const made = await this.graph('POST', `/me/todo/lists/${list}/tasks`, { ...s.body, linkedResources: [this.link(t)] });
+          t.todo = { id: made.id, base: s.here };
           sent++;
+          DB.persist('tasks'); // keep the link even if the page closes mid-sync
+          continue;
         }
-        if (!this.same(t.todo.base, here)) { t.todo = { id: t.todo.id, base: here }; sent++; } // both sides now look like this
+        if (s.relink) t.todo = { id: s.id };
+        if (s.mark) { await this.mark(s.x, t, list); sent++; }
+        if (s.patch) { await this.graph('PATCH', `/me/todo/lists/${list}/tasks/${s.id}`, s.body); sent++; }
+        if (s.rebase) { t.todo = { id: s.id, base: s.here }; sent++; } // both sides now look like this
       }
-
-      // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
-      const keep = new Set(DB.tasks.filter((t) => t.todo && t.todo.id).map((t) => t.todo.id));
-      const extra = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id));
-      if (extra.length > this.MASS && extra.length > remote.size / 2) throw new Error(`Not removing ${extra.length} tasks from To Do at once — check that your tasks look right here.`);
-      for (const x of extra) {
+      if (out.error) throw new Error(out.error); // the sends above still went; only the removals are refused
+      for (const x of out.remove) {
         try { await this.graph('DELETE', `/me/todo/lists/${list}/tasks/${x.id}`); } catch (e) { if (e.status !== 404) throw e; }
         sent++;
       }
