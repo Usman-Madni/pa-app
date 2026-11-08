@@ -450,11 +450,11 @@ const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const fmtTime = (hhmm) => {
   if (!hhmm) return '';
   const [h, m] = hhmm.split(':').map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }); // "1:52 PM", whatever the region's clock
 };
 const fmtDay = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 const fmtClock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'HH:mm' for a time box
-const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hour12: true }) : '—');
 
 // Record IDs: time + crypto random + a counter, so two devices (or two clicks in the same millisecond) never collide.
 let idCounter = 0;
@@ -1272,7 +1272,7 @@ const Reminders = {
   // becomes an exact-time reminder here. The next one here still goes to To Do after it.
   fromToDo(t, sent, newTime) {
     for (const r of t.reminders) if (sameMinute(this.time(t, r), sent)) r.fired = true;
-    if (newTime != null) t.reminders.push(this.exact(newTime));
+    if (newTime != null && !t.reminders.some((r) => sameMinute(this.time(t, r), newTime))) t.reminders.push(this.exact(newTime)); // never twice
   },
   // [{t, r, at}] whose time has come (not gone off yet, not in `shown`: the keys a read-only device has shown).
   due(tasks, now = Date.now(), shown = new Set()) {
@@ -3014,7 +3014,9 @@ const TD = {
   // What both sides are compared on — the same for what we send (payload) and what To Do has.
   fields(x) {
     const due = graphMs(x.dueDateTime);
-    const rem = x.isReminderOn ? graphMs(x.reminderDateTime) : null;
+    // A reminder whose time has passed has gone off: To Do keeps it switched on, but it's no longer one to compare.
+    const on = x.isReminderOn ? graphMs(x.reminderDateTime) : null;
+    const rem = on != null && on > Date.now() ? on : null;
     return {
       title: (x.title || '').trim(),
       notes: shortHash(this.plain(x.body)),

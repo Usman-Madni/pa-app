@@ -226,6 +226,28 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(rr && rr.at === `${day(6)}T08:15` && !rr.fired && e.reminders.find((r) => r.id === 'e1').fired, 'reminder changed in To Do: kept here as that exact time, the old one done with');
   check(sentAt(R(e)) === newRem, 'and To Do keeps it');
 
+  // A reminder that has gone off: To Do keeps it switched on (at its past time) even when told "no reminder".
+  // That's not a change made on the phone, and must never come back as a new reminder, sync after sync.
+  const gone = PA.addTask({ title: 'Rang already' });
+  PA.Reminders.add(gone, { kind: 'at', at: PA.toISO(new Date(Date.now() + 864e5)) + 'T09:00' });
+  await PA.TD.sync();
+  const pastAt = new Date(Date.now() - 3600e3);
+  gone.reminders[0].at = `${PA.toISO(pastAt)}T${String(pastAt.getHours()).padStart(2, '0')}:${String(pastAt.getMinutes()).padStart(2, '0')}`;
+  gone.reminders[0].fired = true;
+  gone.todo.base = { ...gone.todo.base, rem: String(Math.round(new Date(gone.reminders[0].at).getTime() / 60000)) };
+  R(gone).reminderDateTime = phoneAt(new Date(gone.reminders[0].at).getTime());
+  R(gone).isReminderOn = true;
+  const keepOn = (x) => { x.isReminderOn = true; x.reminderDateTime = phoneAt(new Date(gone.reminders[0].at).getTime()); };
+  await PA.TD.sync(); keepOn(R(gone));
+  await PA.TD.sync(); keepOn(R(gone));
+  await PA.TD.sync(); keepOn(R(gone));
+  check(gone.reminders.length === 1, `a reminder that went off isn't added again and again (has ${gone.reminders.length})`);
+  before = g.writes().length;
+  await PA.TD.sync();
+  check(g.writes().length === before, 'and once it has gone off, nothing is sent back and forth');
+  PA.Reminders.fromToDo(gone, null, new Date(gone.reminders[0].at).getTime());
+  check(gone.reminders.length === 1, 'bringing in a reminder never adds a second at the same minute');
+
   // Both sides changed: the same field keeps this app's version; different fields both stay.
   R(f).title = 'Water the plants (phone)';
   R(f).body = { content: 'From the phone', contentType: 'text' };
