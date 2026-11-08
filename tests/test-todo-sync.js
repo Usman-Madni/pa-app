@@ -11,6 +11,7 @@ function fakeMicrosoft() {
   const reply = (status, j) => ({ ok: status < 300, status, json: async () => (j == null ? j : JSON.parse(JSON.stringify(j))) });
   g.fetch = async (url, opts = {}) => {
     const method = (opts.method || 'GET').toUpperCase();
+    if (g.gate && method === 'POST' && String(opts.body || '').includes(g.gateOn)) await g.gate; // hold a sync mid-send
     if (url.startsWith('https://login.microsoftonline.com/')) {
       g.tokenCalls.push(Object.fromEntries(new URLSearchParams(opts.body)));
       if (g.failToken) return reply(400, { error: 'invalid_grant', error_description: 'The refresh token has expired.' });
@@ -359,6 +360,23 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   PA.TD.SOON_MS = 5000;
   PA.DF.handle = null;
   PA.DF.status = 'none';
+
+  // An edit made while a sync is busy sending goes to To Do straight after, not at the next 5-minute check.
+  PA.TD.SOON_MS = 10;
+  let open;
+  g.gate = new Promise((r) => { open = r; });
+  g.gateOn = 'Sent by the running sync';
+  PA.addTask({ title: 'Sent by the running sync' });
+  win.clearTimeout(PA.TD.timer); // only the edit made during the sync may queue the next one
+  const running = PA.TD.sync();
+  await tick(20);
+  const typed = PA.addTask({ title: 'Typed during a sync' });
+  open();
+  g.gate = null;
+  await running;
+  await tick(150);
+  check(typed.todo && typed.todo.id && L2.has(typed.todo.id), 'an edit made during a sync goes to To Do straight after');
+  PA.TD.SOON_MS = 5000;
 
   // --- Signing in again ---
   win.localStorage.setItem('dev_msAuth', JSON.stringify({ ...JSON.parse(win.localStorage.getItem('dev_msAuth')), exp: 0 }));

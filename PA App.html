@@ -577,7 +577,7 @@ function changed(...keys) {
   if (state.readOnly) return;
   keys.forEach((k) => DB.persist(k));
   DF.markDirty();
-  if (keys.includes('tasks') && !TD.busy) TD.soon(); // the phone's copy in To Do follows a few seconds later
+  if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
 }
 
 // ===================== Notifications =====================
@@ -3225,6 +3225,15 @@ const TD = {
     return { send, remove, error: '' };
   },
 
+  // Tasks were edited. During a sync the edit may have missed it, so another runs straight after; the sync's own
+  // saves (ownSave) don't count.
+  ownSave: false,
+  tasksChanged() {
+    if (this.ownSave) return;
+    if (this.busy) this.again = true;
+    else this.soon();
+  },
+  saveOwn() { this.ownSave = true; try { changed('tasks'); } finally { this.ownSave = false; } },
   soon() {
     if (state.readOnly || !this.connected()) return;
     clearTimeout(this.timer);
@@ -3292,11 +3301,11 @@ const TD = {
         try { await this.graph('DELETE', `/me/todo/lists/${list}/tasks/${x.id}`); } catch (e) { if (e.status !== 404) throw e; }
         sent++;
       }
-      if (sent) changed('tasks');
+      if (sent) this.saveOwn();
       this.error = '';
       device.set('todoLast', Date.now());
     } catch (e) {
-      if (sent) changed('tasks'); // links made before the problem are kept
+      if (sent) this.saveOwn(); // links made before the problem are kept
       this.error = e.signin ? '' : e.message;
     } finally {
       this.busy = false;
