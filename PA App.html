@@ -3324,9 +3324,10 @@ function askNotifications() {
   }
 }
 
-function notify(title, body) {
+// quiet = the message in the app only: To Do already rings for this one on this computer and the phone.
+function notify(title, body, quiet = false) {
   toast(`🔔 ${title}${body ? ' — ' + body : ''}`);
-  if ('Notification' in window && Notification.permission === 'granted') {
+  if (!quiet && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, tag: title }); } catch { /* some browsers need a service worker; the toast already showed */ }
   }
 }
@@ -3342,7 +3343,7 @@ function checkReminders() {
   for (const { t, r, at } of due) {
     if (at >= now - MISSED_MS) {
       const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
-      notify(fullTitle(t), when);
+      notify(fullTitle(t), when, !state.readOnly && TD.connected() && !!(t.todo && t.todo.id));
     }
     if (state.readOnly) state.remindedHere.add(`${t.id}:${r.id}`);
     else { r.fired = true; changedAny = true; }

@@ -72,6 +72,23 @@ const day = (d) => local(d).slice(0, 10);
   check(doc.querySelector('#toasts').textContent.includes('5 reminders went off while PA App was closed: A5, A4, A3 +2 more'), 'up to three names, then "+N more"');
   wipe();
 
+  // With Microsoft To Do connected, To Do already rings on this computer and the phone: PA App only shows its own
+  // message, with no second Windows notification.
+  const rang = [];
+  win.Notification = function (title) { rang.push(title); };
+  win.Notification.permission = 'granted';
+  exactTask('Ring here', 1);
+  PA.checkReminders();
+  check(rang.includes('Ring here'), 'not connected to To Do: a Windows notification as well as the message');
+  win.localStorage.setItem('dev_msAuth', JSON.stringify({ access: 'x', exp: Date.now() + 3600e3, refresh: 'y' }));
+  exactTask('Quiet here', 1).todo = { id: 'T1', base: {} };
+  exactTask('Not on the phone', 1).todo = { removed: true };
+  PA.checkReminders();
+  win.localStorage.removeItem('dev_msAuth');
+  check(!rang.includes('Quiet here') && doc.querySelector('#toasts').textContent.includes('🔔 Quiet here'), 'connected to To Do: only the message in the app, no second ring');
+  check(rang.includes('Not on the phone'), 'a task deleted from To Do still rings here (To Do won\'t)');
+  wipe();
+
   // Times worked out correctly
   const rt = (r, due) => PA.Reminders.time({ due }, r);
   const T = (s) => new Date(s).getTime();

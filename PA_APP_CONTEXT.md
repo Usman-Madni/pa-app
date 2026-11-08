@@ -97,6 +97,8 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - **New tasks get no reminder** unless one is picked.
 - **`fired`** is set once a reminder goes off, so it never repeats. Changing the due date re-arms the relative reminders; exact-time ones keep their state.
 - **Phones** show reminders without changing the data (`state.remindedHere`).
+- **With To Do connected**, a task on the phone list gets only the 🔔 message inside PA App, no Windows notification: To Do already rings for it on this computer and the phone (`notify(…, quiet)`). A task not on the phone list (deleted there) still rings here.
+- **Times** always show on the 12-hour clock ("1:52 pm", `hour12: true`), whatever the computer's region; a static test checks every time format.
 - **Missed ones:** a reminder over 10 minutes late when PA App checks (every 20 s; closed or the laptop asleep in between) doesn't pop up. They're named in one message instead, "3 reminders went off while PA App was closed: Pay rent, Call bank, Gym" (oldest first, up to three names, then "+N more"), with no Windows notification: the phone has rung for them already through To Do (`MISSED_MS`).
 - **Repeat copies and duplicates** bring their reminders along, re-armed (`Reminders.copy`). On a next copy an exact-time reminder moves by as many days as the due date did. An exact-time one whose time has already passed counts as gone off, so a copy never pops up a reminder the moment it's made.
 - **Sort** (`SORTS`, `sortTasks`, per device `dev_taskSort`): due date (the default), priority, name A–Z, newest added, oldest added, bucket, completion. Done tasks go last, except when sorting by completion. On the Board the cards in each column follow the sort too.
@@ -323,3 +325,7 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
   - Turning a reminder off in To Do still skips just that one (the next one still goes): kept on purpose.
   - Missed reminders (over 10 minutes late) go into one message instead of a pop-up each, since the phone already rang for them.
   - A copied exact-time reminder already in the past counts as gone off (no instant pop-up from a duplicate).
+- **8 Nov 2026:** after trying it on the laptop.
+  - Bug: To Do keeps a reminder switched on at its past time after it rings, and PA App read that as a reminder set on the phone, adding a copy at every sync. A past reminder time in To Do now counts as gone off (`TD.fields`), and `Reminders.fromToDo` never adds a second at the same minute.
+  - Times on the 12-hour clock everywhere (the region used 24-hour).
+  - To Do rang on the laptop and PA App did too: with To Do connected, PA App's own reminder is a message in the app only (the user's choice over showing nothing or keeping both).
