@@ -31,10 +31,14 @@ The day a repeat keeps coming back to ("the 31st", "the last Friday"), taken fro
 
 **Reminder**:
 A moment PA App reminds you about a task: a time before the due date ("1 hour before", "evening before") or an exact date and time. A task can have several; each goes off once.
-_Avoid_: alarm, notification
+_Avoid_: alarm (a reminder going off shows a notification)
 
 **Missed reminder**:
 A reminder that went off more than 10 minutes before PA App could show it, because PA App was closed or the laptop asleep. Missed reminders are named together in one message rather than popping up.
+
+**Notification**:
+A message PA App showed (a reminder, "Added …", a sync problem), kept with its time for 30 days in the Notifications list.
+_Avoid_: alert, log entry
 
 ## Editing
 

@@ -24,7 +24,9 @@ function otherDeviceSave(handle, mutate) {
   check(content && content.app === 'PA App' && content.data.tasks[0].title === 'First task', 'new data file holds the existing task');
   check(content.savedFrom && content.saveToken, 'file records who saved and a version token');
   check(!('dev_view' in content.data) && !content.data.theme, 'device settings stay out of the file');
-  check(win.localStorage.getItem('dev_unsaved') === 'false', 'browser knows it is in step with the file');
+  // The "Data file created" message is kept in Notifications (in the data file), so one more save follows it.
+  await PA.DF.save();
+  check(win.localStorage.getItem('dev_unsaved') === 'false' && file.json().data.notices.some((n) => /Data file created/.test(n.text)), 'browser knows it is in step with the file (which keeps the "created" message too)');
 
   // Change -> save
   submitForm(win, 'quick-add', { title: 'Second task' });

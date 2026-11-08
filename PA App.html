@@ -57,6 +57,15 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-si
 }
 .nav-btn:hover { background: var(--panel-2); color: var(--text); }
 .nav-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-count { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; text-align: center; }
+.nav-count[hidden] { display: none; }
+.notice-list { padding: 6px 0; }
+.notice-day { padding: 12px 16px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.notice-row { display: flex; gap: 14px; align-items: baseline; width: 100%; padding: 8px 16px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; }
+.notice-row.link { cursor: pointer; }
+.notice-row.link:hover { background: var(--panel-2); }
+.notice-time { flex: none; width: 70px; font-size: 12px; color: var(--muted); }
+.notice-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .ico { width: 20px; text-align: center; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
 .df-badge { font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 8px; background: var(--panel-2); }
@@ -414,6 +423,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
     <button class="nav-btn" data-view="tasks"><span class="ico">☑</span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar"><span class="ico">▦</span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes"><span class="ico">✎</span><span>Notes</span></button>
+    <button class="nav-btn" data-view="notices"><span class="ico">🔔</span><span>Notifications</span><span class="nav-count" id="notice-count" hidden></span></button>
     <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span>Settings</span></button>
     <div class="side-foot">
       <div class="df-badge" id="df-badge"></div>
@@ -465,12 +475,14 @@ function uid() {
   return `${Date.now().toString(36)}-${r[0].toString(36)}${r[1].toString(36)}-${(idCounter++).toString(36)}`;
 }
 
-function toast(msg) {
+// A message for 5 seconds; it's also kept in Notifications (Notices). task = the task it's about, if one.
+function toast(msg, task) {
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = msg;
   $('#toasts').append(el);
   setTimeout(() => el.remove(), 5000);
+  Notices.add(msg, task);
 }
 
 // ===================== Per-device settings =====================
@@ -494,7 +506,8 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // buckets: {id, name, order}
 // labels:  {id, name, color:'#rrggbb'}
 // Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels'];
+// notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices'];
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
 // Every task field with its default. Old tasks get the missing fields filled in on load.
@@ -537,7 +550,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -555,7 +568,8 @@ const DB = {
     this.tasks = this.tasks.map(normalizeTask);
     for (const k of DATA_KEYS) this.persist(k);
   },
-  isEmpty() { return DATA_KEYS.every((k) => this[k].length === 0); },
+  // Nothing of yours here (messages shown don't count, so they never make a fresh browser look like it has data).
+  isEmpty() { return DATA_KEYS.every((k) => k === 'notices' || this[k].length === 0); },
 };
 
 // Every edit goes through here: save in the browser, then queue a save to the data file.
@@ -564,6 +578,40 @@ function changed(...keys) {
   keys.forEach((k) => DB.persist(k));
   DF.markDirty();
   if (keys.includes('tasks') && !TD.busy) TD.soon(); // the phone's copy in To Do follows a few seconds later
+}
+
+// ===================== Notifications =====================
+// Every message PA App shows is kept with its time for 30 days, so one that came and went unseen can be read later
+// (Notifications in the sidebar). It's in the data file, so the phone view can read it too; only the computer adds.
+const Notices = {
+  KEEP_MS: 30 * 864e5,
+  adding: false,
+  add(text, task) {
+    if (state.readOnly || this.adding) return; // never from a read-only device; never while saving one (a save problem toasts)
+    this.adding = true;
+    try {
+      const now = Date.now();
+      DB.notices = DB.notices.filter((n) => n.at > now - this.KEEP_MS);
+      DB.notices.push({ id: uid(), at: now, text, ...(task ? { task } : {}), read: state.view === 'notices' });
+      changed('notices');
+      renderUnread();
+      if (state.view === 'notices' && !document.querySelector('#main :focus')) render();
+    } finally { this.adding = false; }
+  },
+  unread() { return DB.notices.filter((n) => !n.read).length; },
+  markRead() {
+    if (state.readOnly || !this.unread()) return;
+    DB.notices.forEach((n) => { n.read = true; });
+    changed('notices');
+  },
+  clear() { DB.notices = []; changed('notices'); },
+};
+function renderUnread() {
+  const el = $('#notice-count');
+  if (!el) return;
+  const n = state.readOnly ? 0 : Notices.unread();
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.hidden = !n;
 }
 
 // ===================== Screen state =====================
@@ -1115,7 +1163,8 @@ function itemsForDay(key, previews) {
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, settings: renderSettings };
+  renderUnread();
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -2747,6 +2796,29 @@ function renderCalendar() {
     </div>`;
 }
 
+// Notifications: every message shown in the last 30 days, newest first, by day. One about a task opens it.
+function renderNotices() {
+  const list = [...DB.notices].sort((a, b) => b.at - a.at);
+  const dayName = (k) => (k === todayISO() ? 'Today' : k === toISO(addDays(new Date(), -1)) ? 'Yesterday' : fmtDay(k));
+  let lastDay = '';
+  const rows = list.map((n) => {
+    const k = toISO(new Date(n.at));
+    const head = k !== lastDay ? `<div class="notice-day">${esc(dayName(k))}</div>` : '';
+    lastDay = k;
+    const task = n.task && DB.tasks.find((t) => t.id === n.task);
+    const text = `<span class="notice-time">${esc(fmtTime(fmtClock(n.at)))}</span><span class="notice-text">${esc(n.text)}</span>`;
+    return head + (task
+      ? `<button class="notice-row link" data-action="open-task" data-id="${esc(task.id)}" title="Open ${esc(fullTitle(task))}">${text}</button>`
+      : `<div class="notice-row">${text}</div>`);
+  }).join('');
+  return `
+    <div class="page-head">
+      <div><h1>Notifications</h1><p class="sub">Every message PA App showed in the last 30 days, newest first</p></div>
+      ${list.length ? '<button class="btn edit-only" data-action="clear-notices">Clear all</button>' : ''}
+    </div>
+    <div class="card notice-list">${rows || '<div class="empty">No notifications yet</div>'}</div>`;
+}
+
 function renderNotes() {
   const q = state.noteQuery.toLowerCase();
   const notes = [...DB.notes]
@@ -3238,6 +3310,7 @@ function todoCard() {
 function setView(view) {
   state.view = view;
   device.set('view', view);
+  if (view === 'notices') Notices.markRead();
   render();
   try { window.scrollTo(0, 0); } catch { /* not available in tests */ }
 }
@@ -3325,8 +3398,8 @@ function askNotifications() {
 }
 
 // quiet = the message in the app only: To Do already rings for this one on this computer and the phone.
-function notify(title, body, quiet = false) {
-  toast(`🔔 ${title}${body ? ' — ' + body : ''}`);
+function notify(title, body, quiet = false, task = '') {
+  toast(`🔔 ${title}${body ? ' — ' + body : ''}`, task);
   if (!quiet && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, tag: title }); } catch { /* some browsers need a service worker; the toast already showed */ }
   }
@@ -3343,7 +3416,7 @@ function checkReminders() {
   for (const { t, r, at } of due) {
     if (at >= now - MISSED_MS) {
       const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
-      notify(fullTitle(t), when, !state.readOnly && TD.connected() && !!(t.todo && t.todo.id));
+      notify(fullTitle(t), when, !state.readOnly && TD.connected() && !!(t.todo && t.todo.id), t.id);
     }
     if (state.readOnly) state.remindedHere.add(`${t.id}:${r.id}`);
     else { r.fired = true; changedAny = true; }
@@ -3365,7 +3438,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
-  'td-connect', 'td-sync', 'td-disconnect',
+  'td-connect', 'td-sync', 'td-disconnect', 'clear-notices',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -3455,6 +3528,9 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'open-task': openTaskDrawer(id); break;
+    case 'clear-notices':
+      if (confirm('Clear all notifications? This can\'t be undone.')) { Notices.clear(); render(); }
+      break;
     case 'layout': device.set('taskLayout', btn.dataset.layout); render(); break;
     case 'board-add':
       state.boardAdd = btn.dataset.bucket;
