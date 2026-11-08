@@ -562,8 +562,10 @@ const DB = {
     try { localStorage.setItem('pa_' + k, JSON.stringify(this[k])); } catch { toast('Could not save in this browser — storage is full or blocked'); }
   },
   exportAll() { return Object.fromEntries(DATA_KEYS.map((k) => [k, this[k]])); },
+  loads: 0, // how many times everything was replaced (a sync in progress checks it: its tasks are old copies then)
   importAll(data) {
     if (!data || !REQUIRED_KEYS.every((k) => Array.isArray(data[k]))) throw new Error('This file has no PA App data in it');
+    this.loads++;
     for (const k of DATA_KEYS) this[k] = Array.isArray(data[k]) ? data[k] : [];
     this.tasks = this.tasks.map(normalizeTask);
     for (const k of DATA_KEYS) this.persist(k);
@@ -3034,6 +3036,8 @@ const TD = {
     });
     let res = await send();
     if (res.status === 401) { const a = this.auth(); if (a) device.set('msAuth', { ...a, exp: 0 }); res = await send(); }
+    // Everything was reloaded (a newer data file) while we waited: this sync's tasks are old copies. Stop; it runs again.
+    if (this.busy && this.syncLoads !== DB.loads) throw Object.assign(new Error('Reloaded during the sync'), { reloaded: true });
     if (res.status === 204) return null;
     const j = await res.json().catch(() => null);
     if (!res.ok) throw Object.assign(new Error((j && j.error && j.error.message) || `To Do answered ${res.status}`), { status: res.status });
@@ -3244,6 +3248,7 @@ const TD = {
     if (this.busy) { this.again = true; return; }
     if (this.waitingForFile()) return; // the data file needs reconnecting or a decision first; DF.check() syncs after
     this.busy = true;
+    this.syncLoads = DB.loads;
     let sent = 0, cameIn = false;
     try {
       let list = await this.listId();
@@ -3305,8 +3310,11 @@ const TD = {
       this.error = '';
       device.set('todoLast', Date.now());
     } catch (e) {
-      if (sent) this.saveOwn(); // links made before the problem are kept
-      this.error = e.signin ? '' : e.message;
+      if (e.reloaded) this.again = true; // nothing of this run is kept: the next run links the new copies (by their ids)
+      else {
+        if (sent) this.saveOwn(); // links made before the problem are kept
+        this.error = e.signin ? '' : e.message;
+      }
     } finally {
       this.busy = false;
     }

@@ -394,6 +394,26 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(doc.querySelector('#main [data-action="td-connect"]')?.textContent === 'Sign in again', 'and Settings says so');
   g.failToken = false;
 
+  // The data file reloads during a sync (a newer version came in): the sync's links mustn't land on the old copies of
+  // the tasks. It stops, runs again on the new ones, and never makes a second To Do task.
+  PA.TD.SOON_MS = 10;
+  win.localStorage.setItem('dev_msAuth', JSON.stringify({ access: 'tokX', exp: Date.now() + 3600e3, refresh: 'refX' })); // signed in again
+  g.gate = new Promise((r) => { open = r; });
+  g.gateOn = 'Reloaded mid-sync';
+  PA.addTask({ title: 'Reloaded mid-sync' });
+  win.clearTimeout(PA.TD.timer);
+  const held = PA.TD.sync();
+  await tick(20);
+  PA.DB.importAll(JSON.parse(JSON.stringify(PA.DB.exportAll()))); // as DF.load does: every task is a new object
+  open();
+  g.gate = null;
+  await held;
+  await tick(150);
+  const fresh = PA.DB.tasks.find((x) => x.title === 'Reloaded mid-sync');
+  check(fresh.todo && fresh.todo.id && L2.has(fresh.todo.id), 'reloaded during a sync: the new copy of the task is linked straight after');
+  check([...L2.values()].filter((x) => x.title === 'Reloaded mid-sync').length === 1, 'and To Do has it once');
+  PA.TD.SOON_MS = 5000;
+
   // --- Disconnect ---
   PA.TD.disconnect();
   check(!win.localStorage.getItem('dev_msAuth') && !win.localStorage.getItem('dev_todoList'), 'Disconnect forgets the sign-in on this device');
