@@ -9,7 +9,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - Keep the app one self-contained file. **Ask first** before renaming it, splitting it, adding a build step or a runtime dependency, or changing the shape of stored data (`pa_*` keys or the data file).
 - **Dates:** use `toISO(date)` (local `YYYY-MM-DD`). Never slice `.toISOString()` into a date, because it's UTC and shifts the day in any timezone ahead of or behind UTC. `toISOString()` is only for exact instants such as `savedAt`.
 - **Two kinds of storage.** Shared data (`pa_tasks`, `pa_notes`, `pa_events`, `pa_buckets`, `pa_labels`, `pa_notices`) goes in the data file. Per-device settings (`dev_*`: theme, view, device name, save bookkeeping) never do.
-- **Every edit goes through `changed(key)`.** That saves in the browser and queues the data-file save. Don't write `localStorage` directly for data.
+- **Every edit goes through `changed(key)`.** That saves in the browser and queues the data-file save. Don't write `localStorage` directly for data. It also stamps each changed record's `updated` and marks deletions (`Stamps`), which the merge between devices (`mergeData`) relies on: an edit that skips `changed()` could lose to an older copy.
 - **Read-only devices** (any phone or tablet, browsers without the File System Access API, or `?readonly`) must never change data. New edit actions go in `EDIT_ACTIONS` and get the `edit-only` class.
 - **New records** get IDs from `uid()`, never `Date.now()` alone.
 - **Questions use the app's own box:** `await ask(question, {yes, danger})` or `askText(question, value)`, never the browser's `confirm()` / `prompt()` / `alert()` (a test checks). In tests, answer it with `answer(win, yes, text)`.

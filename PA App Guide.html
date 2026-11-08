@@ -310,7 +310,8 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <p>Every change is saved to the data file about two seconds later. Only the laptop changes it. Settings per computer (theme, which screen is open) stay out of it.</p>
           <ul>
             <li><b>Reconnect</b>: after Chrome restarts it asks permission again; one click.</li>
-            <li><b>Both changed?</b> If the file changed elsewhere while this browser also has unsaved changes, PA App stops and asks: <b>Keep this device's version</b> or <b>Use the file's version</b>.</li>
+            <li><b>Both changed?</b> If the file was saved elsewhere while this browser also has changes, PA App puts them together, task by task: the newer change to each task, note or event wins, and nothing else is lost. A message says "Brought in changes saved on …". Something deleted on one side stays deleted.</li>
+            <li><b>A different data file?</b> Opening another data file while this browser has data of its own asks first: <b>Keep this device's version</b> or <b>Use the file's version</b>.</li>
             <li><b>Backups</b>: one dated copy a day in your backup folder. <b>Export</b> saves a copy any time; <b>Import</b> replaces everything (it asks first).</li>
           </ul>
         </section>

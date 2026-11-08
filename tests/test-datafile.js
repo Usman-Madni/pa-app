@@ -48,30 +48,47 @@ function otherDeviceSave(handle, mutate) {
   check(PA.DB.tasks.some((t) => t.title === 'From office'), "another device's save is loaded when nothing is unsaved here");
   check(PA.DF.status === 'ok', 'status back to ok');
 
-  // --- Both changed -> conflict, nothing saved until resolved ---
+  // --- Every change stamps the record it changed ---
+  const changedFn = win.eval('changed');
+  const first = PA.DB.tasks.find((t) => t.title === 'First task');
+  const second = PA.DB.tasks.find((t) => t.title === 'Second task');
+  const secondWas = second.updated;
+  first.notes = 'edited';
+  changedFn('tasks');
+  check(first.updated > 0 && second.updated === secondWas, 'a change stamps that record with when it changed, and only that one');
+
+  // --- Both changed (another device saved meanwhile) -> merged record by record, nothing asked, nothing lost ---
   submitForm(win, 'quick-add', { title: 'Mine' });
-  otherDeviceSave(file, (d) => d.tasks.push({ id: 'x2', title: 'Theirs', due: '', priority: 'low', remind: -1, done: false }));
-  const writesBefore = file.writes;
+  otherDeviceSave(file, (d) => d.tasks.push({ id: 'x2', title: 'Theirs', due: '', priority: 'low', done: false, updated: Date.now() }));
   await PA.DF.save();
-  check(PA.DF.status === 'conflict', 'both changed -> conflict');
-  check(file.writes === writesBefore, 'nothing written while the conflict is open');
-  check(win.document.querySelector('#banner').textContent.includes('changed here and in the file'), 'conflict banner shows');
-  await PA.DF.check();
-  check(PA.DF.status === 'conflict', 'polling does not clear an open conflict');
+  let titles = file.json().data.tasks.map((t) => t.title);
+  check(PA.DF.status === 'ok' && titles.includes('Mine') && titles.includes('Theirs'), 'both changed: merged and saved, both new tasks kept');
+  check(PA.DB.tasks.some((t) => t.title === 'Theirs') && win.document.querySelector('#toasts').textContent.includes('Office PC'), 'shown here, saying where the other changes came from');
 
-  // Keep mine
-  await PA.DF.keepMine();
-  const after = file.json().data.tasks.map((t) => t.title);
-  check(after.includes('Mine') && !after.includes('Theirs'), "'Keep this device's version' writes mine");
-
-  // Use theirs
-  submitForm(win, 'quick-add', { title: 'Mine again' });
-  otherDeviceSave(file, (d) => d.tasks.push({ id: 'x3', title: 'Theirs again', due: '', priority: 'low', remind: -1, done: false }));
+  // The same task changed on both sides: the newer change wins the whole task
+  const theirs = PA.DB.tasks.find((t) => t.id === 'x2');
+  theirs.notes = 'note made here';
+  changedFn('tasks');
+  otherDeviceSave(file, (d) => { const x = d.tasks.find((t) => t.id === 'x2'); x.title = 'Theirs, renamed later'; x.updated = Date.now() + 60000; });
   await PA.DF.save();
-  PA.DF.useTheirs();
-  const titles = PA.DB.tasks.map((t) => t.title);
-  check(titles.includes('Theirs again') && !titles.includes('Mine again'), "'Use the file's version' loads theirs");
-  check(JSON.parse(win.localStorage.getItem('pa_tasks')).some((t) => t.title === 'Theirs again'), 'loaded version saved in the browser too');
+  const x2 = PA.DB.tasks.find((t) => t.id === 'x2');
+  check(x2.title === 'Theirs, renamed later' && x2.notes !== 'note made here', 'same task changed on both: the newer change wins the whole task');
+
+  // Deleted here: stays deleted, though the other copy still has it
+  const mine = PA.DB.tasks.find((t) => t.title === 'Mine');
+  PA.DB.tasks = PA.DB.tasks.filter((t) => t !== mine);
+  changedFn('tasks');
+  otherDeviceSave(file, (d) => d.events.push({ id: 'e9', title: 'Their event', date: '2026-11-10', time: '', updated: Date.now() }));
+  await PA.DF.save();
+  check(!file.json().data.tasks.some((t) => t.id === mine.id) && file.json().data.deleted.some((m) => m.key === 'tasks' && m.id === mine.id), 'deleted here stays deleted (a marker says so)');
+  check(PA.DB.events.some((e) => e.id === 'e9'), 'while their other change still comes in');
+
+  // Deleted on the other device: goes here too
+  submitForm(win, 'quick-add', { title: 'Local edit' });
+  otherDeviceSave(file, (d) => { d.tasks = d.tasks.filter((t) => t.id !== 'x1'); d.deleted = [...(d.deleted || []), { key: 'tasks', id: 'x1', at: Date.now() + 1000 }]; });
+  await PA.DF.save();
+  check(!PA.DB.tasks.some((t) => t.id === 'x1') && PA.DB.tasks.some((t) => t.title === 'Local edit'), 'deleted on the other device: gone here too, local changes kept');
+  check(JSON.parse(win.localStorage.getItem('pa_tasks')).some((t) => t.title === 'Theirs, renamed later'), 'the merged data is saved in the browser too');
   app.close();
 
   // --- Empty browser never overwrites a file with data ---
@@ -85,11 +102,15 @@ function otherDeviceSave(handle, mutate) {
   check(empty.PA.DB.tasks[0]?.title === 'Keep me', 'empty browser loads the file instead');
   empty.close();
 
-  // --- Linking a file when both sides have data -> ask ---
+  // --- Linking a different file when both sides have data -> ask (merging two unrelated sets would mix them) ---
   const both = loadApp({ pickFile: fakeFile('pa-app-data.json', full.text) });
   submitForm(both.win, 'quick-add', { title: 'Local only' });
   await both.PA.DF.openExisting();
   check(both.PA.DF.status === 'conflict', 'linking a file when both have data asks which to keep');
+  check(both.win.document.querySelector('#banner').textContent.includes('changed here and in the file'), 'the banner asks');
+  await both.PA.DF.keepMine();
+  const kept = both.PA.DB.tasks.map((t) => t.title);
+  check(kept.includes('Local only') && JSON.parse(both.win.localStorage.getItem('pa_tasks')).length === kept.length, "'Keep this device's version' still works");
   both.close();
 
   // --- Not a PA App file ---
