@@ -52,6 +52,8 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
   check(doc.body.classList.contains('phone') && /body\.phone \.qa-native \{ pointer-events: auto; \}/.test(css), 'quick add\'s Due: on a phone the tap lands on the date box itself (phones can ignore opening it from code)');
 
+  check(/body\.phone \.p-input\[type="date"\], body\.phone \.p-input\[type="time"\] \{ border: 1px solid/.test(css), 'task panel\'s Due: on a phone the empty date box is drawn as a box to tap (phones show an empty one as nothing)');
+
   // --- An edit saves to OneDrive, with the version check ---
   doc.querySelector('[data-view="tasks"]').click();
   const form = () => doc.querySelector('[data-form="quick-add"]');

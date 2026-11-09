@@ -346,6 +346,9 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .p-select:focus, .p-input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 .p-select option { color: var(--text); background: var(--panel); }
 .p-input:disabled { opacity: .45; }
+/* Phones draw an empty date or time box as nothing at all: give it a visible box to tap, and hide the time until there's a date. */
+body.phone .p-input[type="date"], body.phone .p-input[type="time"] { border: 1px solid var(--border); background: var(--panel); min-height: 36px; }
+body.phone .p-input[type="time"]:disabled { display: none; }
 .p-check { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
 .p-check input { margin-top: 2px; flex-shrink: 0; }
 .p-mini { border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0 2px; }
