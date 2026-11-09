@@ -106,7 +106,7 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   check(!doc.querySelector('[data-action="td-connect"]') && !doc.querySelector('[data-action="df-open"]') && !doc.querySelector('[data-action="df-create"]'), 'Settings on the phone has no To Do or data-file buttons');
   PA.state.openTask = PA.DB.tasks[0].id;
   PA.renderDrawer();
-  check(!doc.querySelector('#drawer [data-action="at-folder"]') && !doc.querySelector('#drawer [data-input="attach"]'), 'no attaching files on the phone yet (stage D)');
+  check(!doc.querySelector('#drawer [data-action="at-folder"]') && doc.querySelector('#drawer [data-input="attach"]'), 'files are added straight to OneDrive: no folder to choose (stage D, test-phone-files)');
   PA.state.openTask = null;
   PA.renderDrawer();
 

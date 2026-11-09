@@ -1094,7 +1094,8 @@ const AT = {
   },
 
   async add(task, files) {
-    if (state.readOnly || state.phone || !task) return;
+    if (state.readOnly || !task) return;
+    if (state.phone) return OD.addFiles(task, files); // straight into OneDrive (stage D)
     if (this.status !== 'ok') return toast('Choose or reconnect the attachments folder first');
     let added = 0;
     for (const f of files) {
@@ -1170,7 +1171,10 @@ const AT = {
   },
 
   async open(att) {
-    if (state.phone) return toast('Attached files open on your computer only, for now');
+    if (state.phone) {
+      if (!OD.canRead()) return toast(OD.offline ? 'No connection: files open when you\'re back online' : 'Sign in to OneDrive to open attached files');
+      return OD.openFile(att, window.open('', '_blank')); // the tab opens now, at the tap
+    }
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     let file;
     try { file = await (await this.dir.getFileHandle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
@@ -1199,8 +1203,9 @@ function attachCard() {
     <div class="card edit-only">
       <h2>Attachments folder</h2>
       <p class="sub">${AT.dir
-        ? `Files you attach to tasks are copied into the <b>${esc(AT.dir.name)}</b> folder. Keep it in your synced folder next to the data file so every computer sees them.`
-        : 'Pick a folder once and files you attach to tasks are copied there. Keep it next to your data file.'}</p>
+        ? `Files you attach to tasks are copied into the <b>${esc(AT.dir.name)}</b> folder.`
+        : 'Pick a folder once and files you attach to tasks are copied there.'}
+        For the phone to open and add them, it must be the <b>Attachments</b> folder in OneDrive › Apps › PA App, beside the data file.</p>
       <div class="row">
         ${AT.status === 'reconnect' ? '<button class="btn primary" data-action="at-reconnect">Reconnect</button>' : ''}
         <button class="btn" data-action="at-folder">${AT.dir ? 'Change folder' : 'Choose folder'}</button>
@@ -2169,7 +2174,7 @@ function attachBlock(t) {
   const list = t.attachments.map((a) => `
     <div class="p-row">
       <span class="p-ico">${fileIcon(a)}</span>
-      <button class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</button>
+      <a href="#" role="button" class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</a><!-- a link still works when read-only disables the panel -->
       <span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
         title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}">📌</button>` : ''}
@@ -2177,7 +2182,10 @@ function attachBlock(t) {
       <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>`}
     </div>`).join('');
   let action = '';
-  if (!state.readOnly && !state.phone) { // files stay on the laptop for now (stage D)
+  if (!state.readOnly && state.phone) { // straight into OneDrive › Apps › PA App › Attachments
+    action = `<label class="p-row p-click"><span class="p-ico">📎</span><span class="p-text">Add file</span><input type="file" multiple data-input="attach" hidden></label>
+      <label class="p-row p-click"><span class="p-ico">📷</span><span class="p-text">Take photo</span><input type="file" accept="image/*" capture="environment" data-input="attach" hidden></label>`;
+  } else if (!state.readOnly) {
     if (AT.status === 'ok') action = '<label class="p-row p-click"><span class="p-ico">📎</span><span class="p-text">Add file</span><input type="file" multiple data-input="attach" hidden></label>';
     else if (AT.status === 'reconnect') action = '<button class="p-row p-click" data-action="at-reconnect"><span class="p-ico">📎</span><span class="p-text">Reconnect attachments folder</span></button><p class="p-sub meta">Browsers ask again for folder access after a restart.</p>';
     else action = '<button class="p-row p-click" data-action="at-folder"><span class="p-ico">📁</span><span class="p-text">Choose attachments folder</span></button><p class="p-sub meta">Pick a folder once, for example next to your data file. Files you attach are copied there; the data file only remembers which file belongs to which task.</p>';
@@ -2185,7 +2193,8 @@ function attachBlock(t) {
   return `
     ${list}
     ${repeating && t.attachments.length ? '<p class="p-sub meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
-    ${state.phone && t.attachments.length ? '<p class="p-sub meta">Attached files open on your computer only, for now.</p>' : ''}
+    ${state.phone && t.attachments.length && !state.readOnly ? '<p class="p-sub meta">Rename or remove files on the laptop.</p>' : ''}
+    ${state.phone && t.attachments.length && !OD.canRead() ? '<p class="p-sub meta">Sign in to OneDrive to open these.</p>' : ''}
     ${state.phone && !t.attachments.length ? '<div class="p-row"><span class="p-ico">📎</span><span class="p-text muted">No files</span></div>' : ''}
     ${action}`;
 }
@@ -3202,10 +3211,11 @@ const TD = {
   },
   async graph(method, path, body, headers = {}) { // headers: e.g. If-Match, so a save only lands on the version read
     const url = path.startsWith('https://') ? path : this.GRAPH + path;
+    const raw = body instanceof Blob; // a file being uploaded goes as it is
     const send = async () => fetch(url, {
       method,
-      headers: { Authorization: `Bearer ${await this.accessToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
-      body: body ? JSON.stringify(body) : undefined,
+      headers: { Authorization: `Bearer ${await this.accessToken()}`, ...(body ? { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' } : {}), ...headers },
+      body: raw ? body : body ? JSON.stringify(body) : undefined,
     });
     let res = await send();
     if (res.status === 401) { const a = this.auth(); if (a) device.set(this.AUTH_KEY, { ...a, exp: 0 }); res = await send(); }
@@ -3646,6 +3656,44 @@ const OD = Object.assign(Object.create(TD), {
       if (this.saveAgain) { this.saveAgain = false; this.save(); }
     }
   },
+  // Attached files (stage D): the laptop's attachments folder, moved into the app's own folder in OneDrive.
+  FILES: 'Attachments',
+  filePath(name) { return `/me/drive/special/approot:/${this.FILES}/${encodeURIComponent(name)}:`; },
+  canRead() { return state.phone && this.connected() && !this.needsSignIn() && !this.offline; },
+  // w: a tab opened at the tap (a phone blocks one opened after waiting for OneDrive).
+  async openFile(att, w) {
+    if (w) try { w.document.title = att.name; w.document.body.textContent = `Opening ${att.name}…`; } catch { /* not ours to write */ }
+    try {
+      const item = await this.graph('GET', this.filePath(att.file));
+      const url = item && item['@microsoft.graph.downloadUrl'];
+      if (!url) throw Object.assign(new Error('no link'), { status: 404 });
+      if (w) w.location.href = url; else location.href = url;
+    } catch (e) {
+      if (w) w.close();
+      if (e && e.name === 'TypeError') toast('No connection: files open when you\'re back online');
+      else if (e && e.status === 404) toast(`"${att.name}" is not in OneDrive › Apps › PA App › ${this.FILES}`);
+      else toast(`Could not open "${att.name}": ${e.message}`);
+    }
+  },
+  // Upload into Attachments; OneDrive picks a free name if this one is taken, and that's the name kept.
+  async addFiles(task, files) {
+    let added = 0;
+    for (const f of files) {
+      try {
+        const wanted = safeFileName(AT.suggestName(task, f.name));
+        toast(`Uploading ${f.name}…`);
+        const saved = await this.graph('PUT', `${this.filePath(wanted)}/content?@microsoft.graph.conflictBehavior=rename`, f);
+        const stored = (saved && saved.name) || wanted;
+        task.attachments.push({ id: uid(), name: stored, file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        added++;
+      } catch (e) {
+        toast(e && e.name === 'TypeError' ? `Could not attach ${f.name}: no connection` : `Could not attach ${f.name}: ${e.message}`);
+      }
+    }
+    if (added) { changed('tasks'); toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
+    render();
+    renderDrawer();
+  },
   disconnect() {
     device.remove(this.AUTH_KEY);
     this.empty = false;
@@ -3932,6 +3980,7 @@ document.addEventListener('click', (e) => {
     case 'at-folder': AT.pickFolder(); break;
     case 'at-reconnect': AT.reconnect(); break;
     case 'open-attach': {
+      e.preventDefault(); // it's a link
       const t = btn.dataset.task ? DB.tasks.find((x) => x.id === btn.dataset.task) : currentTask(); // history rows name their task
       const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
       if (a) AT.open(a);

@@ -147,7 +147,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(again.PA.AT.status === 'ok', 'one click reconnects');
   again.close();
 
-  // Phone: names visible, nothing can be opened or changed
+  // Phone, signed out: names visible, nothing can be changed, and it says how to open them (test-phone-files)
   const ro = loadApp({ fsa: false });
   await ro.PA.RO.open({ name: 'd.json', text: async () => JSON.stringify({ app: 'PA App', version: 2, saveToken: 't', data: {
     tasks: [{ id: 'p', title: 'Passport renewal', attachments: [{ id: 'a1', name: 'passport.jpg', file: 'passport.jpg', size: 2048, type: 'image/jpeg' }] }],
@@ -156,7 +156,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   ro.PA.state.openTask = 'p';
   ro.PA.renderDrawer();
   const rd = ro.doc.querySelector('#drawer');
-  check(rd.textContent.includes('passport.jpg') && rd.textContent.includes('open on your computer only'), 'phone shows attachment names and explains they open on the computer');
+  check(rd.textContent.includes('passport.jpg') && rd.textContent.includes('Sign in to OneDrive to open these'), 'signed-out phone shows attachment names and says to sign in to open them');
   check(!rd.querySelector('[data-input="attach"]') && rd.querySelector('fieldset').disabled, 'phone cannot attach, rename or remove files');
   await ro.PA.AT.add(ro.PA.DB.tasks[0], [new ro.win.File(['x'], 'x.txt')]);
   check(ro.PA.DB.tasks[0].attachments.length === 1, 'phone cannot add attachments even if asked');

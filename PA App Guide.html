@@ -323,7 +323,8 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li>It reads the latest by itself when you open it, when you come back to it, and on <b>Refresh</b>.</li>
             <li>If the laptop saved in the meantime, the phone puts both together (the newer change to each task wins) without asking.</li>
             <li><b>No signal</b> or <b>signed out</b>: it shows the last copy, read-only. A change made just as the signal went is kept on the phone and saved when you're back.</li>
-            <li>Still on the laptop only: attached files, Phone reminders (To Do) and the data file settings.</li>
+            <li><b>Files:</b> tap a file's name to open it. <b>📎 Add file</b> or <b>📷 Take photo</b> puts a new one straight into OneDrive (see Attachments below for the one-time move). Renaming and removing files stay on the laptop.</li>
+            <li>Still on the laptop only: Phone reminders (To Do) and the data file settings. A task added on the phone reaches To Do once PA App is open on the laptop.</li>
             <li>Without signing in, <b>Open data file</b> picks the file by hand, read-only.</li>
           </ul>
           <div class="card">
@@ -340,6 +341,16 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <section id="files2" data-title="Attachments">
           <h3>Attachments</h3>
           <p>Files you attach are copied into your attachments folder and named after the task. The data file only stores their names. Removing a file from a task deletes it from the folder only when no other task uses it.</p>
+          <div class="card">
+            <b>So the phone can use them (once)</b>
+            <ol class="steps" style="margin-top:6px">
+              <li>Close PA App on the laptop.</li>
+              <li>In File Explorer, move your attachments folder into <code>OneDrive › Apps › PA App</code>, beside the data file. Its name must be <b>Attachments</b>.</li>
+              <li>Open PA App on the laptop: <b>Settings › Attachments folder › Change folder</b> and choose it in its new place.</li>
+              <li>On the phone: open a task with a file and tap the file's name.</li>
+            </ol>
+          </div>
+          <div class="note">A file added on the phone reaches the laptop's folder once OneDrive has synced it, usually within a minute.</div>
         </section>
       </div>
 
