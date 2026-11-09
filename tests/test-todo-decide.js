@@ -68,16 +68,23 @@ const { loadApp, tick, check, done } = require('./helpers');
   const g = task('Deleted on the phone');
   g.todo = { removed: true };
   const h = task('Lost its link');
-  out = TD.decideOut([e, f, g, h, a], remoteOf(copyOf(h, 'H'), p3, copyOf(task('Gone here'), 'Z')));
+  const goneHere = task('Gone here');
+  const elsewhere = task('Made on the other device, not here yet');
+  out = TD.decideOut([e, f, g, h, a], remoteOf(copyOf(h, 'H'), p3, copyOf(goneHere, 'Z'), copyOf(elsewhere, 'Y')), [goneHere.id]);
   const of = (t) => out.send.find((s) => s.t === t);
   check(of(e) && !of(e).id, 'a new task: created');
   check(!of(f) && !of(g), 'a done task never sent, and one deleted on the phone: left out');
   check(of(h).id === 'H' && of(h).relink && !of(h).patch, 'a lost link: its old To Do task used again, never a second copy');
   check(of(a).mark, 'a To Do task that lost its PA App mark: marked again');
-  check(out.remove.length === 1 && out.remove[0].id === 'Z', 'made by this app, gone here: removed in To Do');
-  const ours = Array.from({ length: 12 }, (_, i) => copyOf(task(`Gone ${i}`), `G${i}`));
-  out = TD.decideOut([a], remoteOf(copyOf(a, 'A'), ...ours));
+  check(out.remove.length === 1 && out.remove[0].id === 'Z', 'made by this app, deleted here: removed in To Do');
+  check(!out.remove.some((x) => x.id === 'Y'), 'made for a task this device hasn\'t seen yet (the other device\'s, still on its way): left alone');
+  const goneMany = Array.from({ length: 12 }, (_, i) => task(`Gone ${i}`));
+  const ours = goneMany.map((t, i) => copyOf(t, `G${i}`));
+  out = TD.decideOut([a], remoteOf(copyOf(a, 'A'), ...ours), goneMany.map((t) => t.id));
   check(out.error && !out.remove.length && out.send.length === 1, 'removing most of the list at once: refused (other sends still go)');
+
+  // --- Two devices adopt the same new To Do task: the same task here, so merging keeps one ---
+  check(TD.adoptId({ id: 'AAMkADQ1=' }) === TD.adoptId({ id: 'AAMkADQ1=' }) && TD.adoptId({ id: 'AAMkADQ1=' }) !== TD.adoptId({ id: 'AAMkADQ2=' }), 'a task added in To Do gets an id made from its To Do id');
 
   check(app.errors.length === 0, 'no script errors' + (app.errors.length ? ': ' + app.errors[0] : ''));
   done();

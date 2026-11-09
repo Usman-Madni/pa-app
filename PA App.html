@@ -689,8 +689,7 @@ function changed(...keys) {
   if (state.readOnly) return;
   if (Stamps.touch(keys) && !keys.includes('deleted')) keys = [...keys, 'deleted'];
   keys.forEach((k) => DB.persist(k));
-  if (state.phone) { OD.markDirty(); return; }
-  DF.markDirty();
+  if (state.phone) OD.markDirty(); else DF.markDirty();
   if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
 }
 
@@ -3072,7 +3071,7 @@ function renderSettings() {
     <div class="page-head"><div><h1>Settings</h1></div><a class="btn" href="PA App Guide.html" target="_blank" rel="noopener">? Guide</a></div>
     <div class="grid" style="max-width:720px">
       <div class="card" id="df-card">${dataFileCard()}</div>
-      ${state.phone ? '' : todoCard()}
+      ${todoCard()}
       ${state.phone ? '' : attachCard()}
       ${manageCard()}
       <div class="card">
@@ -3208,7 +3207,8 @@ const TD = {
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split('\n')[0] : 'Microsoft sign-in failed');
     const old = this.auth() || {};
-    device.set(this.AUTH_KEY, { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '' });
+    // scope: what Microsoft granted (e.g. whether the phone's sign-in includes To Do)
+    device.set(this.AUTH_KEY, { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '', scope: j.scope || old.scope || '' });
   },
   async accessToken() {
     const a = this.auth();
@@ -3217,7 +3217,7 @@ const TD = {
     if (a.refresh) {
       try { await this.token({ grant_type: 'refresh_token', refresh_token: a.refresh }); return this.auth().access; } catch { /* it lasts about a day */ }
     }
-    device.set(this.AUTH_KEY, { access: '', exp: 0, refresh: '' });
+    device.set(this.AUTH_KEY, { access: '', exp: 0, refresh: '', scope: a.scope || '' });
     throw Object.assign(new Error('Sign in to Microsoft again'), { signin: true });
   },
   async graph(method, path, body, headers = {}) { // headers: e.g. If-Match, so a save only lands on the version read
@@ -3342,11 +3342,21 @@ const TD = {
     x.recurrence = null;
   },
   // A task added to the list in To Do: make it here and mark it as ours, so it's kept in step from now on.
+  // A task added in To Do gets an id made from its To Do id: if both devices bring it in before seeing each other's,
+  // they make the same task, and merging keeps one.
+  adoptId(x) { return `todo-${shortHash(x.id)}${shortHash(`${x.id}~`)}`; },
   async adopt(x, list) {
+    const id = this.adoptId(x);
     const there = this.fields(x);
     const ms = there.rem ? Number(there.rem) * 60000 : null;
+    const had = DB.tasks.find((t) => t.id === id);
+    if (had || DB.deleted.some((m) => m.key === 'tasks' && m.id === id)) { // brought in already (or deleted since) on the other device
+      if (had && !had.todo) had.todo = { id: x.id };
+      if (had) await this.mark(x, had, list);
+      return had || null;
+    }
     const t = normalizeTask({
-      id: uid(), title: there.title || 'Untitled', notes: this.plain(x.body), priority: there.imp === 'high' ? 'high' : 'low',
+      id, title: there.title || 'Untitled', notes: this.plain(x.body), priority: there.imp === 'high' ? 'high' : 'low',
       due: there.due ? `${there.due}T${ALL_DAY}` : '', created: Date.parse(x.createdDateTime) || Date.now(),
       reminders: ms != null ? [Reminders.exact(ms)] : [],
     });
@@ -3392,7 +3402,10 @@ const TD = {
   // What goes out. send: per task, create it (no id), use a lost link again (relink), put back a lost PA App mark,
   // update it (patch), and/or record how both sides now look (rebase). remove: To Do tasks this app made whose task is
   // gone here. error: refused.
-  decideOut(tasks, remote) {
+  // deletedIds: tasks deleted here (their 30-day markers). Both devices sync the same list, so a To Do task made for a
+  // task this device doesn't know (the other device's, its save still on the way) is never removed.
+  decideOut(tasks, remote, deletedIds = []) {
+    const known = new Set([...tasks.map((t) => t.id), ...deletedIds]);
     const byOurId = new Map([...remote.values()].filter((x) => this.ourId(x)).map((x) => [this.ourId(x), x]));
     const send = [];
     const keep = new Set();
@@ -3416,7 +3429,7 @@ const TD = {
     }
     // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
     for (const t of tasks) if (t.todo && t.todo.id) keep.add(t.todo.id);
-    const remove = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id));
+    const remove = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id) && known.has(this.ourId(x)));
     if (remove.length > this.MASS && remove.length > remote.size / 2) {
       return { send, remove: [], error: `Not removing ${remove.length} tasks from To Do at once — check that your tasks look right here.` };
     }
@@ -3432,13 +3445,15 @@ const TD = {
     else this.soon();
   },
   saveOwn() { this.ownSave = true; try { changed('tasks'); } finally { this.ownSave = false; } },
+  // Both devices sync. The laptop once connected; the phone while it can edit, its OneDrive sign-in including To Do.
+  ready() { return state.phone ? OD.canEdit() && OD.hasTasks() && !OD.reading : this.connected(); },
   soon() {
-    if (state.phone || !this.connected()) return; // only the laptop syncs To Do, even while the phone edits
+    if (!this.ready()) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.sync(), this.SOON_MS);
   },
   async sync() {
-    if (state.phone || !this.connected()) return;
+    if (!this.ready()) return;
     if (this.busy) { this.again = true; return; }
     if (this.waitingForFile()) return; // the data file needs reconnecting or a decision first; DF.check() syncs after
     this.busy = true;
@@ -3480,7 +3495,7 @@ const TD = {
       }
 
       // 2. What goes out to To Do, decided on the tasks as they are now (a tick from the phone may have made a next copy).
-      const out = this.decideOut(DB.tasks, remote);
+      const out = this.decideOut(DB.tasks, remote, DB.deleted.filter((m) => m.key === 'tasks').map((m) => m.id));
       for (const s of out.send) {
         const { t } = s;
         if (!s.id) {
@@ -3528,7 +3543,29 @@ const TD = {
   },
 };
 
+// The phone syncs To Do with its OneDrive sign-in (which asks for To Do too); no separate connect or disconnect.
+function phoneTodoCard() {
+  const intro = `Keeps the “${TD.LIST_NAME}” list in your Microsoft To Do up to date from this phone too, so reminders don't wait for the laptop. Uses the same sign-in as OneDrive.`;
+  if (!OD.connected()) return `<div class="card"><h2>Phone reminders</h2><p class="sub">${intro}</p><p class="sub">Sign in to OneDrive (above) to start.</p></div>`;
+  if (!OD.hasTasks()) {
+    return `<div class="card"><h2>Phone reminders</h2><p class="sub">${intro}</p>
+      <p><span class="status-dot warn"></span>Sign in again to add To Do to this phone's sign-in.</p>
+      <button class="btn primary" data-action="od-connect">Sign in again</button></div>`;
+  }
+  const last = device.get('todoLast', 0);
+  const onPhone = DB.tasks.filter((t) => t.todo && t.todo.id && !t.done).length;
+  const status = OD.needsSignIn() ? '<span class="status-dot warn"></span>Paused — sign in to Microsoft again'
+    : state.readOnly ? '<span class="status-dot warn"></span>Paused while read-only (offline or signed out)'
+    : TD.error ? '<span class="status-dot bad"></span>Sync problem' : '<span class="status-dot on"></span>Syncing from this phone';
+  return `<div class="card"><h2>Phone reminders</h2><p class="sub">${intro}</p>
+    <p>${status}</p>
+    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list · last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>
+    ${TD.error ? `<p class="sub" style="color:var(--danger)">${esc(TD.error)}</p>` : ''}
+    <div class="row">${OD.needsSignIn() ? '<button class="btn primary" data-action="od-connect">Sign in again</button>' : `<button class="btn edit-only" data-action="td-sync" ${TD.busy ? 'disabled' : ''}>${TD.busy ? 'Syncing…' : 'Sync now'}</button>`}</div></div>`;
+}
+
 function todoCard() {
+  if (state.phone) return phoneTodoCard();
   const a = TD.auth();
   const err = TD.error ? `<p class="sub" style="color:var(--danger)">${esc(TD.error)}</p>` : '';
   const intro = `Copies every open task, with its next reminder, to a “${TD.LIST_NAME}” list in your Microsoft To Do. To Do then reminds you on your phone, even when this computer is off. Ticks, edits and new tasks made in that list on the phone come back here when this app next syncs (if both sides changed the same thing, this app's version wins).`;
@@ -3560,12 +3597,14 @@ function todoCard() {
 // (If-Match: the file's eTag). If the laptop saved meanwhile, it merges record by record (mergeData) and tries again,
 // quietly. A change that couldn't be saved (no signal, page closed) is merged in at the next open.
 const OD = Object.assign(Object.create(TD), {
-  SCOPE: 'Files.ReadWrite.AppFolder offline_access',
+  // PA App's own folder only, and To Do (the phone syncs it too): one sign-in for both.
+  SCOPE: 'Files.ReadWrite.AppFolder Tasks.ReadWrite offline_access',
   AUTH_KEY: 'odAuth',
   CONNECTED_NOTE: 'Signed in to OneDrive',
   FILE_NAME: 'pa-app-data.json',
   SAVE_MS: 2000,
-  reading: false,   // (its own flag: `busy` is the To Do sync's)
+  busy: false,      // never set: its own, so the To Do sync's `busy` (on TD) can't stop OneDrive reads and saves
+  reading: false,
   saving: false,
   saveAgain: false,
   saveTimer: null,
@@ -3577,6 +3616,8 @@ const OD = Object.assign(Object.create(TD), {
   offline: false,   // the last read or save failed for want of a connection: read-only, showing the last copy
   lastRead: 0,
   afterSignIn() { this.open(); },
+  // Signed in before To Do was added to the phone's sign-in: OneDrive only, until it signs in again.
+  hasTasks() { const a = this.auth(); return !!a && /\bTasks\.ReadWrite\b/i.test(a.scope || ''); },
   canEdit() {
     return state.phone && !params.has('readonly') && this.connected() && !this.needsSignIn() && !this.offline && !!this.item;
   },
@@ -3619,6 +3660,7 @@ const OD = Object.assign(Object.create(TD), {
     renderStatus();
     render();
     if (device.get('odUnsaved', false)) this.save();
+    TD.soon(); // with the latest read, To Do follows (when it may)
   },
   // Something changed on the phone: keep it here (it survives closing the page) and save it shortly.
   markDirty() {
@@ -3729,6 +3771,8 @@ const OD = Object.assign(Object.create(TD), {
     render();
   },
 });
+// On the phone the To Do sync uses this one sign-in (OD keeps its own AUTH_KEY and SCOPE, so it's unaffected).
+if (state.phone) Object.assign(TD, { AUTH_KEY: OD.AUTH_KEY, SCOPE: OD.SCOPE });
 
 // ===================== Actions =====================
 function setView(view) {

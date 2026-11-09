@@ -48,7 +48,7 @@ const dataFile = (title, savedFrom = 'Laptop') => ({
   doc.querySelector('#banner [data-action="od-connect"]').click();
   await tick(50);
   const ap = new URL(popup.location.href).searchParams;
-  check(ap.get('scope') === 'Files.ReadWrite.AppFolder offline_access', 'it asks only for PA App\'s own OneDrive folder (not all your files, not To Do)');
+  check(ap.get('scope') === 'Files.ReadWrite.AppFolder Tasks.ReadWrite offline_access', 'it asks only for PA App\'s own OneDrive folder (not all your files), and To Do: one sign-in for both');
   popup.location.href = `http://localhost/?code=c1&state=${ap.get('state')}`;
   await tick(400);
   check(win.localStorage.getItem('dev_odAuth') && !win.localStorage.getItem('dev_msAuth'), 'its tokens are kept apart from the To Do sign-in');

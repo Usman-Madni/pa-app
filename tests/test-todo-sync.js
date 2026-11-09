@@ -149,15 +149,22 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(next.todo && next.todo.id !== a.todo.id && L.get(next.todo.id).title === PA.fullTitle(next) && L.get(next.todo.id).status === 'notStarted', 'the next copy is sent as a new task');
   const nextTodo = next.todo.id;
   PA.Series.untick(a);
+  win.eval('changed')('tasks'); // as the app does after every change: it records the deletion
   check(!PA.DB.tasks.includes(next), 'unticking still removes the untouched next copy, though it was sent to To Do');
   await PA.TD.sync();
   check(!L.has(nextTodo) && L.get(a.todo.id).status === 'notStarted', 'its To Do copy is deleted, and the unticked one is open again');
 
   // --- Deleting ---
   PA.DB.tasks = PA.DB.tasks.filter((x) => x !== b);
+  win.eval('changed')('tasks');
   const bTodo = b.todo.id;
   await PA.TD.sync();
   check(!L.has(bTodo), 'deleted here: deleted in To Do');
+  // A To Do task for a task this device has never seen (the phone's, its save not here yet) is left alone.
+  L.set('PHONE1', { id: 'PHONE1', title: 'Added on the phone just now', status: 'notStarted', linkedResources: [{ applicationName: 'PA App', externalId: 'from-the-phone' }] });
+  await PA.TD.sync();
+  check(L.has('PHONE1') && !PA.DB.tasks.some((x) => x.id === 'from-the-phone'), 'a To Do task for a task not here yet (made on the phone): not deleted, not brought in');
+  L.delete('PHONE1');
   L.delete(d.todo.id);
   await PA.TD.sync();
   check(PA.DB.tasks.includes(d) && d.todo && d.todo.removed, 'deleted in To Do: kept here, marked as removed from the phone');
@@ -184,6 +191,7 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   await PA.TD.sync();
   const bulkIds = many.map((x) => x.todo.id);
   PA.DB.tasks = PA.DB.tasks.filter((x) => !many.includes(x));
+  win.eval('changed')('tasks');
   await PA.TD.sync();
   check(bulkIds.every((id) => L2.has(id)) && /Not removing 12/.test(PA.TD.error), 'removing over half the list at once is refused, with a message');
   for (const id of bulkIds) L2.delete(id);
@@ -302,6 +310,7 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   await PA.TD.sync();
   check(PA.DB.tasks.length === count + 1, 'and never comes in twice');
   PA.DB.tasks = PA.DB.tasks.filter((x) => x !== p1);
+  win.eval('changed')('tasks');
   await PA.TD.sync();
   check(!L2.has('P1'), 'deleting it here deletes it in To Do, like any other');
 
