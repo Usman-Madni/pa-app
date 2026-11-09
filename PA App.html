@@ -248,6 +248,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .qa-btn.set, .qa-select.set { color: var(--accent); font-weight: 600; }
 .qa-select option { color: var(--text); background: var(--panel); }
 .qa-native { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; }
+/* On a phone, opening the picker from code (showPicker) can be ignored: the tap lands on the invisible date box itself,
+   which always opens the phone's own picker. */
+body.phone .qa-native { pointer-events: auto; }
 .qa-preview { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 12px 10px 44px; font-size: 13px; }
 .qa-preview:empty { display: none; }
 .qa-chip { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 9px; }
@@ -1289,6 +1292,7 @@ function itemsForDay(key, previews) {
 // ===================== Rendering =====================
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
+  document.body.classList.toggle('phone', state.phone);
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   renderUnread();
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings };

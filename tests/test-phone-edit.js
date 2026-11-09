@@ -49,6 +49,8 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   const banner = () => doc.querySelector('#banner').textContent;
   check(PA.state.phone && !PA.state.readOnly && PA.DB.tasks[0]?.title === 'From the laptop', 'signed in, online, file read: the phone can edit');
   check(/Editing/.test(banner()) && !/Read-only/.test(banner()), 'the banner says it is editing');
+  const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
+  check(doc.body.classList.contains('phone') && /body\.phone \.qa-native \{ pointer-events: auto; \}/.test(css), 'quick add\'s Due: on a phone the tap lands on the date box itself (phones can ignore opening it from code)');
 
   // --- An edit saves to OneDrive, with the version check ---
   doc.querySelector('[data-view="tasks"]').click();
