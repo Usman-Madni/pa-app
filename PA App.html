@@ -4238,7 +4238,10 @@ else {
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
     OD.open();
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - OD.lastRead > 60000) OD.open(); });
+    // A phone's date or time picker hides the page for a moment; reading then would redraw the box being picked and
+    // lose the pick. So while a box has focus, read once none has (the pick has gone through by then).
+    const readWhenFree = () => (document.querySelector('input:focus, textarea:focus, select:focus') ? setTimeout(readWhenFree, 500) : OD.open());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - OD.lastRead > 60000) readWhenFree(); });
     addEventListener('offline', () => { OD.offline = true; OD.refreshMode(); });
     addEventListener('online', () => OD.open()); // back: read the latest (an unsaved change is merged in and saved)
   }

@@ -77,6 +77,27 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   const lastPut = g.calls.filter((c) => c.method === 'PUT').pop();
   check(lastPut.ifMatch === g.calls.filter((c) => c.method === 'PUT').slice(-2)[0].ifMatch || lastPut.ifMatch !== '"v2"', 'the second try checks against the newer version');
 
+  // --- The phone's date picker hides the page for a moment: coming back must not redraw the box being picked ---
+  PA.state.openTask = 'a';
+  PA.renderDrawer();
+  const box = doc.querySelector('#drawer [data-field="dueDate"]');
+  box.focus();
+  PA.OD.lastRead = 0; // over a minute since the last read
+  const reads = () => g.calls.filter((c) => c.url.endsWith('/me/drive/special/approot')).length;
+  const readsBefore = reads();
+  doc.dispatchEvent(new win.Event('visibilitychange'));
+  await tick(50);
+  check(reads() === readsBefore && box.isConnected, 'back from the date picker: the box being picked is not redrawn under it');
+  box.value = '2026-12-01';
+  box.dispatchEvent(new win.Event('change', { bubbles: true }));
+  box.blur();
+  await tick(700);
+  check(PA.DB.tasks.find((t) => t.id === 'a').due.startsWith('2026-12-01'), 'the picked date is kept');
+  check(reads() > readsBefore, 'the latest is read once the box is left');
+  check(g.file.content.data.tasks.find((t) => t.id === 'a').due.startsWith('2026-12-01'), 'and the date reaches OneDrive');
+  PA.state.openTask = null;
+  PA.renderDrawer();
+
   // --- Phone-only limits: no files, no To Do, no data-file settings ---
   PA.state.view = 'settings';
   PA.render();
