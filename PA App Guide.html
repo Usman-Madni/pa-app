@@ -317,7 +317,18 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="phone" data-title="On the phone">
           <h3>On the phone</h3>
-          <p>Open PA App's address on the phone and <b>Open data file</b> from your synced folder. The phone shows everything (tasks with their details, notes, the calendar, notifications) but can't change anything. Tap <b>Open newer file</b> to see the latest.</p>
+          <p>Open PA App's address on the phone. It shows everything (tasks with their details, notes, the calendar, notifications) but doesn't change anything yet.</p>
+          <p><b>Signed in to OneDrive</b>, it always reads the latest copy by itself: when you open it, when you come back to it, and on <b>Refresh</b>. Without signing in, <b>Open data file</b> picks the file by hand. Offline, it shows the last copy it read.</p>
+          <div class="card">
+            <b>Setting it up (once)</b>
+            <ol class="steps" style="margin-top:6px">
+              <li>On the phone: <b>Sign in to OneDrive</b> and allow access. PA App asks only for its <b>own folder</b>, <code>OneDrive › Apps › PA App</code>, and can't see your other files. Signing in makes that folder.</li>
+              <li>On the laptop, in File Explorer: move your data file into <code>OneDrive › Apps › PA App</code>.</li>
+              <li>In PA App on the laptop: it says the data file "isn't where it was". Go to <b>Settings › Open existing data file</b> and choose it in its new place.</li>
+              <li>On the phone: tap <b>Refresh</b>.</li>
+            </ol>
+          </div>
+          <div class="note"><b>About once a day</b> Microsoft asks the phone to sign in again; it shows the last copy until you do.</div>
         </section>
         <section id="files2" data-title="Attachments">
           <h3>Attachments</h3>
@@ -335,7 +346,8 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <tr><td>Changes from the phone don't come in</td><td>Settings › Phone reminders: if it says Paused, reconnect the data file or sign in again, then <b>Sync now</b>.</td></tr>
             <tr><td>Red text on the Phone reminders card</td><td>It says what went wrong. "Missing from the To Do list" means most tasks vanished there at once: check the "PA App" list in To Do before syncing again.</td></tr>
             <tr><td>"Reconnect data file" banner</td><td>Click it. Chrome asks again after every restart.</td></tr>
-            <tr><td>The phone shows old tasks</td><td>Tap <b>Open newer file</b>; give OneDrive a minute to bring the latest over.</td></tr>
+            <tr><td>The phone shows old tasks</td><td>Tap <b>Refresh</b> (or <b>Open newer file</b> if you're not signed in). After the laptop saves, OneDrive can take a minute to have the latest.</td></tr>
+            <tr><td>The laptop says the data file "isn't where it was"</td><td>You moved it: <b>Settings › Open existing data file</b> and choose it in its new place.</td></tr>
             <tr><td>A message went by too fast</td><td>🔔 Notifications keeps it.</td></tr>
           </table>
         </section>

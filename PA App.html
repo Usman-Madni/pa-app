@@ -968,7 +968,9 @@ const DF = {
 
   fail(e) {
     this.status = this.handle ? 'error' : 'none';
-    this.error = e.message || String(e);
+    this.error = e && e.name === 'NotFoundError'
+      ? 'The data file isn\'t where it was. If you moved it (say, into OneDrive › Apps › PA App), choose it again: Settings › Open existing data file.'
+      : e.message || String(e);
     renderStatus();
   },
 };
@@ -1007,20 +1009,24 @@ const RO = {
     const cached = device.get('roData', null);
     if (cached) { try { DB.importAll(cached); } catch { /* bad cache: start empty */ } }
   },
+  // A data file picked by hand.
   async open(file) {
     try {
-      const parsed = JSON.parse(await file.text());
-      if (!parsed || parsed.app !== 'PA App' || !parsed.data) throw new Error('That file is not a PA App data file');
-      DB.importAll(parsed.data);
-      this.info = { fileName: file.name, savedAt: parsed.savedAt, savedFrom: parsed.savedFrom, openedAt: new Date().toISOString() };
-      device.set('roData', parsed.data);
-      device.set('roInfo', this.info);
+      this.show(JSON.parse(await file.text()), file.name);
       toast('Data file opened (read-only)');
-      render();
-      renderDrawer();
     } catch (e) {
       toast(e.message.startsWith('That file') ? e.message : 'Could not read that file');
     }
+  },
+  // Show a data file's contents and keep them as the last copy. from = 'OneDrive' when read from there.
+  show(parsed, fileName, from = '') {
+    if (!parsed || parsed.app !== 'PA App' || !parsed.data) throw new Error('That file is not a PA App data file');
+    DB.importAll(parsed.data);
+    this.info = { fileName, from, savedAt: parsed.savedAt, savedFrom: parsed.savedFrom, openedAt: new Date().toISOString() };
+    device.set('roData', parsed.data);
+    device.set('roInfo', this.info);
+    render();
+    renderDrawer();
   },
 };
 
@@ -1320,13 +1326,26 @@ function statusBadge() {
   }
 }
 
+// What the read-only view (phone) is showing, and the buttons for getting the latest: from OneDrive once signed in
+// there, otherwise by picking the file. Used by the banner and the Settings card.
+function roState(small = '') {
+  const i = RO.info;
+  const shown = i ? `Showing <b>${esc(i.fileName)}</b>${i.from ? ` from ${esc(i.from)}` : ''}, saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')}.` : '';
+  const pick = `<label class="btn ${small} ${OD.connected() ? '' : 'primary'}">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>`;
+  if (!OD.connected()) {
+    return { text: shown || 'Open your data file to see your tasks, notes and events, or sign in to OneDrive to always see the latest.', buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in to OneDrive</button>${pick}` };
+  }
+  if (OD.needsSignIn()) return { text: `${shown} Sign in to OneDrive again to see the latest.`, buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in again</button>` };
+  const where = `OneDrive › Apps › ${esc(OD.folder || 'PA App')}`;
+  if (OD.empty) return { text: `Signed in. Now move your data file into <b>${where}</b> on the laptop (see the Guide), then tap Refresh.`, buttons: `<button class="btn ${small} primary" data-action="od-refresh">Refresh</button>` };
+  const note = OD.offline ? ' <b>Offline</b> — showing the last copy.' : OD.error ? ` <span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
+  return { text: `${shown || 'Reading from OneDrive…'}${note}`, buttons: `<button class="btn ${small} primary" data-action="od-refresh" ${OD.reading ? 'disabled' : ''}>${OD.reading ? 'Reading…' : 'Refresh'}</button>` };
+}
+
 function statusBanner() {
   if (state.readOnly) {
-    const i = RO.info;
-    return `<div class="banner warn">
-      <span>👁 <b>Read-only view.</b> ${i ? `Showing <b>${esc(i.fileName)}</b>, saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')}.` : 'Open your data file to see your tasks, notes and events.'}</span>
-      <label class="btn small primary">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>
-    </div>`;
+    const s = roState('small');
+    return `<div class="banner warn"><span>👁 <b>Read-only view.</b> ${s.text}</span><span class="row">${s.buttons}</span></div>`;
   }
   switch (DF.status) {
     case 'reconnect':
@@ -2972,12 +2991,12 @@ function renderNotes() {
 
 function dataFileCard() {
   if (state.readOnly) {
-    const i = RO.info;
+    const s = roState();
     return `
       <h2>Data file (read-only on this device)</h2>
-      <p class="sub">This browser can't save to files, so it only shows your data — it can never change it. That keeps your copies from drifting apart.</p>
-      ${i ? `<p>Showing <b>${esc(i.fileName)}</b><br><span class="sub">Saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')} · opened ${esc(fmtStamp(i.openedAt))}</span></p>` : ''}
-      <label class="btn primary">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>`;
+      <p class="sub">This device shows your data but doesn't change it. Signed in to OneDrive, it always reads the latest copy from PA App's own folder there (it can't see your other files).</p>
+      <p>${s.text}</p>
+      <div class="row">${s.buttons}${OD.connected() ? '<button class="btn" data-action="od-disconnect">Sign out of OneDrive</button>' : ''}</div>`;
   }
   const unsaved = device.get('unsaved', false);
   if (!DF.handle) {
@@ -3073,7 +3092,10 @@ const TD = {
 
   // Azure won't accept "PA%20App.html" as a sign-in return address, so Microsoft returns to the folder instead.
   redirectUri() { return new URL('./', location.href.split('?')[0]).href; },
-  auth() { return device.get('msAuth', null); },
+  AUTH_KEY: 'msAuth',   // where this sign-in's tokens are kept on the device (the phone's OneDrive one has its own)
+  CONNECTED_NOTE: 'Connected to Microsoft To Do',
+  auth() { return device.get(this.AUTH_KEY, null); },
+  afterSignIn() { this.sync(); },
   connected() { return !!this.auth(); },
   needsSignIn() { const a = this.auth(); return !!a && !a.refresh && !(a.access && a.exp > Date.now()); },
   waitingForFile() { return !!DF.handle && DF.status !== 'ok'; }, // syncing waits until the data file is reconnected or decided
@@ -3096,8 +3118,8 @@ const TD = {
       if (back.get('state') !== check) throw new Error('The sign-in answer didn\'t match — try again');
       await this.token({ grant_type: 'authorization_code', code: back.get('code'), redirect_uri: this.redirectUri(), code_verifier: verifier });
       this.error = '';
-      toast('Connected to Microsoft To Do');
-      this.sync();
+      toast(this.CONNECTED_NOTE);
+      this.afterSignIn();
     } catch (e) {
       this.error = e.message;
       try { popup.close(); } catch { /* already closed */ }
@@ -3129,7 +3151,7 @@ const TD = {
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split('\n')[0] : 'Microsoft sign-in failed');
     const old = this.auth() || {};
-    device.set('msAuth', { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '' });
+    device.set(this.AUTH_KEY, { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '' });
   },
   async accessToken() {
     const a = this.auth();
@@ -3138,7 +3160,7 @@ const TD = {
     if (a.refresh) {
       try { await this.token({ grant_type: 'refresh_token', refresh_token: a.refresh }); return this.auth().access; } catch { /* it lasts about a day */ }
     }
-    device.set('msAuth', { access: '', exp: 0, refresh: '' });
+    device.set(this.AUTH_KEY, { access: '', exp: 0, refresh: '' });
     throw Object.assign(new Error('Sign in to Microsoft again'), { signin: true });
   },
   async graph(method, path, body) {
@@ -3149,7 +3171,7 @@ const TD = {
       body: body ? JSON.stringify(body) : undefined,
     });
     let res = await send();
-    if (res.status === 401) { const a = this.auth(); if (a) device.set('msAuth', { ...a, exp: 0 }); res = await send(); }
+    if (res.status === 401) { const a = this.auth(); if (a) device.set(this.AUTH_KEY, { ...a, exp: 0 }); res = await send(); }
     // Everything was reloaded (a newer data file) while we waited: this sync's tasks are old copies. Stop; it runs again.
     if (this.busy && this.syncLoads !== DB.loads) throw Object.assign(new Error('Reloaded during the sync'), { reloaded: true });
     if (res.status === 204) return null;
@@ -3469,6 +3491,56 @@ function todoCard() {
       <button class="btn danger" data-action="td-disconnect">Disconnect</button>
     </div></div>`;
 }
+
+// ===================== OneDrive on the phone =====================
+// The phone signs in to Microsoft with access to PA App's own OneDrive folder only (Apps › PA App — Microsoft makes
+// it on the first sign-in) and reads the data file from there: always the latest, no picking. It's the To Do sign-in's
+// code with another permission and its own tokens (dev_odAuth); the laptop doesn't use it — it reaches the same file
+// through its synced OneDrive folder. Read-only for now (stage B); picking the file by hand still works signed out.
+const OD = Object.assign(Object.create(TD), {
+  SCOPE: 'Files.ReadWrite.AppFolder offline_access',
+  AUTH_KEY: 'odAuth',
+  CONNECTED_NOTE: 'Signed in to OneDrive',
+  FILE_NAME: 'pa-app-data.json',
+  reading: false,   // (its own flag: `busy` is the To Do sync's)
+  error: '',
+  folder: device.get('odFolder', ''), // the app folder's name, e.g. "PA App" (Apps › PA App)
+  empty: false,     // signed in, but no data file in the folder yet
+  offline: false,   // the last read failed for want of a connection: showing the last copy
+  lastRead: 0,
+  afterSignIn() { this.open(); },
+  async open() {
+    if (!this.connected() || this.reading) return;
+    this.reading = true;
+    renderStatus();
+    try {
+      const root = await this.graph('GET', '/me/drive/special/approot');
+      this.folder = root.name || 'PA App';
+      device.set('odFolder', this.folder);
+      const kids = await this.graph('GET', '/me/drive/special/approot/children?$select=id,name,eTag,file');
+      const files = (kids.value || []).filter((f) => f.file && /\.json$/i.test(f.name));
+      const f = files.find((x) => x.name === this.FILE_NAME) || files[0];
+      this.empty = !f;
+      this.offline = false;
+      this.error = '';
+      if (f) RO.show(await this.graph('GET', `/me/drive/items/${f.id}/content`), f.name, 'OneDrive');
+      this.lastRead = Date.now();
+    } catch (e) {
+      if (e && e.name === 'TypeError') this.offline = true; // fetch failed (no connection): keep showing the last copy
+      else this.error = e.signin ? '' : e.message;
+    } finally {
+      this.reading = false;
+    }
+    renderStatus();
+    render();
+  },
+  disconnect() {
+    device.remove(this.AUTH_KEY);
+    this.empty = false;
+    toast('Signed out of OneDrive. The last copy stays on this phone');
+    render();
+  },
+});
 
 // ===================== Actions =====================
 function setView(view) {
@@ -3845,6 +3917,9 @@ document.addEventListener('click', (e) => {
     case 'df-use-theirs': DF.useTheirs(); break;
     case 'df-backup-folder': DF.pickBackupFolder(); break;
     case 'td-connect': TD.signIn(); break;
+    case 'od-connect': OD.signIn(); break;
+    case 'od-refresh': OD.open(); break;
+    case 'od-disconnect': OD.disconnect(); break;
     case 'td-sync':
       if (TD.waitingForFile()) { toast('Reconnect the data file first — then it syncs straight away'); break; }
       TD.sync(); render(); break;
@@ -4052,6 +4127,11 @@ if (signInPopup) document.body.textContent = 'Signing in…';
 else {
   if (state.readOnly) RO.boot(); else DB.load();
   render();
+  if (state.readOnly) {
+    // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
+    OD.open();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - OD.lastRead > 60000) OD.open(); });
+  }
   // To Do waits until the data file has loaded, so it never works from an out-of-date copy.
   Promise.resolve(DF.init()).finally(() => TD.sync());
   AT.init();
@@ -4063,7 +4143,7 @@ else {
 }
 
 // For tests and debugging in the console.
-window.PA = { DB, DF, RO, AT, TD, TaskEdit, Series, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, Reminders };
+window.PA = { DB, DF, RO, AT, TD, OD, TaskEdit, Series, state, device, render, renderDrawer, checkReminders, uid, toISO, normalizeTask, addTask, moveTaskToBucket, nextDue, repeatText, rollTitle, rollPeriod, splitPeriod, fullTitle, Reminders };
 </script>
 </body>
 </html>
