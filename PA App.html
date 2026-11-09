@@ -1131,13 +1131,24 @@ const AT = {
   // this task gets its own renamed copy and the other keeps the old name).
   async rename(task, attId, newBase) {
     const att = task && task.attachments.find((a) => a.id === attId);
-    if (!att || state.readOnly || state.phone) return;
-    if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
+    if (!att || state.readOnly) return;
+    if (!state.phone && this.status !== 'ok') return toast('Reconnect the attachments folder first');
     const dot = att.file.lastIndexOf('.');
     const ext = dot > 0 ? att.file.slice(dot) : '';
     const base = (newBase || '').trim().replace(new RegExp(`${ext.replace('.', '\\.')}$`, 'i'), '');
     if (!base || `${safeFileName(base)}${ext}` === att.file) return;
     const users = DB.tasks.filter((t) => t.attachments.some((a) => a.file === att.file));
+    if (state.phone) {
+      // In OneDrive the file is renamed for every task that uses it (an old file shared by two copies included).
+      const target = await OD.renameFile(att.file, safeFileName(base), ext);
+      if (!target) return;
+      for (const t of users) for (const a of t.attachments) if (a.file === att.file) { a.file = target; a.name = target; }
+      changed('tasks');
+      toast(`Renamed to "${target}"`);
+      render();
+      renderDrawer();
+      return;
+    }
     const target = await this.uniqueName(`${safeFileName(base)}${ext}`);
     try {
       if (att.keep || users.length <= 1) {
@@ -1186,13 +1197,14 @@ const AT = {
 
   async remove(task, attId) {
     const att = task && task.attachments.find((a) => a.id === attId);
-    if (!att || state.readOnly || state.phone) return;
+    if (!att || state.readOnly) return;
     if (!(await ask(`Remove "${att.name}" from this task?`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed('tasks');
     // Delete the file only when no other task (e.g. another copy of a repeating task) still uses it.
     const stillUsed = DB.tasks.some((t) => t.attachments.some((a) => a.file === att.file));
-    if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
+    if (!stillUsed && state.phone) { try { await OD.graph('DELETE', OD.filePath(att.file)); } catch { /* already gone, or no signal: the file stays */ } } // to the OneDrive recycle bin
+    else if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
     render();
     renderDrawer();
   },
@@ -2178,8 +2190,8 @@ function attachBlock(t) {
       <span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
         title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}">📌</button>` : ''}
-      ${state.phone ? '' : `<button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
-      <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>`}
+      <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
+      <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>
     </div>`).join('');
   let action = '';
   if (!state.readOnly && state.phone) { // straight into OneDrive › Apps › PA App › Attachments
@@ -2193,7 +2205,6 @@ function attachBlock(t) {
   return `
     ${list}
     ${repeating && t.attachments.length ? '<p class="p-sub meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
-    ${state.phone && t.attachments.length && !state.readOnly ? '<p class="p-sub meta">Rename or remove files on the laptop.</p>' : ''}
     ${state.phone && t.attachments.length && !OD.canRead() ? '<p class="p-sub meta">Sign in to OneDrive to open these.</p>' : ''}
     ${state.phone && !t.attachments.length ? '<div class="p-row"><span class="p-ico">📎</span><span class="p-text muted">No files</span></div>' : ''}
     ${action}`;
@@ -3693,6 +3704,23 @@ const OD = Object.assign(Object.create(TD), {
     if (added) { changed('tasks'); toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
     render();
     renderDrawer();
+  },
+  // Rename in OneDrive, never over another file: "name (2).pdf" and so on when taken. Gives the new name, or null.
+  async renameFile(from, base, ext) {
+    for (let i = 1; i < 50; i++) {
+      const name = i === 1 ? `${base}${ext}` : `${base} (${i})${ext}`;
+      try {
+        const item = await this.graph('PATCH', this.filePath(from), { name, '@microsoft.graph.conflictBehavior': 'fail' });
+        return (item && item.name) || name;
+      } catch (e) {
+        if (e && e.status === 409) continue; // taken: try the next
+        if (e && e.status === 404) toast(`"${from}" is not in OneDrive › Apps › PA App › ${this.FILES}`);
+        else toast(e && e.name === 'TypeError' ? 'Could not rename: no connection' : `Could not rename: ${e.message}`);
+        return null;
+      }
+    }
+    toast('Could not rename: too many files with that name');
+    return null;
   },
   disconnect() {
     device.remove(this.AUTH_KEY);
