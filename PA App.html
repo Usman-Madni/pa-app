@@ -761,6 +761,11 @@ const state = {
 
 // ===================== Data file (auto-save) =====================
 const FILE_TYPES = [{ description: 'PA App data', accept: { 'application/json': ['.json'] } }];
+// A daily backup's file name (local time), the same on the laptop and the phone: "PA App Backup 09-11-26 3-05pm.json".
+const backupName = (now) => {
+  const h = now.getHours() % 12 || 12;
+  return `PA App Backup ${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${String(now.getFullYear()).slice(2)} ${h}-${pad(now.getMinutes())}${now.getHours() < 12 ? 'am' : 'pm'}.json`;
+};
 const DF = {
   DEBOUNCE_MS: 2000,
   POLL_MS: 20000,
@@ -964,9 +969,7 @@ const DF = {
     if (device.get('lastBackupDay', '') === day) return;
     try {
       if ((await this.backupDir.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
-      const now = new Date();
-      const h = now.getHours() % 12 || 12;
-      const name = `PA App Backup ${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${String(now.getFullYear()).slice(2)} ${h}-${pad(now.getMinutes())}${now.getHours() < 12 ? 'am' : 'pm'}.json`;
+      const name = backupName(new Date());
       let exists = true;
       try { await this.backupDir.getFileHandle(name); } catch { exists = false; }
       if (!exists) {
@@ -3038,7 +3041,10 @@ function dataFileCard() {
       <h2>Data file on OneDrive</h2>
       <p class="sub">Signed in to OneDrive, this phone reads the latest copy from PA App's own folder there (it can't see your other files) and saves every change back. Offline or signed out it only shows the last copy.</p>
       <p>${s.text}</p>
-      <div class="row">${s.buttons}${OD.connected() ? '<button class="btn" data-action="od-disconnect">Sign out of OneDrive</button>' : ''}</div>`;
+      <div class="row">${s.buttons}${OD.connected() ? '<button class="btn" data-action="od-disconnect">Sign out of OneDrive</button>' : ''}</div>
+      <h2 style="margin-top:18px">Daily backups</h2>
+      <p class="sub">The first save of each day also puts a dated copy in OneDrive › Apps › PA App › ${OD.BACKUPS}. A backup is never written over.</p>
+      ${device.get('odBackupName', '') ? `<p class="sub" data-od-backup>Last backup from this phone: <b>${esc(device.get('odBackupName', '').replace(/\.json$/, ''))}</b></p>` : ''}`;
   }
   const unsaved = device.get('unsaved', false);
   if (!DF.handle) {
@@ -3088,7 +3094,7 @@ function renderSettings() {
           <button class="btn" data-action="test-notification">Send test reminder</button>
         </div>
       </div>
-      <div class="card edit-only" ${state.phone ? 'hidden' : ''}>
+      <div class="card edit-only">
         <h2>Manual backup</h2>
         <p class="sub">An extra copy you control. Importing replaces everything in this browser (and then the data file).</p>
         <div class="row">
@@ -3688,6 +3694,7 @@ const OD = Object.assign(Object.create(TD), {
           if (this.edits === edits) device.set('odUnsaved', false); // else a newer change saves next
           RO.info = { fileName: this.item.name, from: 'OneDrive', savedAt: payload.savedAt, savedFrom: payload.savedFrom, openedAt: new Date().toISOString() };
           device.set('roInfo', RO.info);
+          await this.dailyBackup(payload);
           break;
         } catch (e) {
           if (e.status !== 412) throw e;
@@ -3708,6 +3715,30 @@ const OD = Object.assign(Object.create(TD), {
       renderStatus();
       if (this.saveAgain) { this.saveAgain = false; this.save(); }
     }
+  },
+  // Daily backups, like the laptop's: the phone's first save of each day also puts a dated copy in
+  // Apps › PA App › Backups (OneDrive makes the folder). Never over an existing backup; a failure doesn't stop saving.
+  BACKUPS: 'Backups',
+  BACKUP_RETRY_MS: 10 * 60000, // after a failed backup, wait before trying again (its notice is a change, so it saves again)
+  backupFailedAt: 0,
+  async dailyBackup(payload) {
+    const day = todayISO();
+    if (device.get('odBackupDay', '') === day || Date.now() - this.backupFailedAt < this.BACKUP_RETRY_MS) return;
+    const name = backupName(new Date());
+    try {
+      const path = `/me/drive/special/approot:/${this.BACKUPS}/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`;
+      await this.graph('PUT', path, new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' }));
+    } catch (e) {
+      if (!(e && e.status === 409)) {
+        this.backupFailedAt = Date.now();
+        toast('Daily backup failed: ' + (e && e.name === 'TypeError' ? 'no connection' : e.message));
+        return;
+      }
+      // 409: that backup is already there
+    }
+    device.set('odBackupDay', day);
+    device.set('odBackupName', name);
+    if (state.view === 'settings' && !document.querySelector('input:focus, textarea:focus, select:focus')) render();
   },
   // Attached files (stage D): the laptop's attachments folder, moved into the app's own folder in OneDrive.
   FILES: 'Attachments',
@@ -4340,7 +4371,7 @@ document.addEventListener('change', (e) => {
   const kind = e.target.dataset?.input;
   const file = e.target.files?.[0];
   if (!file) return;
-  if (kind === 'import') importData(file);
+  if (kind === 'import' && !state.readOnly) importData(file);
   if (kind === 'attach') AT.add(currentTask(), [...e.target.files]);
   if (kind === 'ro-open') RO.open(file);
   e.target.value = '';

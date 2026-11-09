@@ -12,6 +12,7 @@ function fakeOneDrive() {
     const method = (opts.method || 'GET').toUpperCase();
     if (url.startsWith('https://login.microsoftonline.com/')) return reply(200, { access_token: 'od', expires_in: 3600, refresh_token: 'odr' });
     const headers = opts.headers || {};
+    if (url.includes('/approot:/Backups/')) return reply(201, { id: 'B1' }); // the daily backup: test-phone-backup
     g.calls.push({ method, url, ifMatch: headers['If-Match'], body: opts.body ? JSON.parse(opts.body) : null });
     const path = url.replace('https://graph.microsoft.com/v1.0', '').split('?')[0];
     if (path === '/me/drive/special/approot') return reply(200, { id: 'root', name: 'PA App' });
