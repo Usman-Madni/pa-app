@@ -161,9 +161,10 @@ const { loadApp, check, done } = require('./helpers');
   check(doc.querySelector('#drawer').textContent.includes('This is the last one (3 of 3)'), 'the third says it is the last');
   check(PA.Series.tick(n3).next === null, 'ticking the last one makes no more');
   // Calendar preview also stops
-  const m = PA.addTask({ title: 'Course', due: '2026-11-02T18:00' });
+  // (a month safely in the future: the calendar only previews repeats from today on)
+  const m = PA.addTask({ title: 'Course', due: '2030-11-04T18:00' }); // a Monday
   m.repeat = { freq: 'weekly', interval: 1, days: [1], monthMode: 'date', unit: 'days', until: '', endMode: 'count', count: 2 };
-  PA.state.calMonth = new Date(2026, 10, 1);
+  PA.state.calMonth = new Date(2030, 10, 1);
   doc.querySelector('[data-view="calendar"]').click();
   const previews = [...doc.querySelectorAll('.chip.repeat')].filter((x) => x.textContent.includes('Course')).length;
   check(previews === 1, `calendar shows only the remaining repeats (1, got ${previews})`);
