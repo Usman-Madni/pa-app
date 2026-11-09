@@ -315,6 +315,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li><b>Both changed?</b> If the file was saved elsewhere while this browser also has changes, PA App puts them together, task by task: the newer change to each task, note or event wins, and nothing else is lost. A message says "Brought in changes saved on …". Something deleted on one side stays deleted.</li>
             <li><b>A different data file?</b> Opening another data file while this browser has data of its own asks first: <b>Keep this device's version</b> or <b>Use the file's version</b>.</li>
             <li><b>Backups</b>: one dated copy a day in your backup folder (the phone puts its own in OneDrive › Apps › PA App › Backups). <b>Export</b> saves a copy any time; <b>Import</b> replaces everything (it asks first).</li>
+            <li><b>A "pa-app-data-LAPTOP.json" beside it?</b> That's OneDrive's conflict copy, made when the laptop and the phone saved within the same few seconds. Leave it: next time the phone opens, it puts the copy's changes into the data file (the newer change to each task wins), saves, and moves the copy to OneDrive's recycle bin. A message says so.</li>
           </ul>
         </section>
         <section id="phone" data-title="On the phone">
@@ -335,7 +336,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <b>Setting it up (once)</b>
             <ol class="steps" style="margin-top:6px">
               <li>On the phone: <b>Sign in to OneDrive</b> and allow access. PA App asks only for its <b>own folder</b>, <code>OneDrive › Apps › PA App</code>, and can't see your other files. Signing in makes that folder.</li>
-              <li>On the laptop, in File Explorer: move your data file into <code>OneDrive › Apps › PA App</code>.</li>
+              <li>On the laptop, in File Explorer: make a folder called <b>Data</b> in <code>OneDrive › Apps › PA App</code> and move your data file into it. (A data file left loose in <code>Apps › PA App</code> is still found.)</li>
               <li>In PA App on the laptop: it says the data file "isn't where it was". Go to <b>Settings › Open existing data file</b> and choose it in its new place.</li>
               <li>On the phone: tap <b>Refresh</b>.</li>
             </ol>
@@ -349,7 +350,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <b>So the phone can use them (once)</b>
             <ol class="steps" style="margin-top:6px">
               <li>Close PA App on the laptop.</li>
-              <li>In File Explorer, move your attachments folder into <code>OneDrive › Apps › PA App</code>, beside the data file. Its name must be <b>Attachments</b>.</li>
+              <li>In File Explorer, move your attachments folder into <code>OneDrive › Apps › PA App</code>, beside the Data folder. Its name must be <b>Attachments</b>.</li>
               <li>Open PA App on the laptop: <b>Settings › Attachments folder › Change folder</b> and choose it in its new place.</li>
               <li>On the phone: open a task with a file and tap the file's name.</li>
             </ol>

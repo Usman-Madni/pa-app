@@ -989,7 +989,7 @@ const DF = {
   fail(e) {
     this.status = this.handle ? 'error' : 'none';
     this.error = e && e.name === 'NotFoundError'
-      ? 'The data file isn\'t where it was. If you moved it (say, into OneDrive › Apps › PA App), choose it again: Settings › Open existing data file.'
+      ? 'The data file isn\'t where it was. If you moved it (say, into OneDrive › Apps › PA App › Data), choose it again: Settings › Open existing data file.'
       : e.message || String(e);
     renderStatus();
   },
@@ -1222,7 +1222,7 @@ function attachCard() {
       <p class="sub">${AT.dir
         ? `Files you attach to tasks are copied into the <b>${esc(AT.dir.name)}</b> folder.`
         : 'Pick a folder once and files you attach to tasks are copied there.'}
-        For the phone to open and add them, it must be the <b>Attachments</b> folder in OneDrive › Apps › PA App, beside the data file.</p>
+        For the phone to open and add them, it must be the <b>Attachments</b> folder in OneDrive › Apps › PA App, beside the Data folder.</p>
       <div class="row">
         ${AT.status === 'reconnect' ? '<button class="btn primary" data-action="at-reconnect">Reconnect</button>' : ''}
         <button class="btn" data-action="at-folder">${AT.dir ? 'Change folder' : 'Choose folder'}</button>
@@ -1378,7 +1378,7 @@ function roState(small = '') {
   }
   if (OD.needsSignIn()) return { text: `${shown} Sign in to OneDrive again to see the latest.`, buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in again</button>` };
   const where = `OneDrive › Apps › ${esc(OD.folder || 'PA App')}`;
-  if (OD.empty) return { text: `Signed in. Now move your data file into <b>${where}</b> on the laptop (see the Guide), then tap Refresh.`, buttons: `<button class="btn ${small} primary" data-action="od-refresh">Refresh</button>` };
+  if (OD.empty) return { text: `Signed in. Now move your data file into <b>${where} › ${OD.DATA_DIR}</b> on the laptop (see the Guide), then tap Refresh.`, buttons: `<button class="btn ${small} primary" data-action="od-refresh">Refresh</button>` };
   const note = OD.offline ? ` <b>Offline</b> — showing the last copy${device.get('odUnsaved', false) ? '; your last change saves when you\'re back online' : ''}.`
     : OD.error ? ` <span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
   const refresh = `<button class="btn ${small} primary" data-action="od-refresh" ${OD.reading ? 'disabled' : ''}>${OD.reading ? 'Reading…' : 'Refresh'}</button>`;
@@ -3641,13 +3641,14 @@ const OD = Object.assign(Object.create(TD), {
     if (!this.connected() || this.reading) return;
     this.reading = true;
     renderStatus();
+    let copies = [];
     try {
       const root = await this.graph('GET', '/me/drive/special/approot');
       this.folder = root.name || 'PA App';
       device.set('odFolder', this.folder);
-      const kids = await this.graph('GET', '/me/drive/special/approot/children?$select=id,name,eTag,file');
-      const files = (kids.value || []).filter((f) => f.file && /\.json$/i.test(f.name));
-      const f = files.find((x) => x.name === this.FILE_NAME) || files[0];
+      const found = await this.findFile();
+      const f = found.f;
+      copies = found.copies;
       this.empty = !f;
       this.offline = false;
       this.error = '';
@@ -3669,8 +3670,50 @@ const OD = Object.assign(Object.create(TD), {
     this.refreshMode();
     renderStatus();
     render();
-    if (device.get('odUnsaved', false)) this.save();
+    if (copies && copies.length && this.canEdit()) await this.tidyCopies(copies);
+    else if (device.get('odUnsaved', false)) this.save();
     TD.soon(); // with the latest read, To Do follows (when it may)
+  },
+  // The data file lives in Apps › PA App › Data; a phone whose file is still loose in Apps › PA App (from before the
+  // Data folder) finds it there. f: the data file; copies: OneDrive's conflict copies beside it
+  // ("pa-app-data-LAPTOP.json", made when the laptop and phone saved within the same few seconds).
+  DATA_DIR: 'Data',
+  async findFile() {
+    const pick = (kids) => (kids.value || []).filter((x) => x.file && /\.json$/i.test(x.name));
+    let files = [];
+    try {
+      files = pick(await this.graph('GET', `/me/drive/special/approot:/${this.DATA_DIR}:/children?$select=id,name,eTag,file`));
+    } catch (e) { if (e && (e.name === 'TypeError' || e.signin)) throw e; } // no Data folder yet (404): look loose
+    if (!files.length) files = pick(await this.graph('GET', '/me/drive/special/approot/children?$select=id,name,eTag,file'));
+    const base = this.FILE_NAME.replace(/\.json$/i, '');
+    const isCopy = (x) => x.name.toLowerCase().startsWith(`${base}-`.toLowerCase());
+    const f = files.find((x) => x.name === this.FILE_NAME) || files.find((x) => !isCopy(x)) || files[0];
+    return { f, copies: f ? files.filter((x) => x !== f && isCopy(x)) : [] };
+  },
+  // Put each conflict copy's records together with the data file (the newer change to each record wins, as in every
+  // merge), save, and only once that's saved move the copies to OneDrive's recycle bin. Not saved: they stay for next time.
+  async tidyCopies(copies) {
+    const merged = [];
+    for (const c of copies) {
+      try {
+        const file = await this.graph('GET', `/me/drive/items/${c.id}/content`);
+        if (!file || !file.data || !REQUIRED_KEYS.every((k) => Array.isArray(file.data[k]))) continue; // not one of ours
+        DB.importAll(mergeData(DB.exportAll(), file.data));
+        merged.push(c);
+      } catch { /* try again next time */ }
+    }
+    if (!merged.length) return;
+    this.edits++;
+    device.set('roData', DB.exportAll());
+    device.set('odUnsaved', true);
+    await this.save();
+    if (device.get('odUnsaved', false)) return;
+    let gone = 0;
+    for (const c of merged) {
+      try { await this.graph('DELETE', `/me/drive/items/${c.id}`); gone++; } catch { /* left for next time; merging it again changes nothing */ }
+    }
+    if (!document.querySelector('input:focus, textarea:focus, select:focus')) { render(); renderDrawer(); }
+    if (gone) toast(`Tidied ${gone === 1 ? 'a conflict copy' : `${gone} conflict copies`} of the data file (made when both devices saved at once): its changes are in, and the copy is in OneDrive's recycle bin`);
   },
   // Something changed on the phone: keep it here (it survives closing the page) and save it shortly.
   markDirty() {
