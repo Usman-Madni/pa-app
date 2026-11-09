@@ -1,32 +1,16 @@
 # PA App
 
-Your personal assistant: tasks with reminders, notes and a calendar, all in one file.
+Your personal assistant: tasks with reminders, notes and a calendar, with reminders on your phone through Microsoft To Do.
 
-## Use it
-Open **`PA App.html`** in **Chrome or Edge** on your computer. Nothing to install.
+**Open it:** https://usman-madni.github.io/pa-app/ in Chrome. On a computer, install it from Chrome's menu (**⋮ › Cast, save, and share › Install page as app**).
 
-**First time:**
-1. Go to **Settings → Data file → Create new data file**. Save it in OneDrive, e.g. `pa-app-data.json`.
-   From then on, every change saves to that file automatically, 2 seconds after you stop typing.
-2. In the same place, choose **Daily backups → Choose backup folder**, for example the `backups` folder here.
-   The first save each day also writes a dated backup copy there.
+**How to use it:** the **PA App Guide** (**? Guide** in the app's sidebar or Settings, or [`PA App Guide.html`](PA%20App%20Guide.html)) covers everything: tasks, repeats, reminders, phone reminders, the data file and the phone.
 
-**After restarting the browser,** click **Reconnect data file** once. Browsers ask again for file access after a restart.
-
-**Using two computers:**
-- Open the same data file on both (**Settings → Open existing data file**).
-- Each computer picks up the other's saves within about 20 seconds.
-- If both changed something in the meantime, the app asks which version to keep.
-- Best used on one computer at a time.
-
-## On your phone (read-only for now)
-- Open **https://usman-madni.github.io/pa-app/PA%20App.html** on your phone. You can add it to your home screen.
-- On a phone the app only shows your data and never changes it. That stops two different copies from appearing.
-- Tap **Open data file** and pick `pa-app-data.json` from OneDrive. To see newer changes, tap **Open newer file** and pick it again.
-- Planned: full editing on the phone through OneDrive.
-
-## Theme
-The **🌓** button in the sidebar switches between Auto (follows Windows), Dark and Light.
+## In short
+- **One data file**, saved automatically a couple of seconds after every change. Put it in OneDrive. A dated backup is made once a day.
+- **The laptop edits.** If the file was saved elsewhere meanwhile, both sides' changes are merged item by item.
+- **The phone** signs in to OneDrive (PA App's own folder only) and shows the latest copy. Editing on the phone is coming.
+- **Microsoft To Do** carries your tasks and reminders to the phone and brings ticks and edits back.
 
 ## For development
 ```bash

@@ -93,6 +93,32 @@ const dataFile = (title, savedFrom = 'Laptop') => ({
   check(again.errors.length === 0 && phone.errors.length === 0, 'no script errors' + (again.errors[0] || phone.errors[0] ? ': ' + (again.errors[0] || phone.errors[0]) : ''));
   again.close();
 
+  // --- On a real phone the PA App tab is paused while you sign in, so it can't watch the pop-up's address.
+  //     index.html (where Microsoft returns) hands the answer back with a message and closes itself. ---
+  const fs = require('fs');
+  const path = require('path');
+  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check(/postMessage/.test(index) && /PA%20App\.html/.test(index), 'index.html hands the sign-in answer back to PA App, and otherwise opens PA App');
+  const p2 = loadApp({ fsa: false, fetch: g.fetch });
+  await tick(20);
+  let pop;
+  p2.win.open = () => (pop = { closed: false, location: { href: 'about:blank' }, close() { this.closed = true; } });
+  p2.doc.querySelector('#banner [data-action="od-connect"]').click();
+  await tick(50);
+  const st = new URL(pop.location.href).searchParams.get('state');
+  pop.location.href = 'https://login.microsoftonline.com/still-signing-in'; // its address can't be read from here
+  pop.closed = true; // it closed itself straight after sending the message
+  p2.win.dispatchEvent(new p2.win.MessageEvent('message', { data: { paSignIn: `?code=c2&state=${st}` }, origin: p2.win.location.origin }));
+  await tick(400);
+  check(p2.win.localStorage.getItem('dev_odAuth') && !p2.PA.OD.error, 'the answer handed back by message signs in, though the pop-up has already closed');
+  p2.PA.OD.signIn();
+  await tick(50);
+  const st2 = new URL(pop.location.href).searchParams.get('state'); // even with the right check code…
+  p2.win.dispatchEvent(new p2.win.MessageEvent('message', { data: { paSignIn: `?code=evil&state=${st2}` }, origin: 'https://evil.example' }));
+  await tick(300);
+  check(!g.tokenCalls.some((c) => c.code === 'evil'), 'a message from another site is ignored');
+  p2.close();
+
   // --- The laptop: no OneDrive sign-in, and a moved data file is explained ---
   const file = fakeFile();
   const laptop = loadApp({ pickFile: file, fetch: g.fetch });

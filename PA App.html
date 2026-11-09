@@ -3126,19 +3126,33 @@ const TD = {
     }
     render();
   },
-  // Microsoft sends the pop-up back to our own site with ?code=…; until then its address can't be read.
+  // Microsoft sends the pop-up back to our own site with ?code=…. Two ways to get it: index.html there hands it back
+  // with a message (needed on phones, where this tab is paused meanwhile), and we also watch the pop-up's address.
   waitForPopup(popup) {
     return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (p) => {
+        if (done) return;
+        done = true;
+        clearInterval(iv);
+        removeEventListener('message', onMessage);
+        try { popup.close(); } catch { /* closed already */ }
+        if (p) resolve(p); else reject(new Error('The sign-in window was closed'));
+      };
+      const onMessage = (e) => {
+        if (e.origin !== location.origin || !e.data || typeof e.data.paSignIn !== 'string') return; // only our own page
+        const p = new URLSearchParams(e.data.paSignIn);
+        if (p.has('code') || p.has('error')) finish(p);
+      };
+      addEventListener('message', onMessage);
       const iv = setInterval(() => {
-        if (popup.closed) { clearInterval(iv); reject(new Error('The sign-in window was closed')); return; }
+        // Closed: its message may still be on the way (a paused tab gets both at once), so wait a moment for it.
+        if (popup.closed) { clearInterval(iv); setTimeout(() => finish(null), 1000); return; }
         let href = '';
         try { href = popup.location.href; } catch { return; } // still on Microsoft's site
         if (!href || !href.startsWith(this.redirectUri())) return;
         const p = new URL(href).searchParams;
-        if (!p.has('code') && !p.has('error')) return;
-        clearInterval(iv);
-        popup.close();
-        resolve(p);
+        if (p.has('code') || p.has('error')) finish(p);
       }, 250);
     });
   },
