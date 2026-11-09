@@ -224,6 +224,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .task-card .title { overflow-wrap: anywhere; }
 .task-card.done .title { color: var(--muted); }
 .task-card.dragging { opacity: .5; }
+/* Touch drag: the card that follows the finger, and no text selection or callout on a held card */
+.drag-ghost { position: fixed; z-index: 60; pointer-events: none; opacity: .92; transform: rotate(2deg); box-shadow: 0 10px 28px rgba(0, 0, 0, .3); }
+@media (pointer: coarse) { .task-card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 .board-add-btn { width: 100%; text-align: left; border: 0; background: transparent; color: var(--muted); padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
 .board-add-btn:hover { background: var(--panel); color: var(--text); }
 .add-card { flex-direction: column; align-items: stretch; gap: 8px; border-color: var(--accent); }
@@ -1891,7 +1894,8 @@ function renderTasks() {
     </div>`}`;
 }
 
-// One column per bucket (plus "No bucket" when it has tasks). Cards drag between columns on a computer.
+// One column per bucket (plus "No bucket" when it has tasks). Cards drag between columns: with the mouse, or by
+// holding and dragging on a touch screen (TouchDrag).
 function renderBoard(list) {
   const cols = [{ id: '', name: 'No bucket' }, ...sortedBuckets()];
   const columns = cols.map((b) => {
@@ -4294,7 +4298,7 @@ document.addEventListener('wheel', (e) => {
   else try { window.scrollBy(e.deltaX, e.deltaY); } catch { /* not available in tests */ }
 }, { passive: true });
 
-// Board drag and drop (computer only; phones are read-only).
+// Board drag and drop with a mouse (touch screens: TouchDrag below).
 document.addEventListener('dragstart', (e) => {
   const card = e.target.closest?.('[data-card]');
   if (!card || state.readOnly) return;
@@ -4316,6 +4320,96 @@ document.addEventListener('drop', (e) => {
   e.preventDefault();
   moveTaskToBucket(e.dataTransfer.getData('text/plain'), col.dataset.bucketCol);
 });
+
+// Board drag by touch (phones and tablets don't send the mouse's drag events): hold a card a moment, then drag it
+// onto another column. Moving the finger before then is a scroll, and a quick tap still opens the task. Near the
+// board's left or right edge it scrolls along, so a column off screen can be reached.
+const TouchDrag = {
+  HOLD_MS: 350,
+  SLOP: 10,        // px the finger may wander while holding
+  EDGE: 40,        // px from the board's side where it scrolls along
+  timer: null, card: null, ghost: null, col: null, board: null, scroller: null,
+  x: 0, y: 0, dx: 0, dy: 0,
+  dragging: false,
+  start(e) {
+    this.cancel();
+    if (state.readOnly || e.touches.length !== 1) return;
+    const card = e.target.closest?.('.board [data-card]');
+    if (!card || e.target.closest('input, button, select, a')) return;
+    const p = e.touches[0];
+    this.card = card;
+    this.x = p.clientX; this.y = p.clientY;
+    this.timer = setTimeout(() => this.lift(), this.HOLD_MS);
+  },
+  lift() {
+    const card = this.card;
+    if (!card || !card.isConnected) return this.cancel();
+    const r = card.getBoundingClientRect();
+    this.dx = this.x - r.left; this.dy = this.y - r.top;
+    this.ghost = card.cloneNode(true);
+    this.ghost.classList.add('drag-ghost');
+    this.ghost.removeAttribute('data-card');
+    this.ghost.style.width = `${r.width}px`;
+    document.body.append(this.ghost);
+    card.classList.add('dragging');
+    this.board = card.closest('.board');
+    this.dragging = true;
+    try { navigator.vibrate?.(15); } catch { /* not on every phone */ }
+    this.follow();
+    this.scroller = setInterval(() => this.edgeScroll(), 16);
+  },
+  move(e) {
+    const p = e.touches[0];
+    if (!p) return;
+    if (!this.dragging) {
+      if (this.timer && Math.hypot(p.clientX - this.x, p.clientY - this.y) > this.SLOP) this.cancel(); // a scroll
+      return;
+    }
+    e.preventDefault(); // dragging: the page stays still
+    this.x = p.clientX; this.y = p.clientY;
+    this.follow();
+  },
+  // The card under the finger, and the column it's over lit up.
+  follow() {
+    this.ghost.style.left = `${this.x - this.dx}px`;
+    this.ghost.style.top = `${this.y - this.dy}px`;
+    const col = document.elementFromPoint(this.x, this.y)?.closest?.('[data-bucket-col]') || null;
+    if (col !== this.col) {
+      this.col?.classList.remove('over');
+      col?.classList.add('over');
+      this.col = col;
+    }
+  },
+  edgeScroll() {
+    if (!this.board) return;
+    const r = this.board.getBoundingClientRect();
+    const step = this.x < r.left + this.EDGE ? -12 : this.x > r.right - this.EDGE ? 12 : 0;
+    if (!step) return;
+    this.board.scrollLeft += step;
+    this.follow();
+  },
+  end(e) {
+    if (!this.dragging) return this.cancel();
+    e.preventDefault(); // no tap: the task doesn't open
+    const id = this.card.dataset.card;
+    const to = this.col ? this.col.dataset.bucketCol : null;
+    this.cancel();
+    if (to != null) moveTaskToBucket(id, to);
+  },
+  cancel() {
+    clearTimeout(this.timer);
+    clearInterval(this.scroller);
+    this.ghost?.remove();
+    this.card?.classList.remove('dragging');
+    this.col?.classList.remove('over');
+    Object.assign(this, { timer: null, scroller: null, ghost: null, card: null, col: null, board: null, dragging: false });
+  },
+};
+document.addEventListener('touchstart', (e) => TouchDrag.start(e), { passive: true });
+document.addEventListener('touchmove', (e) => TouchDrag.move(e), { passive: false });
+document.addEventListener('touchend', (e) => TouchDrag.end(e), { passive: false });
+document.addEventListener('touchcancel', () => TouchDrag.cancel());
+document.addEventListener('contextmenu', (e) => { if (TouchDrag.card) e.preventDefault(); }); // a long hold isn't a menu
 
 let noteTimer;
 document.addEventListener('input', (e) => {
