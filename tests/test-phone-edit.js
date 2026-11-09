@@ -54,6 +54,8 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
 
   check(/body\.phone \.p-input\[type="date"\], body\.phone \.p-input\[type="time"\] \{ border: 1px solid/.test(css), 'task panel\'s Due: on a phone the empty date box is drawn as a box to tap (phones show an empty one as nothing)');
 
+  check(/body\.phone \.p-input\[type="date"\] \{ flex: 1 1 150px !important; \}/.test(css), 'on a phone the date box is wide enough to show its date (too narrow, it shows only its arrow)');
+
   // --- An edit saves to OneDrive, with the version check ---
   doc.querySelector('[data-view="tasks"]').click();
   const form = () => doc.querySelector('[data-form="quick-add"]');
