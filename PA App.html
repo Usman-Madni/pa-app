@@ -674,11 +674,12 @@ function mergeData(mine, theirs, now = Date.now()) {
   return out;
 }
 
-// Every edit goes through here: save in the browser, then queue a save to the data file.
+// Every edit goes through here: save in the browser, then queue a save to the data file (the phone: to OneDrive).
 function changed(...keys) {
   if (state.readOnly) return;
   if (Stamps.touch(keys) && !keys.includes('deleted')) keys = [...keys, 'deleted'];
   keys.forEach((k) => DB.persist(k));
+  if (state.phone) { OD.markDirty(); return; }
   DF.markDirty();
   if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
 }
@@ -731,8 +732,12 @@ const state = {
   activeNote: null,
   calMonth: monthStart(new Date()),
   selectedDay: todayISO(),
-  // Read-only on phones/tablets (even ones whose Chrome can write files — the phone must never make a
-  // second copy), in browsers that can't write files (Safari, Firefox), or with ?readonly in the address.
+  // A phone: a phone or tablet (even one whose Chrome can write files — it must never make a second copy), a browser
+  // that can't write files (Safari, Firefox), or ?readonly in the address. It reaches the data file through OneDrive,
+  // never a file of its own, and leaves files, the To Do sync and the data-file settings to the laptop.
+  phone: isPhone() || typeof window.showOpenFilePicker !== 'function' || params.has('readonly'),
+  // Can't change anything right now: a phone that isn't signed in to OneDrive and online with the file read
+  // (OD.canEdit), or ?readonly. Starts true on a phone; OD.refreshMode() opens editing up.
   readOnly: isPhone() || typeof window.showOpenFilePicker !== 'function' || params.has('readonly'),
   remindedHere: new Set(), // read-only devices remember shown reminders here instead of changing the data
   openTask: null,          // id of the task shown in the details drawer
@@ -760,7 +765,7 @@ const DF = {
   timer: null,
 
   async init() {
-    if (state.readOnly) return;
+    if (state.phone) return; // the phone reaches the file through OneDrive (OD)
     const [h, b] = await Promise.all([idb.get('data'), idb.get('backups')]);
     this.backupDir = b || null;
     if (!h) { renderStatus(); return; }
@@ -1039,7 +1044,7 @@ const AT = {
   status: 'none', // none | reconnect | ok
 
   async init() {
-    if (state.readOnly) return;
+    if (state.phone) return; // files stay on the laptop for now (stage D)
     this.dir = (await idb.get('attachments')) || this.dir || null;
     if (this.dir) this.status = (await this.dir.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ok' : 'reconnect';
     renderDrawer();
@@ -1079,7 +1084,7 @@ const AT = {
   },
 
   async add(task, files) {
-    if (state.readOnly || !task) return;
+    if (state.readOnly || state.phone || !task) return;
     if (this.status !== 'ok') return toast('Choose or reconnect the attachments folder first');
     let added = 0;
     for (const f of files) {
@@ -1115,7 +1120,7 @@ const AT = {
   // this task gets its own renamed copy and the other keeps the old name).
   async rename(task, attId, newBase) {
     const att = task && task.attachments.find((a) => a.id === attId);
-    if (!att || state.readOnly) return;
+    if (!att || state.readOnly || state.phone) return;
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     const dot = att.file.lastIndexOf('.');
     const ext = dot > 0 ? att.file.slice(dot) : '';
@@ -1155,7 +1160,7 @@ const AT = {
   },
 
   async open(att) {
-    if (state.readOnly) return toast('Attached files open on your computer only, for now');
+    if (state.phone) return toast('Attached files open on your computer only, for now');
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     let file;
     try { file = await (await this.dir.getFileHandle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
@@ -1167,7 +1172,7 @@ const AT = {
 
   async remove(task, attId) {
     const att = task && task.attachments.find((a) => a.id === attId);
-    if (!att || state.readOnly) return;
+    if (!att || state.readOnly || state.phone) return;
     if (!(await ask(`Remove "${att.name}" from this task?`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed('tasks');
@@ -1316,6 +1321,9 @@ function renderStatus() {
 
 function statusBadge() {
   if (state.readOnly) return '<span class="status-dot warn"></span>Read-only';
+  if (state.phone) {
+    return OD.saving || device.get('odUnsaved', false) ? '<span class="status-dot warn"></span>Saving to OneDrive…' : '<span class="status-dot on"></span>Saved to OneDrive';
+  }
   const unsaved = device.get('unsaved', false);
   switch (DF.status) {
     case 'ok': return unsaved ? '<span class="status-dot warn"></span>Saving…' : '<span class="status-dot on"></span>Saved to file';
@@ -1338,13 +1346,17 @@ function roState(small = '') {
   if (OD.needsSignIn()) return { text: `${shown} Sign in to OneDrive again to see the latest.`, buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in again</button>` };
   const where = `OneDrive › Apps › ${esc(OD.folder || 'PA App')}`;
   if (OD.empty) return { text: `Signed in. Now move your data file into <b>${where}</b> on the laptop (see the Guide), then tap Refresh.`, buttons: `<button class="btn ${small} primary" data-action="od-refresh">Refresh</button>` };
-  const note = OD.offline ? ' <b>Offline</b> — showing the last copy.' : OD.error ? ` <span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
-  return { text: `${shown || 'Reading from OneDrive…'}${note}`, buttons: `<button class="btn ${small} primary" data-action="od-refresh" ${OD.reading ? 'disabled' : ''}>${OD.reading ? 'Reading…' : 'Refresh'}</button>` };
+  const note = OD.offline ? ` <b>Offline</b> — showing the last copy${device.get('odUnsaved', false) ? '; your last change saves when you\'re back online' : ''}.`
+    : OD.error ? ` <span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
+  const refresh = `<button class="btn ${small} primary" data-action="od-refresh" ${OD.reading ? 'disabled' : ''}>${OD.reading ? 'Reading…' : 'Refresh'}</button>`;
+  if (!state.readOnly) return { text: `${shown}${note}`, buttons: refresh, editing: true };
+  return { text: `${shown || 'Reading from OneDrive…'}${note}`, buttons: refresh };
 }
 
 function statusBanner() {
-  if (state.readOnly) {
+  if (state.phone) {
     const s = roState('small');
+    if (s.editing) return `<div class="banner"><span>✏ <b>Editing.</b> Every change saves to OneDrive. ${s.text}</span><span class="row">${s.buttons}</span></div>`;
     return `<div class="banner warn"><span>👁 <b>Read-only view.</b> ${s.text}</span><span class="row">${s.buttons}</span></div>`;
   }
   switch (DF.status) {
@@ -2150,11 +2162,11 @@ function attachBlock(t) {
       <span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
         title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}">📌</button>` : ''}
-      <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
-      <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>
+      ${state.phone ? '' : `<button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename">✎</button>
+      <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove">✕</button>`}
     </div>`).join('');
   let action = '';
-  if (!state.readOnly) {
+  if (!state.readOnly && !state.phone) { // files stay on the laptop for now (stage D)
     if (AT.status === 'ok') action = '<label class="p-row p-click"><span class="p-ico">📎</span><span class="p-text">Add file</span><input type="file" multiple data-input="attach" hidden></label>';
     else if (AT.status === 'reconnect') action = '<button class="p-row p-click" data-action="at-reconnect"><span class="p-ico">📎</span><span class="p-text">Reconnect attachments folder</span></button><p class="p-sub meta">Browsers ask again for folder access after a restart.</p>';
     else action = '<button class="p-row p-click" data-action="at-folder"><span class="p-ico">📁</span><span class="p-text">Choose attachments folder</span></button><p class="p-sub meta">Pick a folder once, for example next to your data file. Files you attach are copied there; the data file only remembers which file belongs to which task.</p>';
@@ -2162,8 +2174,8 @@ function attachBlock(t) {
   return `
     ${list}
     ${repeating && t.attachments.length ? '<p class="p-sub meta">📌 = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
-    ${state.readOnly && t.attachments.length ? '<p class="p-sub meta">Attached files open on your computer only, for now.</p>' : ''}
-    ${state.readOnly && !t.attachments.length ? '<div class="p-row"><span class="p-ico">📎</span><span class="p-text muted">No files</span></div>' : ''}
+    ${state.phone && t.attachments.length ? '<p class="p-sub meta">Attached files open on your computer only, for now.</p>' : ''}
+    ${state.phone && !t.attachments.length ? '<div class="p-row"><span class="p-ico">📎</span><span class="p-text muted">No files</span></div>' : ''}
     ${action}`;
 }
 
@@ -2990,11 +3002,11 @@ function renderNotes() {
 }
 
 function dataFileCard() {
-  if (state.readOnly) {
+  if (state.phone) {
     const s = roState();
     return `
-      <h2>Data file (read-only on this device)</h2>
-      <p class="sub">This device shows your data but doesn't change it. Signed in to OneDrive, it always reads the latest copy from PA App's own folder there (it can't see your other files).</p>
+      <h2>Data file on OneDrive</h2>
+      <p class="sub">Signed in to OneDrive, this phone reads the latest copy from PA App's own folder there (it can't see your other files) and saves every change back. Offline or signed out it only shows the last copy.</p>
       <p>${s.text}</p>
       <div class="row">${s.buttons}${OD.connected() ? '<button class="btn" data-action="od-disconnect">Sign out of OneDrive</button>' : ''}</div>`;
   }
@@ -3029,8 +3041,8 @@ function renderSettings() {
     <div class="page-head"><div><h1>Settings</h1></div><a class="btn" href="PA App Guide.html" target="_blank" rel="noopener">? Guide</a></div>
     <div class="grid" style="max-width:720px">
       <div class="card" id="df-card">${dataFileCard()}</div>
-      ${state.readOnly ? '' : todoCard()}
-      ${attachCard()}
+      ${state.phone ? '' : todoCard()}
+      ${state.phone ? '' : attachCard()}
       ${manageCard()}
       <div class="card">
         <h2>This device</h2>
@@ -3046,7 +3058,7 @@ function renderSettings() {
           <button class="btn" data-action="test-notification">Send test reminder</button>
         </div>
       </div>
-      <div class="card edit-only">
+      <div class="card edit-only" ${state.phone ? 'hidden' : ''}>
         <h2>Manual backup</h2>
         <p class="sub">An extra copy you control. Importing replaces everything in this browser (and then the data file).</p>
         <div class="row">
@@ -3177,11 +3189,11 @@ const TD = {
     device.set(this.AUTH_KEY, { access: '', exp: 0, refresh: '' });
     throw Object.assign(new Error('Sign in to Microsoft again'), { signin: true });
   },
-  async graph(method, path, body) {
+  async graph(method, path, body, headers = {}) { // headers: e.g. If-Match, so a save only lands on the version read
     const url = path.startsWith('https://') ? path : this.GRAPH + path;
     const send = async () => fetch(url, {
       method,
-      headers: { Authorization: `Bearer ${await this.accessToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { Authorization: `Bearer ${await this.accessToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
     let res = await send();
@@ -3389,12 +3401,12 @@ const TD = {
   },
   saveOwn() { this.ownSave = true; try { changed('tasks'); } finally { this.ownSave = false; } },
   soon() {
-    if (state.readOnly || !this.connected()) return;
+    if (state.phone || !this.connected()) return; // only the laptop syncs To Do, even while the phone edits
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.sync(), this.SOON_MS);
   },
   async sync() {
-    if (state.readOnly || !this.connected()) return;
+    if (state.phone || !this.connected()) return;
     if (this.busy) { this.again = true; return; }
     if (this.waitingForFile()) return; // the data file needs reconnecting or a decision first; DF.check() syncs after
     this.busy = true;
@@ -3510,19 +3522,38 @@ function todoCard() {
 // The phone signs in to Microsoft with access to PA App's own OneDrive folder only (Apps › PA App — Microsoft makes
 // it on the first sign-in) and reads the data file from there: always the latest, no picking. It's the To Do sign-in's
 // code with another permission and its own tokens (dev_odAuth); the laptop doesn't use it — it reaches the same file
-// through its synced OneDrive folder. Read-only for now (stage B); picking the file by hand still works signed out.
+// through its synced OneDrive folder. Picking the file by hand still works signed out (read-only).
+// Editing (stage C): signed in, online and with the file read, the phone edits. changed() → markDirty keeps the data on
+// the phone (dev_roData, dev_odUnsaved) and saves it to OneDrive a moment later, only onto the version it read
+// (If-Match: the file's eTag). If the laptop saved meanwhile, it merges record by record (mergeData) and tries again,
+// quietly. A change that couldn't be saved (no signal, page closed) is merged in at the next open.
 const OD = Object.assign(Object.create(TD), {
   SCOPE: 'Files.ReadWrite.AppFolder offline_access',
   AUTH_KEY: 'odAuth',
   CONNECTED_NOTE: 'Signed in to OneDrive',
   FILE_NAME: 'pa-app-data.json',
+  SAVE_MS: 2000,
   reading: false,   // (its own flag: `busy` is the To Do sync's)
+  saving: false,
+  saveAgain: false,
+  saveTimer: null,
+  edits: 0,         // counts changes, so one made during a save isn't marked as saved
+  item: null,       // the data file on OneDrive: {id, name, eTag} — eTag = the version last read or saved
   error: '',
   folder: device.get('odFolder', ''), // the app folder's name, e.g. "PA App" (Apps › PA App)
   empty: false,     // signed in, but no data file in the folder yet
-  offline: false,   // the last read failed for want of a connection: showing the last copy
+  offline: false,   // the last read or save failed for want of a connection: read-only, showing the last copy
   lastRead: 0,
   afterSignIn() { this.open(); },
+  canEdit() {
+    return state.phone && !params.has('readonly') && this.connected() && !this.needsSignIn() && !this.offline && !!this.item;
+  },
+  // Editing on or off, as things stand now.
+  refreshMode() {
+    if (!state.phone) return;
+    const ro = !this.canEdit();
+    if (ro !== state.readOnly) { state.readOnly = ro; render(); renderDrawer(); } else renderStatus();
+  },
   async open() {
     if (!this.connected() || this.reading) return;
     this.reading = true;
@@ -3537,7 +3568,14 @@ const OD = Object.assign(Object.create(TD), {
       this.empty = !f;
       this.offline = false;
       this.error = '';
-      if (f) RO.show(await this.graph('GET', `/me/drive/items/${f.id}/content`), f.name, 'OneDrive');
+      if (f) {
+        const file = await this.graph('GET', `/me/drive/items/${f.id}/content`);
+        this.item = { id: f.id, name: f.name, eTag: f.eTag };
+        const mine = device.get('odUnsaved', false) && device.get('roData', null);
+        // A change made here never reached OneDrive: put it together with the file's, then save.
+        RO.show(mine ? { ...file, data: mergeData(mine, file.data) } : file, f.name, 'OneDrive');
+        if (mine) this.edits++;
+      }
       this.lastRead = Date.now();
     } catch (e) {
       if (e && e.name === 'TypeError') this.offline = true; // fetch failed (no connection): keep showing the last copy
@@ -3545,8 +3583,57 @@ const OD = Object.assign(Object.create(TD), {
     } finally {
       this.reading = false;
     }
+    this.refreshMode();
     renderStatus();
     render();
+    if (device.get('odUnsaved', false)) this.save();
+  },
+  // Something changed on the phone: keep it here (it survives closing the page) and save it shortly.
+  markDirty() {
+    this.edits++;
+    device.set('roData', DB.exportAll());
+    device.set('odUnsaved', true);
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => this.save(), this.SAVE_MS);
+    renderStatus();
+  },
+  async save() {
+    if (this.saving) { this.saveAgain = true; return; }
+    if (!this.canEdit() || !device.get('odUnsaved', false)) return;
+    this.saving = true;
+    renderStatus();
+    try {
+      for (let tries = 0; tries < 3; tries++) {
+        const edits = this.edits;
+        Stamps.touch(RECORD_KEYS);
+        const payload = { app: 'PA App', version: 2, saveToken: uid(), savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() };
+        try {
+          const saved = await this.graph('PUT', `/me/drive/items/${this.item.id}/content`, payload, { 'If-Match': this.item.eTag });
+          this.item = { ...this.item, eTag: saved.eTag };
+          device.set('roData', DB.exportAll());
+          if (this.edits === edits) device.set('odUnsaved', false); // else a newer change saves next
+          RO.info = { fileName: this.item.name, from: 'OneDrive', savedAt: payload.savedAt, savedFrom: payload.savedFrom, openedAt: new Date().toISOString() };
+          device.set('roInfo', RO.info);
+          break;
+        } catch (e) {
+          if (e.status !== 412) throw e;
+          // Saved elsewhere since we read it: take the newer version, put both together, and try again (quietly).
+          const meta = await this.graph('GET', `/me/drive/items/${this.item.id}`);
+          const file = await this.graph('GET', `/me/drive/items/${this.item.id}/content`);
+          this.item = { ...this.item, eTag: meta.eTag };
+          DB.importAll(mergeData(DB.exportAll(), file.data));
+          if (!document.querySelector('input:focus, textarea:focus, select:focus')) { render(); renderDrawer(); }
+        }
+      }
+    } catch (e) {
+      if (e && e.name === 'TypeError') this.offline = true; // no signal: read-only until it's back; the change waits here
+      else this.error = e.signin ? '' : e.message;
+      this.refreshMode();
+    } finally {
+      this.saving = false;
+      renderStatus();
+      if (this.saveAgain) { this.saveAgain = false; this.save(); }
+    }
   },
   disconnect() {
     device.remove(this.AUTH_KEY);
@@ -4139,12 +4226,14 @@ const signInPopup = !!window.opener && /[?&](code|error)=/.test(location.search)
 applyTheme();
 if (signInPopup) document.body.textContent = 'Signing in…';
 else {
-  if (state.readOnly) RO.boot(); else DB.load();
+  if (state.phone) RO.boot(); else DB.load();
   render();
-  if (state.readOnly) {
+  if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
     OD.open();
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - OD.lastRead > 60000) OD.open(); });
+    addEventListener('offline', () => { OD.offline = true; OD.refreshMode(); });
+    addEventListener('online', () => OD.open()); // back: read the latest (an unsaved change is merged in and saved)
   }
   // To Do waits until the data file has loaded, so it never works from an out-of-date copy.
   Promise.resolve(DF.init()).finally(() => TD.sync());

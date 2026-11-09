@@ -134,7 +134,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <h2>Chapter 1</h2><div class="title">Start here</div>
         <section id="what" data-title="What PA App is">
           <h3>What PA App is</h3>
-          <p>PA App keeps your tasks, notes and events in <b>one data file</b> on your computer, saved a couple of seconds after every change. Your laptop is where you edit. Your phone can open the same file to read it, and Microsoft To Do puts your tasks on the phone with their reminders.</p>
+          <p>PA App keeps your tasks, notes and events in <b>one data file</b> in OneDrive, saved a couple of seconds after every change. You can edit on the laptop and on the phone; if both changed things, PA App puts them together. Microsoft To Do also puts your tasks on the phone with their reminders.</p>
           <div class="grid">
             <div class="card"><b>☀ My Day</b><span>Today's tasks, what's overdue, and today's events.</span></div>
             <div class="card"><b>☑ Tasks</b><span>Every task, on a board or in a list.</span></div>
@@ -307,7 +307,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <h2>Chapter 6</h2><div class="title">Your data</div>
         <section id="file" data-title="The data file">
           <h3>The data file</h3>
-          <p>Every change is saved to the data file about two seconds later. Only the laptop changes it. Settings per computer (theme, which screen is open) stay out of it.</p>
+          <p>Every change is saved to the data file about two seconds later, from the laptop or the phone. Settings per device (theme, which screen is open) stay out of it.</p>
           <ul>
             <li><b>Reconnect</b>: after Chrome restarts it asks permission again; one click.</li>
             <li><b>Both changed?</b> If the file was saved elsewhere while this browser also has changes, PA App puts them together, task by task: the newer change to each task, note or event wins, and nothing else is lost. A message says "Brought in changes saved on …". Something deleted on one side stays deleted.</li>
@@ -317,8 +317,14 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="phone" data-title="On the phone">
           <h3>On the phone</h3>
-          <p>Open PA App's address on the phone. It shows everything (tasks with their details, notes, the calendar, notifications) but doesn't change anything yet.</p>
-          <p><b>Signed in to OneDrive</b>, it always reads the latest copy by itself: when you open it, when you come back to it, and on <b>Refresh</b>. Without signing in, <b>Open data file</b> picks the file by hand. Offline, it shows the last copy it read.</p>
+          <p>Open PA App's address on the phone. <b>Signed in to OneDrive</b>, you can do everything there that you do on the laptop: add and tick tasks, edit them, notes, events, repeats, reminders. The banner says <b>✏ Editing</b>, and every change saves to OneDrive a couple of seconds later.</p>
+          <ul>
+            <li>It reads the latest by itself when you open it, when you come back to it, and on <b>Refresh</b>.</li>
+            <li>If the laptop saved in the meantime, the phone puts both together (the newer change to each task wins) without asking.</li>
+            <li><b>No signal</b> or <b>signed out</b>: it shows the last copy, read-only. A change made just as the signal went is kept on the phone and saved when you're back.</li>
+            <li>Still on the laptop only: attached files, Phone reminders (To Do) and the data file settings.</li>
+            <li>Without signing in, <b>Open data file</b> picks the file by hand, read-only.</li>
+          </ul>
           <div class="card">
             <b>Setting it up (once)</b>
             <ol class="steps" style="margin-top:6px">

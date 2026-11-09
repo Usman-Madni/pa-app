@@ -68,12 +68,8 @@ const dataFile = (title, savedFrom = 'Laptop') => ({
   await tick(50);
   check(PA.DB.tasks[0]?.title === 'Newer', 'Refresh brings the latest');
 
-  // --- Still read-only ---
-  doc.querySelector('[data-view="tasks"]').click();
-  const form = doc.querySelector('[data-form="quick-add"]');
-  form.elements.title.value = 'Sneaky';
-  form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
-  check(PA.DB.tasks.length === 1 && PA.state.readOnly, 'the phone still can\'t change anything (that comes in stage C)');
+  // --- With the file read, the phone can edit (stage C; tests in test-phone-edit) ---
+  check(!PA.state.readOnly && /Editing/.test(banner()), 'with the file read, the phone can edit');
 
   // --- Offline: the last copy, and it says so ---
   g.offline = true;
