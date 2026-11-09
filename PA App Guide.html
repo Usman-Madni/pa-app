@@ -3,25 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PA App Guide</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='system-ui' font-weight='700'>?</text></svg>">
+<title>Butler Guide</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%230f5c57'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='%23fbf8f2' font-family='Georgia,serif'>?</text></svg>">
 <style>
-/* Same colours as PA App; follows its 🌓 setting (dev_theme) when opened from it. */
+/* Butler's colours (DESIGN.md); follows its theme setting (dev_theme) when opened from it. */
 :root {
-  --bg: #f6f7fb; --panel: #ffffff; --panel-2: #f1f3f9; --text: #1c2030; --muted: #6b7185; --border: #e3e6ef;
-  --accent: #4f46e5; --accent-soft: #eceafd; --danger: #dc2626; --ok: #16a34a; --warn: #d97706; --late: #ea580c; --event: #0d9488;
+  --bg: #f7f3ec; --panel: #fdfbf7; --panel-2: #efe9de; --text: #26231e; --muted: #6b6457; --border: #e2dbcd;
+  --accent: #0f5c57; --accent-soft: #e0ebe7; --danger: #b3452f; --ok: #3f6f3a; --warn: #9a6a12; --late: #b8661c; --event: #8a5a3c; --up: #44637f;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
-    --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --late: #fb923c; --event: #2dd4bf;
+    --bg: #1b1a17; --panel: #23211d; --panel-2: #2c2a25; --text: #ece6da; --muted: #a39c8e; --border: #37342e;
+    --accent: #6cc3ba; --accent-soft: #233f3b; --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --late: #e39a55; --event: #d6a07c; --up: #9db8d3;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #11131a; --panel: #1a1d27; --panel-2: #232736; --text: #e8eaf2; --muted: #9aa0b4; --border: #2c3142;
-  --accent: #8b85ff; --accent-soft: #2a2850; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24; --late: #fb923c; --event: #2dd4bf;
+  --bg: #1b1a17; --panel: #23211d; --panel-2: #2c2a25; --text: #ece6da; --muted: #a39c8e; --border: #37342e;
+  --accent: #6cc3ba; --accent-soft: #233f3b; --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --late: #e39a55; --event: #d6a07c; --up: #9db8d3;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -86,7 +86,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 .chip { display: inline-block; padding: 1px 9px; border-radius: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .c-over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .c-today { background: var(--accent-soft); color: var(--accent); }
-.c-up { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #3b82f6; }
+.c-up { background: color-mix(in srgb, var(--up) 18%, transparent); color: var(--up); }
 .c-done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .c-event { background: color-mix(in srgb, var(--event) 18%, transparent); color: var(--event); }
 .c-late { background: color-mix(in srgb, var(--late) 18%, transparent); color: var(--late); }
@@ -114,7 +114,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 <body>
 <div class="layout">
   <nav class="side" aria-label="Contents">
-    <a class="brand" href="#top"><span class="logo">?</span><span>PA App Guide</span></a>
+    <a class="brand" href="#top"><span class="logo">?</span><span>Butler Guide</span></a>
     <div id="toc"></div>
     <div class="foot">Examples are made up. Times show as on your own clock.</div>
   </nav>
@@ -122,37 +122,38 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
     <div class="bar">
       <button class="toggle" type="button" aria-label="Contents">☰</button>
       <span class="c" id="bar-chap">Start here</span>
-      <span class="s" id="bar-sec">PA App Guide</span>
-      <a class="back" href="PA App.html">← Back to PA App</a>
+      <span class="s" id="bar-sec">Butler Guide</span>
+      <a class="back" href="PA App.html">← Back to Butler</a>
     </div>
     <div class="content">
-      <h1 id="top">PA App Guide</h1>
+      <h1 id="top">Butler Guide</h1>
       <p class="lede">Tasks, reminders, notes and a calendar in one place, with reminders on your phone through Microsoft To Do. Everything here is what's in the app today.</p>
 
       <!-- ===================== 1 ===================== -->
       <div class="chapter" data-chap="Start here">
         <h2>Chapter 1</h2><div class="title">Start here</div>
-        <section id="what" data-title="What PA App is">
-          <h3>What PA App is</h3>
-          <p>PA App keeps your tasks, notes and events in <b>one data file</b> in OneDrive, saved a couple of seconds after every change. You can edit on the laptop and on the phone; if both changed things, PA App puts them together. Microsoft To Do also puts your tasks on the phone with their reminders.</p>
+        <section id="what" data-title="What Butler is">
+          <h3>What Butler is</h3>
+          <p>Butler keeps your tasks, notes and events in <b>one data file</b> in OneDrive, saved a couple of seconds after every change. You can edit on the laptop and on the phone; if both changed things, Butler puts them together. Microsoft To Do also puts your tasks on the phone with their reminders.</p>
+          <p><b>Butler</b> is the app's new name (it was "PA App"). Only the name you see changed: the file is still <code>PA App.html</code>, so your links and installed app keep working, and the OneDrive folder and the To Do list are still called "PA App".</p>
           <div class="grid">
-            <div class="card"><b>☀ My Day</b><span>Today's tasks, what's overdue, and today's events.</span></div>
-            <div class="card"><b>☑ Tasks</b><span>Every task, on a board or in a list.</span></div>
-            <div class="card"><b>▦ Calendar</b><span>The month, with tasks, events and coming repeats.</span></div>
-            <div class="card"><b>✎ Notes</b><span>Free-form notes, saved as you type.</span></div>
-            <div class="card"><b>🔔 Notifications</b><span>Every message from the last 30 days.</span></div>
-            <div class="card"><b>⚙ Settings</b><span>The data file, backups, phone reminders, buckets and labels.</span></div>
+            <div class="card"><b>My Day</b><span>Today's tasks, what's overdue, and today's events.</span></div>
+            <div class="card"><b>Tasks</b><span>Every task, on a board or in a list.</span></div>
+            <div class="card"><b>Calendar</b><span>The month, with tasks, events and coming repeats.</span></div>
+            <div class="card"><b>Notes</b><span>Free-form notes, saved as you type.</span></div>
+            <div class="card"><b>Notifications</b><span>Every message from the last 30 days.</span></div>
+            <div class="card"><b>Settings</b><span>The data file, backups, phone reminders, buckets and labels.</span></div>
           </div>
         </section>
         <section id="install" data-title="Install it on the laptop">
           <h3>Install it on the laptop</h3>
-          <p>Open PA App's web address in Chrome, then install it so it opens in its own window like any other program:</p>
+          <p>Open Butler's web address in Chrome, then install it so it opens in its own window like any other program:</p>
           <ol class="steps">
-            <li>Open PA App in Chrome.</li>
+            <li>Open Butler in Chrome.</li>
             <li>Click <b>⋮</b> (top right) › <b>Cast, save, and share</b> › <b>Install page as app</b>.</li>
             <li>From then on, open it from the Start menu or the taskbar.</li>
           </ol>
-          <p><b>On the phone</b>, open the same address in Chrome, then <b>⋮</b> › <b>Add to Home screen</b> (or <b>Install app</b>) › <b>Install</b>. PA App then opens from its own icon, full screen.</p>
+          <p><b>On the phone</b>, open the same address in Chrome, then <b>⋮</b> › <b>Add to Home screen</b> (or <b>Install app</b>) › <b>Install</b>. Butler then opens from its own icon, full screen.</p>
           <div class="note"><b>Needs internet to open.</b> The installed app loads from the web each time, so it won't open offline yet. Your data never leaves your computer, apart from the copy of your tasks sent to To Do.</div>
         </section>
         <section id="first" data-title="The first time">
@@ -172,7 +173,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <h2>Chapter 2</h2><div class="title">Tasks</div>
         <section id="quickadd" data-title="Quick add">
           <h3>Quick add</h3>
-          <p>Type a task the way you'd say it. PA App picks out the date, time, repeat, label, bucket and priority, and shows what it understood before you press <kbd>Enter</kbd>.</p>
+          <p>Type a task the way you'd say it. Butler picks out the date, time, repeat, label, bucket and priority, and shows what it understood before you press <kbd>Enter</kbd>.</p>
           <div class="qa">Pay utilities bill Friday 6pm #bills @home every month !high</div>
           <div class="qa"><span class="arrow">→</span> "Pay utilities bill", due Friday 6:00 pm, monthly, label <b>bills</b>, bucket <b>home</b>, high priority</div>
           <table>
@@ -236,7 +237,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="untick" data-title="Unticking and changed copies">
           <h3>Unticking and changed copies</h3>
-          <p>Unticking takes the next copy away again, unless you've changed it since it was made (notes, steps, its date…). Then PA App asks <b>"Remove it anyway?"</b> and says what you changed.</p>
+          <p>Unticking takes the next copy away again, unless you've changed it since it was made (notes, steps, its date…). Then Butler asks <b>"Remove it anyway?"</b> and says what you changed.</p>
           <p>For "again after I finish it" repeats, changing the done date moves the next copy too. If you've changed that copy, it asks <b>"Move it anyway?"</b>: Yes moves only its date and keeps your changes.</p>
         </section>
         <section id="files" data-title="Files on repeats">
@@ -262,14 +263,14 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <section id="where" data-title="Where they ring">
           <h3>Where they ring</h3>
           <ul>
-            <li><b>With To Do connected</b> (chapter 5): your phone, and To Do on the laptop, ring for them. PA App just shows its own 🔔 message inside the app, so nothing rings twice.</li>
-            <li><b>Without To Do</b>: PA App rings on the laptop while it's open.</li>
-            <li><b>Missed</b>: reminders that went off while PA App was closed (or the laptop slept) don't all pop up when you open it. You get one message instead: "3 reminders went off while PA App was closed: …".</li>
+            <li><b>With To Do connected</b> (chapter 5): your phone, and To Do on the laptop, ring for them. Butler just shows its own message (with a bell) inside the app, so nothing rings twice.</li>
+            <li><b>Without To Do</b>: Butler rings on the laptop while it's open.</li>
+            <li><b>Missed</b>: reminders that went off while Butler was closed (or the laptop slept) don't all pop up when you open it. You get one message instead: "3 reminders went off while Butler was closed: …".</li>
           </ul>
         </section>
         <section id="notices" data-title="Notifications">
           <h3>Notifications</h3>
-          <p>Messages fade after 5 seconds. <b>🔔 Notifications</b> in the sidebar keeps every one for 30 days, newest first and grouped by day, with a count of unread ones. Click a reminder there to open its task. <b>Clear all</b> empties the list.</p>
+          <p>Messages fade after 5 seconds. <b>Notifications</b> in the sidebar keeps every one for 30 days, newest first and grouped by day, with a count of unread ones. Click a reminder there to open its task. <b>Clear all</b> empties the list.</p>
         </section>
       </div>
 
@@ -289,16 +290,16 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         <section id="both" data-title="What goes where">
           <h3>What goes where</h3>
           <table>
-            <tr><th>Done in PA App</th><th>Done in To Do</th></tr>
-            <tr><td>New task → appears in To Do</td><td>New task in the "PA App" list → comes into PA App</td></tr>
+            <tr><th>Done in Butler</th><th>Done in To Do</th></tr>
+            <tr><td>New task → appears in To Do</td><td>New task in the "PA App" list → comes into Butler</td></tr>
             <tr><td>Edit, tick, untick → follows</td><td>Tick, untick, rename, notes, Important, due date, reminder → come back</td></tr>
-            <tr><td>Delete → deleted in To Do</td><td>Delete → kept in PA App, not sent again</td></tr>
-            <tr><td>Repeat → To Do gets each copy as it comes</td><td>A repeat set there → becomes PA App's repeat</td></tr>
+            <tr><td>Delete → deleted in To Do</td><td>Delete → kept in Butler, not sent again</td></tr>
+            <tr><td>Repeat → To Do gets each copy as it comes</td><td>A repeat set there → becomes Butler's repeat</td></tr>
           </table>
           <ul>
-            <li>If the same thing was changed on both sides between syncs, <b>PA App's version wins</b>.</li>
+            <li>If the same thing was changed on both sides between syncs, <b>Butler's version wins</b>.</li>
             <li>To Do holds one reminder per task: the next one still to come. Turning it off there skips that one.</li>
-            <li>It syncs when PA App opens, a few seconds after a change, every 5 minutes, and on <b>Sync now</b>.</li>
+            <li>It syncs when Butler opens, a few seconds after a change, every 5 minutes, and on <b>Sync now</b>.</li>
           </ul>
           <div class="warn"><b>After restarting Chrome</b>, click <b>Reconnect</b> by the data file first. Syncing waits for it, and the Phone reminders card says "Paused — reconnect the data file first".</div>
         </section>
@@ -312,7 +313,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <p>Every change is saved to the data file about two seconds later, from the laptop or the phone. Settings per device (theme, which screen is open) stay out of it.</p>
           <ul>
             <li><b>Reconnect</b>: after Chrome restarts it asks permission again; one click.</li>
-            <li><b>Both changed?</b> If the file was saved elsewhere while this browser also has changes, PA App puts them together, task by task: the newer change to each task, note or event wins, and nothing else is lost. A message says "Brought in changes saved on …". Something deleted on one side stays deleted.</li>
+            <li><b>Both changed?</b> If the file was saved elsewhere while this browser also has changes, Butler puts them together, task by task: the newer change to each task, note or event wins, and nothing else is lost. A message says "Brought in changes saved on …". Something deleted on one side stays deleted.</li>
             <li><b>A different data file?</b> Opening another data file while this browser has data of its own asks first: <b>Keep this device's version</b> or <b>Use the file's version</b>.</li>
             <li><b>Backups</b>: one dated copy a day in your backup folder (the phone puts its own in OneDrive › Apps › PA App › Backups). <b>Export</b> saves a copy any time; <b>Import</b> replaces everything (it asks first).</li>
             <li><b>A "pa-app-data-LAPTOP.json" beside it?</b> That's OneDrive's conflict copy, made when the laptop and the phone saved within the same few seconds. Leave it: next time the phone opens, it puts the copy's changes into the data file (the newer change to each task wins), saves, and moves the copy to OneDrive's recycle bin. A message says so.</li>
@@ -320,7 +321,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="phone" data-title="On the phone">
           <h3>On the phone</h3>
-          <p>Open PA App's address on the phone. <b>Signed in to OneDrive</b>, you can do everything there that you do on the laptop: add and tick tasks, edit them, notes, events, repeats, reminders. The banner says <b>✏ Editing</b>, and every change saves to OneDrive a couple of seconds later.</p>
+          <p>Open Butler's address on the phone. <b>Signed in to OneDrive</b>, you can do everything there that you do on the laptop: add and tick tasks, edit them, notes, events, repeats, reminders. The banner says <b>Editing</b>, and every change saves to OneDrive a couple of seconds later.</p>
           <ul>
             <li>It reads the latest by itself when you open it, when you come back to it, and on <b>Refresh</b>.</li>
             <li>If the laptop saved in the meantime, the phone puts both together (the newer change to each task wins) without asking.</li>
@@ -335,9 +336,9 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <div class="card">
             <b>Setting it up (once)</b>
             <ol class="steps" style="margin-top:6px">
-              <li>On the phone: <b>Sign in to OneDrive</b> and allow access. PA App asks only for its <b>own folder</b>, <code>OneDrive › Apps › PA App</code>, and can't see your other files. Signing in makes that folder.</li>
+              <li>On the phone: <b>Sign in to OneDrive</b> and allow access. Butler asks only for its <b>own folder</b>, <code>OneDrive › Apps › PA App</code>, and can't see your other files. Signing in makes that folder.</li>
               <li>On the laptop, in File Explorer: make a folder called <b>Data</b> in <code>OneDrive › Apps › PA App</code> and move your data file into it. (A data file left loose in <code>Apps › PA App</code> is still found.)</li>
-              <li>In PA App on the laptop: it says the data file "isn't where it was". Go to <b>Settings › Open existing data file</b> and choose it in its new place.</li>
+              <li>In Butler on the laptop: it says the data file "isn't where it was". Go to <b>Settings › Open existing data file</b> and choose it in its new place.</li>
               <li>On the phone: tap <b>Refresh</b>.</li>
             </ol>
           </div>
@@ -349,9 +350,9 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <div class="card">
             <b>So the phone can use them (once)</b>
             <ol class="steps" style="margin-top:6px">
-              <li>Close PA App on the laptop.</li>
+              <li>Close Butler on the laptop.</li>
               <li>In File Explorer, move your attachments folder into <code>OneDrive › Apps › PA App</code>, beside the Data folder. Its name must be <b>Attachments</b>.</li>
-              <li>Open PA App on the laptop: <b>Settings › Attachments folder › Change folder</b> and choose it in its new place.</li>
+              <li>Open Butler on the laptop: <b>Settings › Attachments folder › Change folder</b> and choose it in its new place.</li>
               <li>On the phone: open a task with a file and tap the file's name.</li>
             </ol>
           </div>
@@ -371,7 +372,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <tr><td>"Reconnect data file" banner</td><td>Click it. Chrome asks again after every restart.</td></tr>
             <tr><td>The phone shows old tasks</td><td>Tap <b>Refresh</b> (or <b>Open newer file</b> if you're not signed in). After the laptop saves, OneDrive can take a minute to have the latest.</td></tr>
             <tr><td>The laptop says the data file "isn't where it was"</td><td>You moved it: <b>Settings › Open existing data file</b> and choose it in its new place.</td></tr>
-            <tr><td>A message went by too fast</td><td>🔔 Notifications keeps it.</td></tr>
+            <tr><td>A message went by too fast</td><td>Notifications keeps it (Alerts on the phone).</td></tr>
           </table>
         </section>
         <section id="calendar" data-title="Calendar colours">

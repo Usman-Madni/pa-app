@@ -61,15 +61,16 @@ const day = (d) => local(d).slice(0, 10);
   const m2 = exactTask('Call bank', 120);
   const fresh = exactTask('Take medicine', 2);
   PA.checkReminders();
-  const said = [...doc.querySelectorAll('.toast')].map((x) => x.textContent);
-  check(said.some((s) => s === '2 reminders went off while PA App was closed: Pay rent, Call bank'), `missed ones: one message naming them (got ${JSON.stringify(said)})`);
+  // A reminder's message shows a bell icon before the task's name.
+  const said = [...doc.querySelectorAll('.toast')].map((x) => (x.querySelector('use[href="#i-bell"]') ? '🔔' : '') + x.textContent);
+  check(said.some((s) => s === '2 reminders went off while Butler was closed: Pay rent, Call bank'), `missed ones: one message naming them (got ${JSON.stringify(said)})`);
   check(!said.some((s) => s.startsWith('🔔 Pay rent') || s.startsWith('🔔 Call bank')), 'no separate pop-up for each missed one');
   check(said.some((s) => s.startsWith('🔔 Take medicine')), 'one due in the last 10 minutes pops up as before');
   check(m1.reminders[0].fired && m2.reminders[0].fired && fresh.reminders[0].fired, 'all of them count as gone off');
   wipe();
   for (const [i, name] of ['A1', 'A2', 'A3', 'A4', 'A5'].entries()) exactTask(name, 60 + i);
   PA.checkReminders();
-  check(doc.querySelector('#toasts').textContent.includes('5 reminders went off while PA App was closed: A5, A4, A3 +2 more'), 'up to three names, then "+N more"');
+  check(doc.querySelector('#toasts').textContent.includes('5 reminders went off while Butler was closed: A5, A4, A3 +2 more'), 'up to three names, then "+N more"');
   wipe();
 
   // With Microsoft To Do connected, To Do already rings on this computer and the phone: PA App only shows its own
@@ -85,7 +86,7 @@ const day = (d) => local(d).slice(0, 10);
   exactTask('Not on the phone', 1).todo = { removed: true };
   PA.checkReminders();
   win.localStorage.removeItem('dev_msAuth');
-  check(!rang.includes('Quiet here') && doc.querySelector('#toasts').textContent.includes('🔔 Quiet here'), 'connected to To Do: only the message in the app, no second ring');
+  check(!rang.includes('Quiet here') && [...doc.querySelectorAll('.toast')].some((x) => x.querySelector('use[href="#i-bell"]') && x.textContent.trim().startsWith('Quiet here')),'connected to To Do: only the message in the app, no second ring');
   check(rang.includes('Not on the phone'), 'a task deleted from To Do still rings here (To Do won\'t)');
   wipe();
 

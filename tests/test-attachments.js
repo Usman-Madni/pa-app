@@ -33,7 +33,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(a2.name === 'Aug elec bill 2026.jpg' && a2.original === 'IMG_2041.jpg', 'photo named too; the original name is remembered');
   check(folder.files[a1.file] && folder.files[a1.file].parts[0] === pdf, 'the file itself is copied into the folder');
   check(a1.keep === false && a2.keep === false, 'new attachments belong to this one only');
-  check(doc.querySelector('#main').textContent.includes('📎 2'), 'list shows 📎 2');
+  check(doc.querySelector('#main [title="Attachments"] use[href="#i-paperclip"]') && doc.querySelector('#main [title="Attachments"]').textContent.trim() === '2', 'list shows a paperclip and 2');
 
   // Data file holds only names, never contents
   await PA.DF.save();

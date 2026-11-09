@@ -1,6 +1,7 @@
 # PA App — how to work here
 
 Personal assistant (tasks, reminders, notes, calendar) in **one file: `PA App.html`**. Vanilla JS, no build step, no framework.
+The name people see is **Butler**; the file, the data file's `app: 'PA App'` marker, the OneDrive folder and the To Do list keep "PA App". The look follows **`DESIGN.md`** (tokens on `:root` only, icons through `ic(name)`, no emoji as icons); `PRODUCT.md` says what the app is for.
 The user's guide is its own file, `PA App Guide.html`, opened from the app (sidebar and Settings). `index.html` is the folder's page: Microsoft returns there after a sign-in and it hands the answer back to PA App (phones need that); opened on its own it goes to PA App. When a feature changes what the user sees, update the guide in the same commit; it's public, so nothing personal.
 Background, data model and past decisions: **read `PA_APP_CONTEXT.md` before changing data, saving or the read-only mode.**
 Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This repo is public**: nothing personal goes in tracked files or commit messages.

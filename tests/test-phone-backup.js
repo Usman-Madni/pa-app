@@ -94,7 +94,8 @@ const backupPuts = (g) => g.calls.filter((c) => c.method === 'PUT' && /Backups/.
   delete g.backups[nameNow];
   PA.OD.backupFailedAt -= PA.OD.BACKUP_RETRY_MS; // ten minutes later
   await edit('Next save');
-  check(g.backups[nameNow] && JSON.parse(g.backups[nameNow].text).data.tasks[0].title === 'Next save', 'a save after a while backs up again');
+  // (found by its contents: the name carries the minute, which may have moved on since nameNow was worked out)
+  check(Object.values(g.backups).some((b) => b.text !== 'EARLIER' && JSON.parse(b.text).data.tasks[0].title === 'Next save'), 'a save after a while backs up again');
 
   // --- Import on the phone: replaces the data, and saves it to OneDrive ---
   const json = JSON.stringify({ app: 'PA App', version: 2, data: { tasks: [{ id: 'z', title: 'From the backup', priority: 'low', done: false }], notes: [], events: [] } });

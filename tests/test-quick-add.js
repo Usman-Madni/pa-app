@@ -106,7 +106,7 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   t = PA.DB.tasks.find((x) => x.title === 'Buy milk');
   check(t.due === `${realToday}T23:59` && t.reminders.length === 0, 'a date without a time is "any time that day", no reminder');
   check(!doc.querySelector('#main').textContent.includes('11:59'), 'no "11:59 pm" shown for all-day tasks');
-  check(!PA.DB.tasks.filter((x) => x.title === 'Buy milk').some((x) => doc.querySelector('#main').textContent.includes('Overdue · Today')), 'an all-day task due today is not overdue');
+  check(!PA.DB.tasks.filter((x) => x.title === 'Buy milk').some((x) => doc.querySelector('#main').textContent.includes('Overdue: Today')), 'an all-day task due today is not overdue');
   void today;
 
   // Adding on the My Day screen puts it in My Day; adding on Tasks doesn't

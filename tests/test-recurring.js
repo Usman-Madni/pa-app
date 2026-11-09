@@ -75,7 +75,7 @@ const { loadApp, confirmDone, check, done } = require('./helpers');
   doc.querySelector(`#drawer [data-action="repeat-day"][data-weekday="${todayDow}"]`).click();
   check(t.repeat.days.length === 1, 'the last weekday cannot be removed');
   check(doc.querySelector('#drawer').textContent.includes('the next one is due'), 'drawer tells you when the next one will be');
-  check(doc.querySelector('#main').textContent.includes('↻ Weekly'), 'list shows the repeat');
+  check([...doc.querySelectorAll('#main [title="Repeats"]')].some((x) => x.querySelector('use[href="#i-repeat"]') && x.textContent.trim().startsWith('Weekly')),'list shows the repeat (repeat icon, "Weekly")');
 
   // Set a start date 2 days before due, then tick it off
   const dueDay = new Date(t.due.slice(0, 10) + 'T00:00');

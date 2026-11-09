@@ -7,3 +7,7 @@ CLAUDE.local.md
 private-terms.txt
 # Attached files (if the attachments folder is put inside the project)
 attachments/
+# Design tools' working files (screenshots, lint records, critique reports); .impeccable/config.json is kept
+.hallmark/
+.impeccable/critique/
+.impeccable/hook.cache.json
