@@ -182,6 +182,24 @@ body.readonly .edit-only { display: none !important; }
 .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); width: 54px; flex-shrink: 0; font-size: var(--t-sm); }
 
+/* ===== My Day: one timeline of today ===== */
+.grid-main.today { align-items: start; }
+.today-side { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.tl-card .quick-add { margin-bottom: 4px; }
+.tl-h { margin: 22px 0 2px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
+.tl-card > .tl-h:first-child, body.readonly .tl-card > .quick-add + .tl-h { margin-top: 0; }
+.tl .time, .tl-date, .tl-now .time { white-space: nowrap; }
+.tl-h.tl-late { color: var(--danger); }
+.tl .time { width: 64px; }
+.tl-row.tl-past .time { color: var(--danger); }
+.tl-date { width: 92px; flex-shrink: 0; font-size: var(--t-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl-mark { width: 20px; flex-shrink: 0; display: grid; place-items: center; color: var(--c-event); }
+.tl-event .title { color: var(--text); }
+.tl-now { display: flex; align-items: center; gap: 12px; padding: 2px 4px 2px 36px; list-style: none; }
+.tl-now .time { color: var(--accent); font-weight: 600; }
+.tl-rule { flex: 1; height: 2px; border-radius: 2px; background: var(--accent); }
+.tl-card > .empty { padding: 28px 4px 12px; }
+
 /* ===== Calendar ===== */
 .cal-layout { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -451,8 +469,8 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
 
 /* ===== Banners & toasts ===== */
 .banner { padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.banner > span:first-child { display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.banner .i { align-self: center; }
+.banner > span:first-child { display: flex; align-items: flex-start; gap: 8px; min-width: 0; flex: 1 1 260px; }
+.banner > span:first-child > .i { margin-top: 2px; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
 .banner.error { background: color-mix(in srgb, var(--danger) 12%, var(--panel)); }
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
@@ -483,6 +501,14 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
   .nav-btn .lbl-long { display: none; }
   .nav-btn .lbl-short { display: inline; }
   .main { padding: 20px 16px 90px; }
+  /* The phone's status banner is one compact line, so today's tasks are on the first screen */
+  .banner { padding: 8px 12px; font-size: var(--t-sm); gap: 8px; margin-bottom: 12px; }
+  .banner .btn.small { padding: 4px 9px; }
+  .page-head { margin-bottom: 16px; }
+  .page-head h1 { font-size: var(--t-xl); }
+  .tl-date { width: 74px; }
+  .tl .time, .tl-now .time { width: 62px; font-size: var(--t-xs); }
+  .tl-now { padding-left: 32px; }
   .cal-day .chip, .cal-day .more { display: none; }
   .cal-day { min-height: 46px; align-items: center; }
   .cal-day.has-items::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
@@ -1641,9 +1667,10 @@ const Reminders = {
 };
 
 // Title line + the small details under it; shared by list rows and board cards.
-function taskSummary(t) {
+// noDue: the row already shows when (My Day's timeline), so the due date isn't repeated underneath.
+function taskSummary(t, { noDue = false } = {}) {
   const meta = [];
-  if (t.due) {
+  if (t.due && !noDue) {
     const when = `${taskDate(t) === todayISO() ? 'Today' : fmtDay(taskDate(t))}${taskTime(t) ? ' ' + fmtTime(taskTime(t)) : ''}`;
     meta.push(`<span class="${isOverdue(t) ? 'overdue' : ''}">${ic('calendar-event', 'sm')}${isOverdue(t) ? 'Overdue: ' : ''}${esc(when)}</span>`);
   }
@@ -1921,34 +1948,96 @@ function quickAdd(form) {
   return t;
 }
 
+// My Day is one timeline of today: what's late from earlier days pinned on top, then today's tasks and events in
+// time order with a "Now" line, then what's for any time today, then what's done. Beside it: tasks with no date
+// and the next week.
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const andList = (parts) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
+
+function todayPlan(now = new Date()) {
+  const tk = toISO(now);
+  const open = DB.tasks.filter((t) => !t.done);
+  const late = sortTasks(open.filter((t) => isOverdue(t) && taskDate(t) < tk));
+  const lateIds = new Set(late.map((t) => t.id));
+  const today = DB.tasks.filter((t) => !lateIds.has(t.id) && ((!t.done && taskDate(t) === tk) || inMyDay(t)));
+  const events = DB.events.filter((e) => e.date === tk);
+  const timed = [
+    ...today.filter((t) => !t.done && taskTime(t) && taskDate(t) === tk).map((t) => ({ kind: 'task', time: taskTime(t), t })),
+    ...events.filter((e) => e.time).map((e) => ({ kind: 'event', time: e.time, e })),
+  ].sort((a, b) => a.time.localeCompare(b.time));
+  const anyTime = [
+    ...events.filter((e) => !e.time).map((e) => ({ kind: 'event', e })),
+    ...sortTasks(today.filter((t) => !t.done && !(taskTime(t) && taskDate(t) === tk))).map((t) => ({ kind: 'task', t })),
+  ];
+  const doneToday = DB.tasks.filter((t) => t.done && t.completedAt && toISO(new Date(t.completedAt)) === tk)
+    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt)); // newest first
+  const noDate = sortTasks(open.filter((t) => !t.due && !inMyDay(t))).slice(0, 5);
+  const week = toISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
+  const coming = [
+    ...open.filter((t) => taskDate(t) > tk && taskDate(t) <= week).map((t) => ({ kind: 'task', date: taskDate(t), time: taskTime(t), t })),
+    ...DB.events.filter((e) => e.date > tk && e.date <= week).map((e) => ({ kind: 'event', date: e.date, time: e.time || '', e })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || (a.time || '99').localeCompare(b.time || '99')).slice(0, 6);
+  return { late, timed, anyTime, doneToday, noDate, coming, taskCount: timed.filter((x) => x.kind === 'task').length + anyTime.filter((x) => x.kind === 'task').length, eventCount: events.length };
+}
+
+// One row of the timeline: a tick box (tasks) or a calendar mark (events), the time, and the thing itself.
+function timelineRow(x, { time = true, date = false, noDue = time || date } = {}) {
+  const when = `${date ? `<span class="tl-date">${esc(fmtDay(x.date))}</span>` : ''}${time ? `<span class="time">${x.time ? fmtTime(x.time) : ''}</span>` : ''}`;
+  if (x.kind === 'event') {
+    const e = x.e;
+    return `
+    <li class="item tl-row tl-event">
+      <span class="tl-mark" title="Event">${ic('calendar-event')}</span>
+      ${when}
+      <div class="body"><div class="title">${esc(e.title)}</div>${!time && e.time ? `<div class="meta"><span>${fmtTime(e.time)}</span></div>` : ''}</div>
+      <button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(e.id)}" title="Delete" aria-label="Delete event">${ic('x')}</button>
+    </li>`;
+  }
+  const t = x.t;
+  return `
+    <li class="item tl-row ${t.done ? 'done' : ''} ${x.time && isOverdue(t) ? 'tl-past' : ''}">
+      <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="${t.done ? 'Mark not done' : 'Mark done'}">
+      ${when}
+      <div class="body clickable" data-action="open-task" data-id="${esc(t.id)}">${taskSummary(t, { noDue })}</div>
+      <button class="icon-btn edit-only" data-action="delete-task" data-id="${esc(t.id)}" title="Delete" aria-label="Delete task">${ic('x')}</button>
+    </li>`;
+}
+
 function renderToday() {
   const now = new Date();
   const hour = now.getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const tk = todayISO();
-  const open = DB.tasks.filter((t) => !t.done);
-  const dueToday = sortTasks(DB.tasks.filter((t) => (!t.done && (taskDate(t) === tk || isOverdue(t))) || inMyDay(t)));
-  const noDate = sortTasks(open.filter((t) => !t.due && !inMyDay(t))).slice(0, 5);
-  const schedule = itemsForDay(tk).filter((i) => i.kind === 'event');
+  const p = todayPlan(now);
+  const counts = [p.taskCount ? plural(p.taskCount, 'task') : '', p.eventCount ? plural(p.eventCount, 'event') : ''].filter(Boolean);
+  const summary = counts.length ? `${andList(counts)} today` : 'Nothing planned today';
+  const lateNote = p.late.length ? `, ${p.late.length} late from before` : '';
+  // The "Now" line goes between what's past and what's still to come today.
+  const nowHM = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const cut = p.timed.findIndex((x) => x.time > nowHM);
+  const timedRows = p.timed.map((x) => timelineRow(x));
+  if (p.timed.length) timedRows.splice(cut === -1 ? timedRows.length : cut, 0, `<li class="tl-now" aria-label="Now"><span class="time">${fmtTime(nowHM)}</span><span class="tl-rule"></span></li>`);
+  const section = (title, rows, cls = '') => (rows.length ? `<h3 class="tl-h ${cls}">${title}</h3><ul class="list tl">${rows.join('')}</ul>` : '');
+  const nothing = !p.late.length && !p.timed.length && !p.anyTime.length && !p.doneToday.length;
   return `
     <div class="page-head">
-      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
-      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">+ New task</button>
+      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}. ${summary}${lateNote}.</p></div>
+      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
     </div>
-    <div class="grid grid-2" style="margin-bottom:16px">
-      <div class="card"><div class="stat">${dueToday.filter((t) => !t.done).length}</div><div class="stat-label">Tasks for today (added to My Day, due today, overdue)</div></div>
-      <div class="card"><div class="stat">${schedule.length}</div><div class="stat-label">Events today</div></div>
-    </div>
-    <div class="grid grid-main">
-      <div class="card">
-        <h2>Today's tasks</h2>
+    <div class="grid grid-main today">
+      <div class="card tl-card">
         ${quickAddBar('today')}
-        <ul class="list">${dueToday.map(taskItem).join('') || '<li class="empty">Nothing due today</li>'}</ul>
-        ${noDate.length ? `<h2 style="margin-top:16px">Anytime</h2><ul class="list">${noDate.map(taskItem).join('')}</ul>` : ''}
+        ${section('Late', p.late.map((t) => timelineRow({ kind: 'task', t }, { time: false })), 'tl-late')}
+        ${section('Today', timedRows)}
+        ${section(p.timed.length ? 'Any time today' : 'Today', p.anyTime.map((x) => timelineRow(x, { time: false, noDue: true })))}
+        ${section('Done today', p.doneToday.map((t) => timelineRow({ kind: 'task', t }, { time: false })), 'tl-done')}
+        ${nothing ? '<p class="empty">Nothing due today. Add something above, or enjoy the space.</p>' : ''}
       </div>
-      <div class="card">
-        <h2>Schedule <button class="btn small" data-goto="calendar">Open calendar</button></h2>
-        <ul class="list">${schedule.map(dayItem).join('') || '<li class="empty">No events today</li>'}</ul>
+      <div class="today-side">
+        <div class="card">
+          <h2>Coming up <button class="btn small" data-goto="calendar">${ic('calendar', 'sm')}Calendar</button></h2>
+          <ul class="list tl">${p.coming.map((x) => timelineRow(x, { time: false, date: true })).join('') || '<li class="empty">Nothing in the next 7 days</li>'}</ul>
+        </div>
+        ${p.noDate.length ? `<div class="card"><h2>Anytime</h2><ul class="list tl">${p.noDate.map((t) => timelineRow({ kind: 'task', t }, { time: false })).join('')}</ul></div>` : ''}
       </div>
     </div>`;
 }
