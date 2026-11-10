@@ -147,6 +147,14 @@ a.btn { color: var(--text); text-decoration: none; }
 .icon-btn { display: inline-grid; place-items: center; border: 0; background: transparent; cursor: pointer; color: var(--muted); padding: 4px; border-radius: var(--r-sm); transition: background-color .12s ease-out, color .12s ease-out; }
 .icon-btn:hover { background: var(--panel-2); color: var(--text); }
 .icon-btn:is([data-action^="delete"], [data-action^="remove"], [data-action^="clear"]):hover { color: var(--danger); }
+/* With a mouse, a row's delete and a column's tools show when you point at it (or tab to it); touch screens always show them */
+@media (hover: hover) {
+  .item > .icon-btn[data-action="delete-task"], .item > .icon-btn[data-action="delete-event"], .board-tools { opacity: 0; transition: opacity .12s ease-out; }
+  .item:hover > .icon-btn, .item:focus-within > .icon-btn, .board-col:hover .board-tools, .board-col:focus-within .board-tools { opacity: 1; }
+}
+/* Quick add's dropdowns are as wide as what they show, not their longest choice */
+.qa-select { field-sizing: content; }
+select.input { cursor: pointer; padding-right: 8px; }
 .tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: var(--r-md); max-width: 100%; overflow-x: auto; }
 .tab { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 6px 12px; border-radius: var(--r-sm); cursor: pointer; color: var(--muted); white-space: nowrap; }
 .tab:hover { color: var(--text); }
@@ -285,10 +293,13 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .toolbar { margin-bottom: 12px; }
 .toolbar .input { padding: 6px 10px; font-size: 14px; }
 .board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; align-items: flex-start; }
-.board-col { flex: 0 0 272px; background: var(--panel-2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 2px solid transparent; }
+/* Columns share the width (280 to 380px each); more buckets than fit scroll sideways */
+.board-col { flex: 1 0 280px; max-width: 380px; background: var(--panel-2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 2px solid transparent; }
+.board-col.edit-only { flex: 0 0 260px; }
 .board-col.over { border-color: var(--accent); }
 .board-head { display: flex; align-items: center; gap: 6px; }
-.board-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.board-head .meta { font-variant-numeric: tabular-nums; background: var(--panel); border-radius: 999px; padding: 0 8px; font-size: var(--t-xs); }
 .board-tools .icon-btn { padding: 2px 5px; }
 .board-cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
 .task-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; box-shadow: var(--shadow-sm); display: flex; gap: 10px; align-items: flex-start; transition: border-color .12s ease-out; }
@@ -479,6 +490,10 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
 .status-dot.bad { background: var(--danger); }
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
 .toast { background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: var(--r-md); box-shadow: var(--shadow-float); max-width: 320px; animation: pop .2s ease-out; }
+.toast-undo { display: flex; align-items: center; gap: 14px; }
+.toast-undo > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-btn { border: 0; background: transparent; color: var(--accent-soft); font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: var(--r-sm); text-decoration: underline; text-underline-offset: 3px; }
+.toast-btn:hover { background: color-mix(in srgb, var(--bg) 14%, transparent); }
 @keyframes pop { from { transform: translateY(8px); opacity: 0; } }
 
 /* ===== Phones & narrow screens ===== */
@@ -648,6 +663,46 @@ function toast(msg, task) {
   setTimeout(() => el.remove(), 5000);
   Notices.add(msg, task);
 }
+
+// A deleted task waits UNDO_MS with an Undo button before it's really deleted. Until then it's only hidden here:
+// nothing (the data file, the other device, To Do) sees a deletion that might be taken back. Leaving the page, or
+// the screen going to the background on a phone, carries it out at once.
+const PendingDelete = {
+  UNDO_MS: 6000,
+  ids: new Map(), // task id → { timer, toast }
+  has(id) { return this.ids.has(id); },
+  start(t) {
+    const toastEl = document.createElement('div');
+    toastEl.className = 'toast toast-undo';
+    toastEl.innerHTML = `<span>Deleted "${esc(fullTitle(t))}"</span><button type="button" class="toast-btn" data-action="undo-delete" data-id="${esc(t.id)}">Undo</button>`;
+    $('#toasts').append(toastEl);
+    const timer = setTimeout(() => this.commit(t.id), this.UNDO_MS);
+    this.ids.set(t.id, { timer, toast: toastEl });
+    if (state.openTask === t.id) closeTaskDrawer();
+    render();
+  },
+  commit(id) {
+    const p = this.ids.get(id);
+    if (!p) return;
+    clearTimeout(p.timer);
+    p.toast.remove();
+    this.ids.delete(id);
+    const before = DB.tasks.length;
+    DB.tasks = DB.tasks.filter((x) => x.id !== id);
+    if (DB.tasks.length !== before) changed('tasks');
+    render();
+  },
+  undo(id) {
+    const p = this.ids.get(id);
+    if (!p) return;
+    clearTimeout(p.timer);
+    p.toast.remove();
+    this.ids.delete(id);
+    render();
+  },
+  flush() { for (const id of [...this.ids.keys()]) this.commit(id); },
+};
+const hiddenTask = (t) => PendingDelete.has(t.id);
 
 // ===================== Questions =====================
 // The app's own question box, in its style, instead of the browser's grey one. ask() answers true/false;
@@ -1454,7 +1509,7 @@ const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? `${ic('repeat')}≈
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
   const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
-  const tasks = DB.tasks.filter((t) => taskDate(t) === key).map((t) => ({ id: t.id, title: fullTitle(t), time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
+  const tasks = DB.tasks.filter((t) => taskDate(t) === key && !hiddenTask(t)).map((t) => ({ id: t.id, title: fullTitle(t), time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
   // A task done late also shows (faded, ✓) on the day it was actually done.
   const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key).map((t) => ({
     id: t.id, title: fullTitle(t), time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
@@ -1693,6 +1748,7 @@ function taskSummary(t, { noDue = false } = {}) {
 }
 
 function taskItem(t) {
+  if (hiddenTask(t)) return '';
   return `
     <li class="item ${t.done ? 'done' : ''}">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
@@ -1956,10 +2012,11 @@ const andList = (parts) => (parts.length < 2 ? parts.join('') : `${parts.slice(0
 
 function todayPlan(now = new Date()) {
   const tk = toISO(now);
-  const open = DB.tasks.filter((t) => !t.done);
+  const all = DB.tasks.filter((t) => !hiddenTask(t));
+  const open = all.filter((t) => !t.done);
   const late = sortTasks(open.filter((t) => isOverdue(t) && taskDate(t) < tk));
   const lateIds = new Set(late.map((t) => t.id));
-  const today = DB.tasks.filter((t) => !lateIds.has(t.id) && ((!t.done && taskDate(t) === tk) || inMyDay(t)));
+  const today = all.filter((t) => !lateIds.has(t.id) && ((!t.done && taskDate(t) === tk) || inMyDay(t)));
   const events = DB.events.filter((e) => e.date === tk);
   const timed = [
     ...today.filter((t) => !t.done && taskTime(t) && taskDate(t) === tk).map((t) => ({ kind: 'task', time: taskTime(t), t })),
@@ -1969,7 +2026,7 @@ function todayPlan(now = new Date()) {
     ...events.filter((e) => !e.time).map((e) => ({ kind: 'event', e })),
     ...sortTasks(today.filter((t) => !t.done && !(taskTime(t) && taskDate(t) === tk))).map((t) => ({ kind: 'task', t })),
   ];
-  const doneToday = DB.tasks.filter((t) => t.done && t.completedAt && toISO(new Date(t.completedAt)) === tk)
+  const doneToday = all.filter((t) => t.done && t.completedAt && toISO(new Date(t.completedAt)) === tk)
     .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt)); // newest first
   const noDate = sortTasks(open.filter((t) => !t.due && !inMyDay(t))).slice(0, 5);
   const week = toISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
@@ -2065,7 +2122,7 @@ function renderTasks() {
   const layout = taskLayout();
   const sortBy = SORTS[device.get('taskSort', 'due')] ? device.get('taskSort', 'due') : 'due';
   const groupBy = device.get('taskGroup', 'none');
-  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t)), sortBy);
+  const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t) && !hiddenTask(t)), sortBy);
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
   const listHtml = (items) => items.map(taskItem).join('');
@@ -2137,6 +2194,7 @@ function renderBoard(list) {
 }
 
 function taskCard(t) {
+  if (hiddenTask(t)) return '';
   return `
     <div class="task-card ${t.done ? 'done' : ''}" draggable="${state.readOnly ? 'false' : 'true'}" data-card="${esc(t.id)}">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
@@ -4190,7 +4248,7 @@ function checkReminders() {
 
 // ===================== Events =====================
 const EDIT_ACTIONS = new Set([
-  'toggle-task', 'delete-task', 'clear-done', 'delete-event', 'new-note', 'delete-note',
+  'toggle-task', 'delete-task', 'undo-delete', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
@@ -4282,17 +4340,13 @@ document.addEventListener('click', (e) => {
       const t = DB.tasks.find((x) => x.id === id);
       if (!t) break;
       const rich = t.notes.trim() || t.checklist.length || t.attachments.length;
-      const remove = () => {
-        DB.tasks = DB.tasks.filter((x) => x.id !== id);
-        changed('tasks');
-        if (state.openTask === id) closeTaskDrawer();
-        render();
-      };
+      const remove = () => PendingDelete.start(t); // really deleted a few seconds later, unless Undo
       if (!rich) { remove(); break; }
       ask(`Delete "${fullTitle(t)}"? Its notes and checklist go too${t.attachments.length ? '; attached files stay in your attachments folder' : ''}.`, { yes: 'Delete', danger: true })
         .then((yes) => { if (yes) remove(); });
       break;
     }
+    case 'undo-delete': PendingDelete.undo(id); break;
     case 'open-task': openTaskDrawer(id); break;
     case 'clear-notices':
       ask('Clear all notifications? This can\'t be undone.', { yes: 'Clear all', danger: true }).then((yes) => { if (yes) { Notices.clear(); render(); } });
@@ -4729,6 +4783,9 @@ document.addEventListener('change', (e) => {
 window.addEventListener('beforeunload', () => { if (!state.readOnly) DB.persist('notes'); });
 // Coming back to the tab: see if another device saved meanwhile.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && DF.status === 'ok') DF.check(); });
+// A delete waiting for Undo happens now if the page is left or put in the background (a phone may never come back).
+document.addEventListener('visibilitychange', () => { if (document.hidden) PendingDelete.flush(); });
+window.addEventListener('pagehide', () => PendingDelete.flush());
 
 // ===================== Start =====================
 // On localhost Microsoft's sign-in pop-up comes back to this page; there it only hands the answer to the main
