@@ -86,10 +86,10 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 .chip { display: inline-block; padding: 1px 9px; border-radius: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .c-over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .c-today { background: var(--accent-soft); color: var(--accent); }
-.c-up { background: color-mix(in srgb, var(--up) 18%, transparent); color: var(--up); }
-.c-done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
-.c-event { background: color-mix(in srgb, var(--event) 18%, transparent); color: var(--event); }
-.c-late { background: color-mix(in srgb, var(--late) 18%, transparent); color: var(--late); }
+.c-up { background: var(--panel-2); color: var(--text); }
+.c-done { background: transparent; color: var(--muted); text-decoration: line-through; }
+.c-event { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+.c-late { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--danger); }
 .c-rep { border: 1.5px dashed var(--muted); color: var(--muted); }
 .qa { font-family: ui-monospace, Consolas, monospace; font-size: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin: 8px 0; }
 .qa .arrow { color: var(--muted); }
@@ -389,8 +389,10 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="calendar" data-title="Calendar colours">
           <h3>Calendar colours</h3>
-          <p><span class="chip c-over">Overdue</span> <span class="chip c-today">Today</span> <span class="chip c-up">Upcoming</span> <span class="chip c-done">Done</span> <span class="chip c-event">Event</span> <span class="chip c-late">Done late</span> <span class="chip c-rep">Coming repeat</span></p>
-          <p>Coming repeats are previews, not tasks yet; "again after I finish it" ones are estimates (↻≈). Click a task on the calendar to open it.</p>
+          <p><span class="chip c-over">Overdue</span> <span class="chip c-today">Today</span> <span class="chip c-up">Coming up</span> <span class="chip c-done">Done</span> <span class="chip c-event">Event</span> <span class="chip c-late">Done late</span> <span class="chip c-rep">Coming repeat</span></p>
+          <p>Only three things have a colour: <b>late</b> (overdue, or missed and done later) is red, <b>today</b> is teal, and everything else is plain ink: coming up on a light fill, done faded and struck through, events outlined, repeats dashed.</p>
+          <p>Coming repeats are previews, not tasks yet; "again after I finish it" ones are estimates (≈). Click a task on the calendar to open it.</p>
+          <p><b>On the phone</b> each day shows a mark instead of names: teal when something's on, red when something's late. Tap a day to see it.</p>
         </section>
       </div>
     </div>

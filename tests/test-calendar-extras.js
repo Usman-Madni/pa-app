@@ -34,7 +34,7 @@ const txt = (el) => { const c = el.cloneNode(true); c.querySelectorAll('svg').fo
   check(row && /Done this day — was due Thu, (Oct 1|1 Oct) \(19 days late\)/.test(row.textContent), `day list: "Done this day — was due Oct 1 (19 days late)"`);
   row.querySelector('[data-action="open-task"]').click();
   check(PA.state.openTask === t.id, 'clicking it opens the task');
-  check(doc.querySelector('.cal-legend').textContent.includes('Done late, on this day') && doc.querySelector('.cal-legend').textContent.includes('Missed, done later') && doc.querySelector('.cal-legend').textContent.includes('Estimated repeat'), 'legend explains the late and estimate chips');
+  check(doc.querySelector('.cal-legend').textContent.includes('Done late, on this day') && doc.querySelector('.cal-legend').textContent.includes('Missed, done later') && doc.querySelector('.cal-legend').textContent.includes('estimated repeat'),'legend explains the late and estimate chips');
   // --- Late task: orange "missed" chip on the due day, done chip with orange outline on the done day ---
   const m = PA.addTask({ title: 'm', due: '2026-10-24T23:59' });
   PA.Series.tick(m, new Date(2026, 9, 25, 12), true);

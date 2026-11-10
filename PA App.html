@@ -367,37 +367,29 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .day-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chip.repeat { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
 .chip.repeat.est { border-style: dotted; font-style: italic; opacity: .8; } /* "after I finish it": an estimate */
-/* Calendar colours, from the warm palette: overdue = danger, today = accent, upcoming ink-blue, done = ok, events umber
-   (stage 4 of the redesign brings these down to fewer meanings) */
-:root { --c-overdue: var(--danger); --c-today: var(--accent); --c-upcoming: #44637f; --c-done: var(--ok); --c-event: #8a5a3c; --c-late: #b8661c; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --c-upcoming: #9db8d3; --c-event: #d6a07c; --c-late: #e39a55; } }
-:root[data-theme="dark"] { --c-upcoming: #9db8d3; --c-event: #d6a07c; --c-late: #e39a55; }
-.chip.t-overdue, .pill.t-overdue { background: color-mix(in srgb, var(--c-overdue) 16%, transparent); color: var(--c-overdue); }
-.chip.t-today, .pill.t-today { background: color-mix(in srgb, var(--c-today) 18%, transparent); color: var(--c-today); font-weight: 600; }
-.chip.t-upcoming, .pill.t-upcoming { background: color-mix(in srgb, var(--c-upcoming) 15%, transparent); color: var(--c-upcoming); }
-/* Done: green box, the name in the normal text colour, a clear strike line */
-.chip.t-done, .pill.t-done, .chip.doneon, .pill.doneon {
-  background: color-mix(in srgb, var(--c-done) 18%, transparent); color: color-mix(in srgb, var(--text) 78%, transparent);
-}
-.chip.event { background: color-mix(in srgb, var(--c-event) 15%, transparent); color: var(--c-event); }
-/* Late: on the due day "missed" (orange box, no strike); on the done day "done" with an orange outline */
+/* Calendar colours: three meanings only. Late (overdue, or missed and done later) = danger; today = accent; everything
+   else is ink: coming up on a quiet fill, done struck through and faded, events outlined, repeats dashed. */
+:root { --c-overdue: var(--danger); --c-today: var(--accent); --c-late: var(--danger); --c-event: var(--muted); }
+.chip.t-overdue, .pill.t-overdue { background: color-mix(in srgb, var(--c-overdue) 14%, transparent); color: var(--c-overdue); }
+.chip.t-today, .pill.t-today { background: color-mix(in srgb, var(--c-today) 16%, transparent); color: var(--c-today); font-weight: 600; }
+.chip.t-upcoming, .pill.t-upcoming { background: var(--panel-2); color: var(--text); }
+/* Done: no colour of its own, the name faded with a clear strike line */
+.chip.t-done, .pill.t-done, .chip.doneon, .pill.doneon { background: transparent; color: var(--muted); }
+.chip.event, .pill.event { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+/* Late: on the due day "missed" (the late colour, no strike); on the done day "done" with a late outline */
 .late { color: var(--c-late); font-weight: 600; }
-.chip.t-latedue, .pill.t-latedue { background: color-mix(in srgb, var(--c-late) 20%, transparent); color: var(--c-late); }
-.chip.doneon, .pill.doneon { box-shadow: inset 0 0 0 1.5px var(--c-late); }
+.chip.t-latedue, .pill.t-latedue { background: color-mix(in srgb, var(--c-late) 14%, transparent); color: var(--c-late); }
+.chip.doneon, .pill.doneon { box-shadow: inset 0 0 0 1px var(--c-late); }
 .chip.doneon .chip-note { color: var(--c-late); }
 .pill.doneon, .pill.t-latedue { white-space: normal; text-decoration: none; }
-.day-item.t-latedue { border-left-color: var(--c-late); }
-.day-item.doneon { border-left-color: var(--c-done); }
-.day-item { border-left: 3px solid transparent; padding-left: 8px; }
-.day-item.t-overdue { border-left-color: var(--c-overdue); }
-.day-item.t-today { border-left-color: var(--c-today); }
-.day-item.t-upcoming { border-left-color: var(--c-upcoming); }
-.day-item.t-done { border-left-color: var(--c-done); }
-.day-item.event { border-left-color: var(--c-event); }
-.day-item.repeat { border-left: 3px dashed var(--border); }
-.cal-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: var(--t-xs); color: var(--muted); }
+.day-item { padding-left: 4px; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: var(--t-xs); color: var(--muted); }
 .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .cal-legend .chip { font-style: normal; }
+/* The phone shows a mark per day instead of names: late days get the late colour */
+.cal-legend.phone-only { display: none; }
+.cal-mark { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.cal-mark.late { background: var(--c-late); }
 /* Pointing at one half of a late task lights up the other */
 .chip.late-hl { outline: 2px solid var(--c-late); outline-offset: 1px; }
 .repeat-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--panel-2); }
@@ -526,7 +518,10 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
   .tl-now { padding-left: 32px; }
   .cal-day .chip, .cal-day .more { display: none; }
   .cal-day { min-height: 46px; align-items: center; }
-  .cal-day.has-items::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .cal-day.has-items::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .cal-day.has-late::after { background: var(--c-late); }
+  .cal-legend.desk-only { display: none; }
+  .cal-legend.phone-only { display: flex; }
   .toasts { bottom: 80px; }
   .drawer { width: 100%; }
   .field-grid { grid-template-columns: 1fr; }
@@ -3198,6 +3193,7 @@ function renderCalendar() {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const k = toISO(d);
     const items = itemsForDay(k, previews);
+    const hasLate = items.some((it) => it.status === 'overdue' || it.late);
     // A chip = the name (shortened with … when long) + a note that always stays visible.
     const chips = items.slice(0, 3).map((it) => {
       const lateId = it.late || it.kind === 'doneon' ? ` data-late="${esc(it.id)}"` : '';
@@ -3208,7 +3204,7 @@ function renderCalendar() {
       return `<span class="chip ${chipClass(it)}"${lateId}${opens}><span class="chip-t">${chipPrefix(it)}${it.time ? fmtTime(it.time) + ' ' : ''}${esc(it.title)}</span>${note ? `<span class="chip-note">· ${note}</span>` : ''}</span>`;
     }).join('');
     cells.push(`
-      <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''}" data-day="${k}">
+      <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''} ${hasLate ? 'has-late' : ''}" data-day="${k}" aria-label="${esc(fmtDay(k))}${items.length ? `, ${plural(items.length, 'item')}${hasLate ? ', something late' : ''}` : ''}">
         <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
       </button>`);
     // Drop the 6th row when it would only hold next month's days.
@@ -3226,12 +3222,15 @@ function renderCalendar() {
           <div class="row"><button class="btn small" data-action="cal-today">Today</button><button class="btn small" data-action="cal-next" aria-label="Next month"><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></div>
         </div>
         <div class="cal-grid">${dows}${cells.join('')}</div>
-        <div class="cal-legend">
+        <div class="cal-legend desk-only">
           <span><i class="chip t-overdue">Task</i>Overdue</span><span><i class="chip t-today">Task</i>Due today</span>
-          <span><i class="chip t-upcoming">Task</i>Upcoming</span><span><i class="chip t-done"><span class="chip-t">${ic('check')} Task</span></i>Done</span>
+          <span><i class="chip t-upcoming">Task</i>Coming up</span><span><i class="chip t-done"><span class="chip-t">${ic('check')} Task</span></i>Done</span>
           <span><i class="chip t-latedue"><span class="chip-t">Task</span><span class="chip-note">· done 3rd</span></i>Missed, done later</span>
           <span><i class="chip doneon"><span class="chip-t">${ic('check')} Task</span><span class="chip-note">· due 1st</span></i>Done late, on this day</span>
-          <span><i class="chip repeat">${ic('repeat')} Task</i>Next repeat</span><span><i class="chip repeat est">${ic('repeat')}≈ Task</i>Estimated repeat</span><span><i class="chip event">Event</i>Event</span>
+          <span><i class="chip event">Event</i>Event</span><span><i class="chip repeat">${ic('repeat')} Task</i>Next repeat (≈ estimated repeat)</span>
+        </div>
+        <div class="cal-legend phone-only">
+          <span><i class="cal-mark"></i>Something on that day</span><span><i class="cal-mark late"></i>Something late</span><span>Tap a day to see it</span>
         </div>
       </div>
       <div class="card">
