@@ -41,6 +41,8 @@
   --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 17px; --t-lg: 20px; --t-xl: 26px; --t-2xl: 34px;
   --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
   --radius: var(--r-lg);
+  /* Label shades, warm to sit with the palette (a label's stored colour picks one: see LABEL_COLORS) */
+  --lab-red: #a5482f; --lab-orange: #9a5d12; --lab-green: #4b7445; --lab-blue: #44627e; --lab-purple: #7a4f74; --lab-pink: #a1465f; --lab-grey: #6b6457;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -49,6 +51,7 @@
     --accent: #6cc3ba; --accent-hover: #86d1c9; --accent-soft: #233f3b; --accent-ink: #12211f;
     --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
+    --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
     color-scheme: dark;
   }
 }
@@ -57,6 +60,7 @@
   --accent: #6cc3ba; --accent-hover: #86d1c9; --accent-soft: #233f3b; --accent-ink: #12211f;
   --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --scrim: rgba(0, 0, 0, .5);
   --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
+    --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
   color-scheme: dark;
 }
 
@@ -192,8 +196,8 @@ body.readonly .edit-only { display: none !important; }
 /* inline-block + nowrap: a pill that doesn't fit moves to the next line whole, never split in two. */
 .pill { display: inline-block; white-space: nowrap; max-width: 100%; font-size: var(--t-xs); padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
 .pill .i, .chip .i { width: 13px; height: 13px; vertical-align: -2px; }
-.pill.high { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
-.pill.med { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.pill.high { background: color-mix(in srgb, var(--danger) 11%, transparent); color: color-mix(in srgb, var(--danger) 78%, var(--text)); }
+.pill.med { background: color-mix(in srgb, var(--warn) 12%, transparent); color: color-mix(in srgb, var(--warn) 62%, var(--text)); }
 .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); width: 54px; flex-shrink: 0; font-size: var(--t-sm); }
 
@@ -441,9 +445,11 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .p-select:focus, .p-input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 .p-select option { color: var(--text); background: var(--panel); }
 .p-input:disabled { opacity: .45; cursor: not-allowed; }
+.p-row > .p-input[type="date"] { flex: 1 0 9.5em; } /* wide enough to show the whole date */
+body.readonly .p-input:disabled, body.readonly .p-select:disabled { opacity: 1; cursor: default; } /* read-only: plain, readable values */
 /* Phones draw an empty date or time box as nothing at all: give it a visible box to tap, and hide the time until there's a date. */
 body.phone .p-input[type="date"], body.phone .p-input[type="time"] { border: 1px solid var(--border); background: var(--panel); min-height: 36px; }
-body.phone .p-input[type="time"]:disabled { display: none; }
+body.phone:not(.readonly) .p-input[type="time"]:disabled { display: none; } /* read-only keeps a set time on show */
 /* A phone's date box needs room to show its date (too narrow, it shows only its arrow): the time goes onto the next line when it doesn't fit. */
 body.phone .p-row:has(> .p-input[type="date"]) { flex-wrap: wrap; }
 body.phone .p-input[type="date"] { flex: 1 1 150px !important; }
@@ -1531,7 +1537,7 @@ function itemsForDay(key, previews) {
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
   document.body.classList.toggle('phone', state.phone);
-  $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
@@ -1763,7 +1769,7 @@ function taskItem(t) {
     </li>`;
 }
 
-const labelPill = (l) => `<span class="label-pill" style="--lc:${esc(l.color)}">${esc(l.name)}</span>`;
+const labelPill = (l) => `<span class="label-pill" style="--lc:${labelInk(l.color)}">${esc(l.name)}</span>`;
 
 function dayItem(i) {
   const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
@@ -1800,7 +1806,7 @@ function quickAddBar(ctx) {
     <form class="quick-add edit-only" data-form="quick-add" data-ctx="${ctx}" data-key="bar-${ctx}" autocomplete="off">
       <div class="qa-main">
         <span class="qa-circle" aria-hidden="true"></span>
-        <input class="qa-input" name="title" data-qa placeholder="${esc(where)} — try 'Pay utilities bill Friday 6pm'" aria-label="${esc(where)}">
+        <input class="qa-input" name="title" data-qa placeholder="${esc(where)}, like 'Pay utilities bill Friday 6pm'" aria-label="${esc(where)}">
         <span class="qa-tools">
           <select class="qa-select ${bucket ? 'set' : ''}" name="bucket" title="Bucket" data-qa-tool>
             ${opt('', 'Bucket', bucket)}${sortedBuckets().map((b) => opt(b.id, b.name, bucket)).join('')}
@@ -2079,7 +2085,7 @@ function renderToday() {
   const cut = p.timed.findIndex((x) => x.time > nowHM);
   const timedRows = p.timed.map((x) => timelineRow(x));
   if (p.timed.length) timedRows.splice(cut === -1 ? timedRows.length : cut, 0, `<li class="tl-now" aria-label="Now"><span class="time">${fmtTime(nowHM)}</span><span class="tl-rule"></span></li>`);
-  const section = (title, rows, cls = '') => (rows.length ? `<h3 class="tl-h ${cls}">${title}</h3><ul class="list tl">${rows.join('')}</ul>` : '');
+  const section = (title, rows, cls = '') => (rows.length ? `<h2 class="tl-h ${cls}">${title}</h2><ul class="list tl">${rows.join('')}</ul>` : '');
   const nothing = !p.late.length && !p.timed.length && !p.anyTime.length && !p.doneToday.length;
   return `
     <div class="page-head">
@@ -2209,10 +2215,13 @@ function taskCard(t) {
 }
 
 // ===================== Buckets & labels =====================
+// A label's colour is stored by these codes (the data file keeps them as they are). Shown, each is drawn in the
+// matching warm shade from the design tokens (--lab-*), so labels sit with the rest of Butler in light and dark.
 const LABEL_COLORS = [
-  { name: 'Red', hex: '#ef4444' }, { name: 'Orange', hex: '#f97316' }, { name: 'Green', hex: '#22c55e' },
-  { name: 'Blue', hex: '#3b82f6' }, { name: 'Purple', hex: '#a855f7' }, { name: 'Pink', hex: '#ec4899' }, { name: 'Grey', hex: '#64748b' },
+  { name: 'Red', hex: '#ef4444', tok: 'red' }, { name: 'Orange', hex: '#f97316', tok: 'orange' }, { name: 'Green', hex: '#22c55e', tok: 'green' },
+  { name: 'Blue', hex: '#3b82f6', tok: 'blue' }, { name: 'Purple', hex: '#a855f7', tok: 'purple' }, { name: 'Pink', hex: '#ec4899', tok: 'pink' }, { name: 'Grey', hex: '#64748b', tok: 'grey' },
 ];
+const labelInk = (hex) => { const c = LABEL_COLORS.find((x) => x.hex === String(hex).toLowerCase()); return c ? `var(--lab-${c.tok})` : esc(hex); };
 const colorSelect = (cur, attrs = 'name="color"') =>
   `<select class="input" ${attrs} aria-label="Colour">${LABEL_COLORS.map((c) => `<option value="${c.hex}" ${c.hex === cur ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
 
@@ -2281,7 +2290,7 @@ function labelBlock(t) {
   return `
     <div class="p-row p-wrap"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg></span>
       <div class="label-row" style="flex:1">${DB.labels.map((l) => `
-        <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${esc(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
+        <button class="label-pill ${t.labels.includes(l.id) ? 'on' : ''}" style="--lc:${labelInk(l.color)}" data-action="toggle-label" data-label="${esc(l.id)}" aria-pressed="${t.labels.includes(l.id)}">${esc(l.name)}</button>`).join('')
         || '<span class="p-text muted">Labels</span>'}
       </div>
       ${DB.labels.length ? `<button type="button" class="p-mini edit-only" data-action="manage-labels" aria-expanded="${!!state.labelManage}">${state.labelManage ? 'Done' : 'Manage'}</button>` : ''}
@@ -2289,7 +2298,7 @@ function labelBlock(t) {
     ${state.labelManage ? DB.labels.map((l) => `
       <div class="p-row edit-only">
         <span class="p-ico"></span>
-        <span class="p-text">${labelPill(l)} <span class="meta">${DB.tasks.filter((x) => x.labels.includes(l.id)).length} tasks</span></span>
+        <span class="p-text">${labelPill(l)} <span class="meta">${DB.tasks.filter((x) => x.labels.includes(l.id)).length === 1 ? 'task' : 'tasks'}</span></span>
         ${colorSelect(l.color, `data-label-color="${esc(l.id)}" style="width:auto;padding:4px 6px;font-size:13px"`)}
         <button type="button" class="icon-btn" data-action="rename-label" data-id="${esc(l.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
         <button type="button" class="icon-btn" data-action="delete-label" data-id="${esc(l.id)}" title="Delete label" aria-label="Delete label"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
@@ -2308,13 +2317,13 @@ function manageCard() {
     <div class="card">
       <h2>Buckets</h2>
       ${sortedBuckets().map((b) => `
-        <div class="manage-row"><span class="name">${esc(b.name)} <span class="meta">${count((t) => t.bucket === b.id)} tasks</span></span>
+        <div class="manage-row"><span class="name">${esc(b.name)} <span class="meta">${plural(count((t) => t.bucket === b.id), 'task')}</span></span>
           <span class="edit-only"><button class="icon-btn" data-action="rename-bucket" data-id="${esc(b.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button><button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></span>
         </div>`).join('') || '<p class="sub">No buckets yet.</p>'}
       <form class="row edit-only" data-form="add-bucket" style="margin-top:8px"><input class="input grow" name="title" placeholder="New bucket, e.g. Home, Work, Bills" autocomplete="off" maxlength="40"><button class="btn small primary">Add</button></form>
       <h2 style="margin-top:18px">Labels</h2>
       ${DB.labels.map((l) => `
-        <div class="manage-row"><span class="name">${labelPill(l)} <span class="meta">${count((t) => t.labels.includes(l.id))} tasks</span></span>
+        <div class="manage-row"><span class="name">${labelPill(l)} <span class="meta">${plural(count((t) => t.labels.includes(l.id)), 'task')}</span></span>
           <span class="row edit-only">${colorSelect(l.color, `data-label-color="${esc(l.id)}"`)}<button class="icon-btn" data-action="rename-label" data-id="${esc(l.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button><button class="icon-btn" data-action="delete-label" data-id="${esc(l.id)}" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></span>
         </div>`).join('') || '<p class="sub">No labels yet.</p>'}
       <form class="row edit-only" data-form="add-label" style="margin-top:8px"><input class="input grow" name="title" placeholder="New label, e.g. Waiting, Call" autocomplete="off" maxlength="30">${colorSelect(LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex)}<button class="btn small primary">Add</button></form>
