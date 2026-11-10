@@ -94,7 +94,7 @@ button:disabled { cursor: not-allowed; }
   display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 0; border-radius: var(--r-md);
   background: transparent; cursor: pointer; text-align: left; color: var(--muted); transition: background-color .12s ease-out, color .12s ease-out;
 }
-.nav-btn:hover { background: var(--panel-2); color: var(--text); }
+@media (hover: hover) { .nav-btn:hover { background: var(--panel-2); color: var(--text); } } /* no "stuck" hover after a tap */
 .nav-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav-count { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-xs); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .nav-count[hidden] { display: none; }
@@ -122,6 +122,13 @@ button:disabled { cursor: not-allowed; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
 .card h2 { margin: 0 0 12px; font-size: var(--t-md); font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .grid { display: grid; gap: 16px; }
+/* Settings: two columns of cards on a wide screen, one on a narrow one; only the data file card keeps a filled
+   button, the others' main buttons are outlined so the page has one clear first step. */
+.settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); max-width: 1120px; align-items: start; }
+.settings-grid .card:not(#df-card) .btn.primary { background: transparent; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.settings-grid .card:not(#df-card) .btn.primary:hover { background: var(--accent-soft); }
+.settings-grid .card > .row, .settings-grid .card > .btn, .settings-grid .card > label.btn { margin-top: 12px; }
+.settings-grid .card > h2:not(:first-child) { margin-top: 22px; }
 .grid-2 { grid-template-columns: 1fr 1fr; }
 .grid-main { grid-template-columns: 1.4fr 1fr; }
 .stat { font-family: var(--font-display); font-size: var(--t-2xl); font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -245,7 +252,9 @@ body.readonly .edit-only { display: none !important; }
 .note-card.active { border-color: var(--accent); background: var(--accent-soft); }
 .note-card .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note-card .p { color: var(--muted); font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.editor { display: flex; flex-direction: column; gap: 10px; }
+.editor { display: flex; flex-direction: column; gap: 10px; padding: 24px 32px 28px; }
+.editor > * { width: 100%; max-width: 72ch; } /* a comfortable line length, however wide the window */
+.note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .editor .note-title { font-family: var(--font-display); font-size: var(--t-xl); font-weight: 500; border: 0; background: transparent; padding: 4px 0; outline: none; }
 .editor textarea { flex: 1; min-height: 55vh; resize: vertical; border: 0; background: transparent; outline: none; line-height: 1.65; }
 /* Borderless text fields show the keyboard focus as a line under them */
@@ -516,6 +525,8 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
   .tl-date { width: 74px; }
   .tl .time, .tl-now .time { width: 62px; font-size: var(--t-xs); }
   .tl-now { padding-left: 32px; }
+  .editor { padding: 16px; }
+  .settings-grid { grid-template-columns: 1fr; }
   .cal-day .chip, .cal-day .more { display: none; }
   .cal-day { min-height: 46px; align-items: center; }
   .cal-day.has-items::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
@@ -539,12 +550,12 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
 <div class="app">
   <nav class="sidebar">
     <div class="brand"><span class="logo" aria-hidden="true">B</span><span>Butler</span></div>
-    <button class="nav-btn" data-view="today"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span>My Day</span></button>
-    <button class="nav-btn" data-view="tasks"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
-    <button class="nav-btn" data-view="calendar"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
-    <button class="nav-btn" data-view="notes"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
-    <button class="nav-btn" data-view="notices"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
-    <button class="nav-btn" data-view="settings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
+    <button class="nav-btn" data-view="today" title="My Day (1)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span>My Day</span></button>
+    <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
+    <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
+    <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
+    <button class="nav-btn" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
+    <button class="nav-btn" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <div class="side-foot">
       <div class="df-badge" id="df-badge"></div>
       <button class="theme-btn" data-action="cycle-theme" id="theme-btn"></button>
@@ -3281,12 +3292,12 @@ function renderNotes() {
   const ro = state.readOnly ? 'readonly' : '';
   return `
     <div class="page-head">
-      <div><h1>Notes</h1><p class="sub">${DB.notes.length} note${DB.notes.length === 1 ? '' : 's'}${state.readOnly ? '' : ' · saved automatically'}</p></div>
-      <button class="btn primary edit-only" data-action="new-note">+ New note</button>
+      <div><h1>Notes</h1><p class="sub">${plural(DB.notes.length, 'note')}${state.readOnly ? '' : ', saved as you type'}</p></div>
+      <button class="btn primary edit-only" data-action="new-note">${ic('plus', 'sm')}New note</button>
     </div>
     <div class="notes-layout">
       <div>
-        <input class="input" style="width:100%;margin-bottom:10px" placeholder="Search notes…" data-input="note-search" value="${esc(state.noteQuery)}">
+        <input class="input" style="width:100%;margin-bottom:10px" placeholder="Search notes" aria-label="Search notes" data-input="note-search" value="${esc(state.noteQuery)}">
         <div class="note-list">
           ${notes.map((n) => `
             <button class="note-card ${n.id === state.activeNote ? 'active' : ''}" data-note="${esc(n.id)}">
@@ -3297,10 +3308,12 @@ function renderNotes() {
       </div>
       <div class="card editor">
         ${active ? `
-          <input class="note-title" data-input="note-title" value="${esc(active.title)}" placeholder="Title" ${ro}>
-          <div class="meta"><span>Edited ${esc(fmtStamp(active.updated))}</span></div>
-          <textarea data-input="note-body" placeholder="Start writing…" ${ro}>${esc(active.body)}</textarea>
-          <div class="row edit-only" style="justify-content:flex-end"><button class="btn small danger" data-action="delete-note">Delete note</button></div>
+          <div class="note-head">
+            <span class="meta"><span>Edited ${esc(fmtStamp(active.updated))}</span></span>
+            <button class="icon-btn edit-only" data-action="delete-note" title="Delete note" aria-label="Delete note">${ic('trash')}</button>
+          </div>
+          <input class="note-title" data-input="note-title" value="${esc(active.title)}" placeholder="Title" aria-label="Note title" ${ro}>
+          <textarea data-input="note-body" placeholder="Start writing" aria-label="Note" ${ro}>${esc(active.body)}</textarea>
         ` : `<div class="empty">${state.readOnly ? 'No notes in this file' : 'Create a note to get started'}</div>`}
       </div>
     </div>`;
@@ -3346,8 +3359,8 @@ function dataFileCard() {
 function renderSettings() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return `
-    <div class="page-head"><div><h1>Settings</h1></div><a class="btn" href="PA App Guide.html" target="_blank" rel="noopener">? Guide</a></div>
-    <div class="grid" style="max-width:720px">
+    <div class="page-head"><div><h1>Settings</h1><p class="sub">Saving, phone reminders, files, buckets and labels, this device</p></div><a class="btn" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}Guide</a></div>
+    <div class="grid settings-grid">
       <div class="card" id="df-card">${dataFileCard()}</div>
       ${todoCard()}
       ${state.phone ? '' : attachCard()}
@@ -4581,6 +4594,25 @@ document.addEventListener('keydown', (e) => {
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (state.openTask) closeTaskDrawer();
 });
+// Keyboard shortcuts, for when you're not typing in a box: 1 to 6 switch screens, N puts the cursor in quick add
+// (on Tasks if this screen has none), ? lists them.
+const SHORTCUT_VIEWS = ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings'];
+function shortcut(e) {
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt) return false;
+  if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return false;
+  const n = SHORTCUT_VIEWS[Number(e.key) - 1];
+  if (n) { setView(n); return true; }
+  if (e.key === 'n' || e.key === 'N') {
+    if (state.readOnly) return false;
+    let box = $('#main form.quick-add [data-qa]');
+    if (!box) { setView('tasks'); box = $('#main form.quick-add [data-qa]'); }
+    if (box) box.focus();
+    return !!box;
+  }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Notifications, 6 Settings. N: add a task. Esc: close.'); return true; }
+  return false;
+}
+document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });
 // Quick add: preview what was understood as you type or pick.
 document.addEventListener('input', (e) => {
   if (e.target.matches?.('[data-qa]')) updateQuickPreview(e.target.form);

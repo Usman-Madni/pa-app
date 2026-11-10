@@ -27,6 +27,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 76px; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+:root { --display: Georgia, "Times New Roman", serif; } /* the app's Newsreader is built into the app only; Georgia is the nearest serif everywhere */
 a { color: var(--accent); }
 code, kbd { background: var(--panel-2); border: 1px solid var(--border); padding: 0 6px; border-radius: 6px; font-size: 13.5px; font-family: inherit; }
 kbd { font-weight: 600; }
@@ -37,8 +38,8 @@ kbd { font-weight: 600; }
   width: 270px; flex: none; position: sticky; top: 0; height: 100vh; overflow-y: auto;
   background: var(--panel); border-right: 1px solid var(--border); padding: 18px 12px 24px;
 }
-.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 16px; font-weight: 700; font-size: 17px; text-decoration: none; color: var(--text); }
-.logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 16px; font-family: var(--display); font-weight: 500; font-size: 19px; text-decoration: none; color: var(--text); }
+.logo { width: 30px; height: 30px; border-radius: 10px; background: var(--accent); color: var(--bg); display: grid; place-items: center; }
 .chap > a { display: flex; gap: 10px; padding: 7px 10px; border-radius: 9px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 14px; }
 .chap > a .n { width: 20px; flex: none; color: var(--accent); }
 .chap.on > a { background: var(--accent-soft); color: var(--accent); }
@@ -57,11 +58,11 @@ kbd { font-weight: 600; }
 .bar .s { font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar .back { margin-left: auto; font-size: 13.5px; white-space: nowrap; }
 .content { max-width: 760px; padding: 28px 40px 120px; }
-h1 { font-size: 30px; margin: 4px 0 6px; letter-spacing: -.01em; }
+h1 { font-family: var(--display); font-weight: 500; font-size: 34px; margin: 4px 0 6px; letter-spacing: -.01em; }
 .lede { color: var(--muted); font-size: 16.5px; margin: 0 0 8px; }
 .chapter { margin-top: 56px; }
-.chapter > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 0 0 4px; }
-.chapter > .title { font-size: 25px; font-weight: 750; margin: 0 0 6px; letter-spacing: -.01em; }
+.chapter > h2 { font-size: 14px; font-weight: 600; color: var(--accent); margin: 0 0 4px; }
+.chapter > .title { font-family: var(--display); font-size: 28px; font-weight: 500; margin: 0 0 6px; letter-spacing: -.01em; }
 section { margin-top: 30px; }
 h3 { font-size: 19px; margin: 0 0 8px; }
 h3 .num { color: var(--accent); margin-right: 8px; font-variant-numeric: tabular-nums; }
@@ -114,7 +115,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 <body>
 <div class="layout">
   <nav class="side" aria-label="Contents">
-    <a class="brand" href="#top"><span class="logo">?</span><span>Butler Guide</span></a>
+    <a class="brand" href="#top"><span class="logo" aria-hidden="true">B</span><span>Butler Guide</span></a>
     <div id="toc"></div>
     <div class="foot">Examples are made up. Times show as on your own clock.</div>
   </nav>
@@ -176,6 +177,17 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li><b>Done today</b>: what you ticked off today, newest first.</li>
             <li>Beside it (below it on the phone): <b>Coming up</b> for the next 7 days, and <b>Anytime</b> for tasks with no date.</li>
           </ul>
+        </section>
+        <section id="keys" data-title="Keyboard shortcuts">
+          <h3>Keyboard shortcuts</h3>
+          <p>On the laptop, when you're not typing in a box:</p>
+          <table>
+            <tr><th>Key</th><th>Does</th></tr>
+            <tr><td><kbd>1</kbd> to <kbd>6</kbd></td><td>My Day, Tasks, Calendar, Notes, Notifications, Settings (pointing at a screen's name shows its number)</td></tr>
+            <tr><td><kbd>N</kbd></td><td>Puts the cursor in quick add, on Tasks if the screen you're on has none</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Closes the task panel or a question</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Lists these</td></tr>
+          </table>
         </section>
       </div>
 
