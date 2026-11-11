@@ -128,7 +128,10 @@ button:disabled { cursor: not-allowed; }
 .grid { display: grid; gap: 16px; }
 /* Settings: two columns of cards on a wide screen, one on a narrow one; only the data file card keeps a filled
    button, the others' main buttons are outlined so the page has one clear first step. */
-.settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); max-width: 1120px; align-items: start; }
+.settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); max-width: 1120px; align-items: stretch; }
+/* Settings come in three titled groups, each a row of cards of equal height */
+.settings-group { max-width: 1120px; margin-bottom: 28px; }
+.settings-h { margin: 0 0 10px; font-size: var(--t-md); font-weight: 600; color: var(--muted); }
 .settings-grid .card:not(#df-card) .btn.primary { background: transparent; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .settings-grid .card:not(#df-card) .btn.primary:hover { background: var(--accent-soft); }
 .settings-grid .card > .row, .settings-grid .card > .btn, .settings-grid .card > label.btn { margin-top: 12px; }
@@ -3445,34 +3448,45 @@ function renderSettings() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return `
     <div class="page-head"><div><h1>Settings</h1><p class="sub">Saving, phone reminders, files, buckets and labels, this device</p></div><a class="btn" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}Guide</a></div>
-    <div class="grid settings-grid">
-      <div class="card" id="df-card">${dataFileCard()}</div>
-      ${todoCard()}
-      ${state.phone ? '' : attachCard()}
-      ${manageCard()}
-      <div class="card">
-        <h2>This device</h2>
-        <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
-        <div class="row"><input class="input grow" data-input="device-name" value="${esc(deviceName())}" maxlength="40"></div>
-      </div>
-      <div class="card">
-        <h2>Reminders</h2>
-        <p class="sub">Desktop notifications fire while the app is open in a tab.</p>
-        <p>Status: <b>${perm === 'granted' ? 'Enabled' : perm === 'denied' ? 'Blocked in browser settings' : perm === 'unsupported' ? 'Not supported in this browser' : 'Not enabled yet'}</b></p>
-        <div class="row">
-          ${perm === 'default' ? '<button class="btn primary" data-action="enable-notifications">Enable notifications</button>' : ''}
-          <button class="btn" data-action="test-notification">Send test reminder</button>
+    <section class="settings-group" aria-labelledby="sg-save">
+      <h2 class="settings-h" id="sg-save">Saving and backups</h2>
+      <div class="grid settings-grid">
+        <div class="card" id="df-card">${dataFileCard()}</div>
+        <div class="card edit-only">
+          <h2>Manual backup</h2>
+          <p class="sub">An extra copy you control. Importing replaces everything in this browser (and then the data file).</p>
+          <div class="row">
+            <button class="btn" data-action="export">${ic('download', 'sm')}Export backup</button>
+            <label class="btn">${ic('upload', 'sm')}Import backup<input type="file" accept="application/json" data-input="import" hidden></label>
+          </div>
         </div>
       </div>
-      <div class="card edit-only">
-        <h2>Manual backup</h2>
-        <p class="sub">An extra copy you control. Importing replaces everything in this browser (and then the data file).</p>
-        <div class="row">
-          <button class="btn" data-action="export">${ic('download', 'sm')}Export backup</button>
-          <label class="btn">${ic('upload', 'sm')}Import backup<input type="file" accept="application/json" data-input="import" hidden></label>
+    </section>
+    <section class="settings-group" aria-labelledby="sg-remind">
+      <h2 class="settings-h" id="sg-remind">Reminders and this device</h2>
+      <div class="grid settings-grid">
+        ${todoCard()}
+        <div class="card">
+          <h2>Reminders here</h2>
+          <p class="sub">Desktop notifications fire while the app is open in a tab.</p>
+          <p>Status: <b>${perm === 'granted' ? 'Enabled' : perm === 'denied' ? 'Blocked in browser settings' : perm === 'unsupported' ? 'Not supported in this browser' : 'Not enabled yet'}</b></p>
+          <div class="row">
+            ${perm === 'default' ? '<button class="btn primary" data-action="enable-notifications">Enable notifications</button>' : ''}
+            <button class="btn" data-action="test-notification">Send test reminder</button>
+          </div>
+          <h2>This device</h2>
+          <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
+          <div class="row"><input class="input grow" data-input="device-name" value="${esc(deviceName())}" maxlength="40" aria-label="This device's name"></div>
         </div>
       </div>
-    </div>`;
+    </section>
+    <section class="settings-group" aria-labelledby="sg-org">
+      <h2 class="settings-h" id="sg-org">Files and organising</h2>
+      <div class="grid settings-grid">
+        ${state.phone ? '' : attachCard()}
+        ${manageCard()}
+      </div>
+    </section>`;
 }
 
 // ===================== Phone reminders (Microsoft To Do) =====================
