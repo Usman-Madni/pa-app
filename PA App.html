@@ -405,8 +405,10 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .cal-legend .chip { font-style: normal; }
 /* The phone shows a mark per day instead of names: late days get the late colour */
 .cal-legend.phone-only { display: none; }
-.cal-mark { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.cal-mark.late { background: var(--c-late); }
+.cal-mark { display: inline-block; min-width: 1.4em; font-style: normal; font-weight: 600; text-align: center; color: var(--accent); font-variant-numeric: tabular-nums; }
+.cal-mark.late { color: var(--c-late); }
+/* The day as a sheet from the bottom: phones only (a laptop shows the day beside the month) */
+.cal-count, .day-sheet-back, .sheet-grip, .sheet-close { display: none; }
 /* Pointing at one half of a late task lights up the other */
 .chip.late-hl { outline: 2px solid var(--c-late); outline-offset: 1px; }
 .repeat-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--panel-2); }
@@ -552,8 +554,21 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
   .settings-grid { grid-template-columns: 1fr; }
   .cal-day .chip, .cal-day .more { display: none; }
   .cal-day { min-height: 46px; align-items: center; }
-  .cal-day.has-items::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-  .cal-day.has-late::after { background: var(--c-late); }
+  /* A taller month: each day shows how many things it holds, in the late colour when something's late */
+  .cal-grid { gap: 5px; }
+  .cal-day { min-height: 68px; justify-content: space-between; padding: 6px 4px; }
+  .cal-day .cal-count { display: block; font-size: var(--t-sm); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .cal-day.has-late .cal-count { color: var(--c-late); }
+  /* Tapping a day opens it as a sheet from the bottom; tap outside, ×, or Esc closes it */
+  .day-panel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-height: 78vh; overflow: auto; margin: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-float); padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateY(105%); transition: transform .24s cubic-bezier(.2, .8, .2, 1); visibility: hidden;
+  }
+  .day-panel.open { transform: none; visibility: visible; }
+  .day-panel .sheet-grip { display: block; width: 40px; height: 4px; border-radius: 4px; background: var(--border); margin: -6px auto 12px; }
+  .day-panel .sheet-close { display: inline-grid; }
+  .cal-layout:has(.day-panel.open) .day-sheet-back { display: block; position: fixed; inset: 0; z-index: 44; background: var(--scrim); }
   .cal-legend.desk-only { display: none; }
   .cal-legend.phone-only { display: flex; }
   .toasts { bottom: 80px; }
@@ -1009,6 +1024,7 @@ const state = {
   donePrompt: null,        // id of the task whose "Done on…" pop-up is open
   labelManage: false,      // the panel's label list is open for renaming / recolouring / deleting
   selecting: false,        // Tasks is in "select several" mode (Selection)
+  daySheet: false,         // the phone's calendar shows the picked day as a sheet from the bottom
 };
 
 // ===================== Data file (auto-save) =====================
@@ -3305,7 +3321,7 @@ function renderCalendar() {
     }).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''} ${hasLate ? 'has-late' : ''}" data-day="${k}" aria-label="${esc(fmtDay(k))}${items.length ? `, ${plural(items.length, 'item')}${hasLate ? ', something late' : ''}` : ''}">
-        <span class="num">${d.getDate()}</span>${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
+        <span class="num">${d.getDate()}</span>${items.length ? `<span class="cal-count" aria-hidden="true">${items.length}</span>` : ''}${chips}${items.length > 3 ? `<span class="more">+${items.length - 3} more</span>` : ''}
       </button>`);
     // Drop the 6th row when it would only hold next month's days.
     if (i === 34 && new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getMonth() !== m.getMonth()) break;
@@ -3329,11 +3345,13 @@ function renderCalendar() {
           <p class="cal-legend-note">Dashed: the next repeat (≈ an estimate). A task done late shows twice: in red on its due day, and crossed out with an outline on the day you did it. Point at one, or open the day, for how late.</p>
         </div>
         <div class="cal-legend phone-only">
-          <span><i class="cal-mark"></i>Something on that day</span><span><i class="cal-mark late"></i>Something late</span><span>Tap a day to see it</span>
+          <span><i class="cal-mark">2</i>How many things that day</span><span><i class="cal-mark late">1</i>Something late</span><span>Tap a day to open it</span>
         </div>
       </div>
-      <div class="card">
-        <h2>${fmtDay(sel)}</h2>
+      <div class="day-sheet-back" data-action="close-day" aria-hidden="true"></div>
+      <div class="card day-panel ${state.daySheet ? 'open' : ''}" role="region" aria-label="${esc(fmtDay(sel))}">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <h2>${fmtDay(sel)} <button class="icon-btn sheet-close" data-action="close-day" aria-label="Close">${ic('x')}</button></h2>
         <ul class="list">${itemsForDay(sel, previews).map(dayItem).join('') || '<li class="empty">Nothing scheduled</li>'}</ul>
         <form class="edit-only" data-form="add-event" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <input class="input" name="title" placeholder="New event…" required autocomplete="off">
@@ -4235,6 +4253,7 @@ if (state.phone) Object.assign(TD, { AUTH_KEY: OD.AUTH_KEY, SCOPE: OD.SCOPE });
 // ===================== Actions =====================
 function setView(view) {
   if (view !== 'tasks') { state.selecting = false; Selection.ids.clear(); }
+  state.daySheet = false;
   state.view = view;
   device.set('view', view);
   if (view === 'notices') Notices.markRead();
@@ -4384,6 +4403,7 @@ document.addEventListener('click', (e) => {
     if (d.getMonth() !== state.calMonth.getMonth()) state.calMonth = monthStart(d);
     // A task chip in the day opens that task (the day is shown alongside); empty space just opens the day.
     const chip = e.target.closest('.chip[data-action="open-task"]');
+    state.daySheet = !chip; // on a phone the day opens as a sheet from the bottom (a laptop shows it beside)
     render();
     if (chip) openTaskDrawer(chip.dataset.id);
     return;
@@ -4459,6 +4479,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'undo-delete': PendingDelete.undo(id); break;
+    case 'close-day': state.daySheet = false; render(); break;
     case 'select-mode': if (Selection.on()) Selection.stop(); else Selection.start(); break;
     case 'select-cancel': Selection.stop(); break;
     case 'select-task': e.preventDefault(); Selection.toggle(id); break;
@@ -4723,6 +4744,7 @@ document.addEventListener('keydown', (e) => {
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (Selection.on() && !state.openTask) { Selection.stop(); return; }
+  if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return; }
   if (state.openTask) closeTaskDrawer();
 });
 // Keyboard shortcuts, for when you're not typing in a box: 1 to 6 switch screens, N puts the cursor in quick add

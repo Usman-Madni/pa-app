@@ -55,5 +55,28 @@ const inMonth = (n) => iso(new Date(firstOfMonth.getFullYear(), firstOfMonth.get
   check(!/·/.test(doc.querySelector('.cal-legend').textContent), 'no middle dots in the legend');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
+
+  // --- Phone: a taller month with a count per day, and the day opens as a sheet from the bottom ---
+  const ph = loadApp({ fsa: false });
+  const k = PA.toISO(new Date());
+  await ph.PA.RO.open({ name: 'd.json', text: async () => JSON.stringify({ app: 'PA App', version: 2, saveToken: 't', data: { tasks: [{ id: 'p1', title: 'Phone task', due: `${k}T23:59`, priority: 'low', done: false }, { id: 'p2', title: 'Second', due: `${k}T23:59`, priority: 'low', done: false }], notes: [], events: [] } }) });
+  ph.doc.querySelector('[data-view="calendar"]').click();
+  const pd = ph.doc.querySelector(`.cal-day[data-day="${k}"]`);
+  check(pd.querySelector('.cal-count')?.textContent === '2', 'each day shows how many things it holds');
+  check(!ph.doc.querySelector('.day-panel.open'), 'the day sheet starts closed');
+  pd.click();
+  check(ph.doc.querySelector('.day-panel.open') && ph.doc.querySelector('.day-panel').textContent.includes('Phone task'), 'tapping a day opens it as a sheet (read-only too)');
+  ph.doc.querySelector('.day-panel [data-action="close-day"]').click();
+  check(!ph.doc.querySelector('.day-panel.open'), '× closes it');
+  ph.doc.querySelector(`.cal-day[data-day="${k}"]`).click();
+  ph.doc.body.dispatchEvent(new ph.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  check(!ph.doc.querySelector('.day-panel.open'), 'Esc closes it');
+  ph.doc.querySelector(`.cal-day[data-day="${k}"]`).click();
+  ph.doc.querySelector('[data-view="tasks"]').click();
+  ph.doc.querySelector('[data-view="calendar"]').click();
+  check(!ph.doc.querySelector('.day-panel.open'), 'leaving the calendar closes it');
+  check(/max-width:\s*680px[\s\S]*\.day-panel\s*\{[^}]*position:\s*fixed[^}]*transform:\s*translateY\(105%\)/.test(css) && /\.day-panel\.open\s*\{\s*transform:\s*none/.test(css), 'on a phone-sized screen it is a sheet that slides up; a laptop shows the day beside the month');
+  check(ph.errors.length === 0, 'no script errors on the phone' + (ph.errors[0] ? ': ' + ph.errors[0] : ''));
+  ph.close();
   done();
 })();
