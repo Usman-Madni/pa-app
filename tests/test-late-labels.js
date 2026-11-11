@@ -42,7 +42,7 @@ const { loadApp, answer, check, done } = require('./helpers');
   doc.querySelector('[data-view="calendar"]').click();
   const chip = [...doc.querySelectorAll('.cal-day[data-day="2026-10-01"] .chip')].find((c) => c.textContent.includes('Pay water bill'));
   check(chip && chip.classList.contains('t-latedue'), 'calendar: on the due day a late task is an orange "missed" box');
-  check(doc.querySelector('.cal-legend').textContent.includes('Done late'), 'the legend has "Done late"');
+  check(doc.querySelector('.cal-legend').textContent.includes('done late'), 'the legend explains a task done late');
   const dayRow = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Pay water bill'));
   check(dayRow && dayRow.classList.contains('t-latedue') && /Missed — done .*20.* \(19 days late\)/.test(dayRow.textContent) && !dayRow.classList.contains('done'), 'the day list says "Missed — done Oct 20 (19 days late)", not struck through');
   const previews = [...doc.querySelectorAll('.chip.repeat')].filter((c) => c.textContent.includes('Pay water bill'));

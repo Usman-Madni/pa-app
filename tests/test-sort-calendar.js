@@ -79,7 +79,7 @@ const { loadApp, check, done } = require('./helpers');
   check(!shown('Dentist') || hasCls('Dentist', 'event'), 'events have their own colour');
   check([...doc.querySelectorAll('.chip.repeat')].some((c) => c.textContent.includes('Gym')), 'next repeats are dashed');
   const legend = doc.querySelector('.cal-legend');
-  check(legend && ['Overdue', 'Due today', 'Coming up', 'Done', 'Next repeat', 'Event'].every((w) => legend.textContent.includes(w)), 'a legend explains the colours');
+  check(legend && ['Late', 'Due today', 'Coming up', 'Done', 'next repeat', 'Event'].every((w) => legend.textContent.includes(w)), 'a legend explains the colours');
   const todayItem = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('alpha'));
   check(todayItem && todayItem.classList.contains('t-today') && todayItem.textContent.includes('Due today'), 'the day list uses the same colours and says "Due today"');
   todayItem.querySelector('[data-action="open-task"]').click();
