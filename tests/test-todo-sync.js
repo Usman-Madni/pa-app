@@ -359,7 +359,7 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').
   check(!e.done, 'while the data file waits for Reconnect, nothing is synced');
   PA.state.view = 'settings';
   PA.render();
-  check(/Paused — reconnect the data file/.test(doc.querySelector('#main').textContent), 'and the Phone reminders card says why');
+  check(/Paused: reconnect the data file/.test(doc.querySelector('#main').textContent), 'and the Phone reminders card says why');
   doc.querySelector('[data-action="td-sync"]').click();
   check(/Reconnect the data file first/.test(doc.querySelector('#toast')?.textContent || doc.body.textContent), 'Sync now says what to do');
   PA.TD.SOON_MS = 10;

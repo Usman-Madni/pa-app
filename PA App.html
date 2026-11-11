@@ -833,7 +833,7 @@ const DB = {
   },
   persist(k) {
     if (state.readOnly) return;
-    try { localStorage.setItem('pa_' + k, JSON.stringify(this[k])); } catch { toast('Could not save in this browser — storage is full or blocked'); }
+    try { localStorage.setItem('pa_' + k, JSON.stringify(this[k])); } catch { toast('Could not save in this browser: storage is full or blocked'); }
   },
   exportAll() { return Object.fromEntries(DATA_KEYS.map((k) => [k, this[k]])); },
   loads: 0, // how many times everything was replaced (a sync in progress checks it: its tasks are old copies then)
@@ -1014,7 +1014,7 @@ const DF = {
   // Browsers ask again for file access after a restart; this must run from a click.
   async reconnect() {
     try {
-      if ((await this.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given — data is only saving in this browser');
+      if ((await this.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given: data is only saving in this browser');
       if (this.backupDir) await this.backupDir.requestPermission({ mode: 'readwrite' }).catch(() => {});
       if (AT.status === 'reconnect') await AT.reconnect(); // one click brings the attachments folder back too
       await this.check();
@@ -1026,7 +1026,7 @@ const DF = {
       const h = await window.showSaveFilePicker({ suggestedName: 'pa-app-data.json', types: FILE_TYPES });
       await this.attach(h);
       await this.write();
-      toast('Data file created — changes now save to it automatically');
+      toast('Data file created: changes now save to it automatically');
     } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
   },
 
@@ -1287,7 +1287,7 @@ const AT = {
 
   async pickFolder() {
     const inUse = DB.tasks.some((t) => t.attachments.length);
-    if (this.dir && inUse && !(await ask('Files already attached stay in the current folder — move them into the new folder yourself, or they will show as missing. Change folder?', { yes: 'Change folder' }))) return;
+    if (this.dir && inUse && !(await ask('Files already attached stay in the current folder: move them into the new folder yourself, or they will show as missing. Change folder?', { yes: 'Change folder' }))) return;
     try {
       this.dir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'pa-attachments' });
       await idb.set('attachments', this.dir);
@@ -1689,7 +1689,7 @@ const Reminders = {
   },
   // A new reminder ({kind, …}); one counting from the due date needs a due date.
   add(t, r) {
-    if (r.kind !== 'at' && !t.due) return { ok: false, note: 'Set a due date first — or use "On a date and time"' };
+    if (r.kind !== 'at' && !t.due) return { ok: false, note: 'Set a due date first, or use "On a date and time"' };
     t.reminders.push({ ...r, id: uid(), fired: false });
     return { ok: true, note: '' };
   },
@@ -1783,10 +1783,10 @@ const labelPill = (l) => `<span class="label-pill" style="--lc:${labelInk(l.colo
 function dayItem(i) {
   const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
   const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late
-      ? `Missed — done ${esc(i.doneDay ? fmtDay(i.doneDay) : 'later')} (${esc(lateText(DB.tasks.find((t) => t.id === i.id)).replace(/^Done /, ''))})`
+      ? `Missed: done ${esc(i.doneDay ? fmtDay(i.doneDay) : 'later')} (${esc(lateText(DB.tasks.find((t) => t.id === i.id)).replace(/^Done /, ''))})`
       : statusText[i.status]}</span>`
     : i.kind === 'repeat' ? `<span class="pill">${ic('repeat')}${i.est ? '≈ Estimated repeat (after I finish it)' : ' Upcoming repeat'}</span>`
-    : i.kind === 'doneon' ? `<span class="pill doneon">${ic('check')} Done this day — was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
+    : i.kind === 'doneon' ? `<span class="pill doneon">${ic('check')} Done this day: was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete" aria-label="Delete event">${ic('x')}</button>` : '';
   const open = i.kind === 'task' || i.kind === 'doneon' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   // Tasks get a tick box right here (it opens the usual "Done on…" pop-up); events and previews don't.
@@ -1989,7 +1989,7 @@ function updateQuickPreview(form) {
     return;
   }
   const p = parseQuickAdd(text);
-  if (!p.parts.length) { box.innerHTML = form.dataset.ctx === 'board' ? '' : '<span class="qa-hint">Tip: dates like "tomorrow 5pm" or "every Monday", #label, @bucket, !high — press Enter to add</span>'; return; }
+  if (!p.parts.length) { box.innerHTML = form.dataset.ctx === 'board' ? '' : '<span class="qa-hint">Tip: dates like "tomorrow 5pm" or "every Monday", #label, @bucket, !high: press Enter to add</span>'; return; }
   box.innerHTML = `<span class="qa-hint">“${esc(p.title)}”</span>${p.parts.map((x) => `<span class="qa-chip">${iconText(x)}</span>`).join('')}<button type="button" class="qa-link" data-action="qa-raw">Keep words as typed</button>`;
 }
 
@@ -2021,7 +2021,7 @@ function quickAdd(form) {
   if (repeat) TaskEdit.setRepeat(t, repeat); // the message below says it all
   changed('tasks', 'labels');
   const bits = [taskDate(t) ? (taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))) + (taskTime(t) ? ' ' + fmtTime(taskTime(t)) : '') : '', t.repeat ? repeatText(t.repeat).toLowerCase() : ''].filter(Boolean);
-  toast(`Added “${fullTitle(t)}”${bits.length ? ' — ' + bits.join(', ') : ''}`);
+  toast(`Added “${fullTitle(t)}”${bits.length ? ': ' + bits.join(', ') : ''}`);
   return t;
 }
 
@@ -2389,13 +2389,13 @@ function renderDrawer() {
           <span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span class="p-lbl">Done on</span>
           <input class="p-input" type="date" data-field="doneDate" value="${esc(toISO(new Date(t.completedAt || Date.now())))}" aria-label="Done on">
           <input class="p-input" style="flex:0 0 auto" type="time" data-field="doneTime" value="${t.completedAllDay ? '' : esc(fmtClock(t.completedAt))}" aria-label="Done at">
-          ${t.completedAllDay ? '' : '<button type="button" class="p-mini edit-only" data-action="clear-done-time" title="No time — just the date">no time</button>'}
+          ${t.completedAllDay ? '' : '<button type="button" class="p-mini edit-only" data-action="clear-done-time" title="No time: just the date">no time</button>'}
         </div>${lateText(t) ? `<p class="p-sub late" style="padding-top:0">${lateText(t)}</p>` : ''}` : ''}
         <div class="p-row ${isOverdue(t) ? 'overdue' : t.due ? 'on' : ''}">
           <span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-calendar-event"/></svg></span><span class="p-lbl">Due</span>
           <input class="p-input" type="date" data-field="dueDate" value="${esc(taskDate(t))}" aria-label="Due date">
           <input class="p-input" style="flex:0 0 auto" type="time" data-field="dueTime" value="${esc(taskTime(t))}" ${t.due ? '' : 'disabled'} aria-label="Due time">
-          ${taskTime(t) ? '<button type="button" class="p-mini edit-only" data-action="clear-time" title="No time — any time that day">no time</button>' : ''}
+          ${taskTime(t) ? '<button type="button" class="p-mini edit-only" data-action="clear-time" title="No time: any time that day">no time</button>' : ''}
           ${t.due ? '<button type="button" class="icon-btn edit-only" data-action="clear-due" title="Remove the due date" aria-label="Remove the due date"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>' : ''}
         </div>
         ${reminderBlock(t)}
@@ -2488,7 +2488,7 @@ function attachBlock(t) {
       <a href="#" role="button" class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</a><!-- a link still works when read-only disables the panel -->
       <span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
-        title="${a.keep ? 'Kept on every repeat — click to keep it with this one only' : 'This one only — click to keep it on every repeat'}" aria-pressed="${!!a.keep}" aria-label="Keep on every repeat">${ic('pin')}</button>` : ''}
+        title="${a.keep ? 'Kept on every repeat: click to keep it with this one only' : 'This one only: click to keep it on every repeat'}" aria-pressed="${!!a.keep}" aria-label="Keep on every repeat">${ic('pin')}</button>` : ''}
       <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
       <button class="icon-btn edit-only" data-action="remove-attach" data-att="${esc(a.id)}" title="Remove" aria-label="Remove"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>`).join('');
@@ -2528,7 +2528,7 @@ function historyBlock(t) {
         <span style="color:var(--muted)">${ic(x.done ? 'check' : 'circle')}</span>
         <button class="link-btn" data-action="open-history" data-id="${esc(x.id)}" title="Open this copy">${esc(fullTitle(x))}</button>
       </div>
-      <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? ` · done ${esc(x.completedAllDay ? fmtDay(toISO(new Date(x.completedAt))) : fmtStamp(x.completedAt))}` : x.done ? '' : ' · not done yet'}${lateText(x) ? ` · <span class="late">${lateText(x)}</span>` : ''}</div>
+      <div class="meta">${x.due ? `Due ${esc(fmtDay(taskDate(x)))}` : 'No due date'}${x.done && x.completedAt ? `, done ${esc(x.completedAllDay ? fmtDay(toISO(new Date(x.completedAt))) : fmtStamp(x.completedAt))}` : x.done ? '' : ', not done yet'}${lateText(x) ? `, <span class="late">${lateText(x)}</span>` : ''}</div>
       ${x.notes.trim() ? `<div class="meta history-note">${esc(x.notes.trim().split('\n')[0].slice(0, 120))}</div>` : ''}
       ${x.attachments.length ? `<div class="label-row">${x.attachments.map((a) => `
         <button class="btn small" data-action="open-attach" data-task="${esc(x.id)}" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${fileIcon(a)} ${esc(a.name)}</button>`).join('')}</div>` : ''}
@@ -2569,7 +2569,7 @@ function openDonePrompt(t) {
       <p class="meta" style="margin:0">${esc(fullTitle(t) || 'New task')}</p>
       <div class="row quick-done">
         <button type="button" class="btn primary" data-action="done-quick" data-when="today">Today</button>
-        ${canDue ? `<button type="button" class="btn" data-action="done-quick" data-when="due">On the due date · ${esc(fmtDay(dueDay))}${taskTime(t) ? ' ' + esc(fmtTime(taskTime(t))) : ''}</button>` : ''}
+        ${canDue ? `<button type="button" class="btn" data-action="done-quick" data-when="due">On the due date, ${esc(fmtDay(dueDay))}${taskTime(t) ? ' ' + esc(fmtTime(taskTime(t))) : ''}</button>` : ''}
       </div>
       <p class="meta" style="margin:4px 0 -4px">Another date:</p>
       <div class="row">
@@ -2656,7 +2656,7 @@ const TaskEdit = {
   // Relative reminders count from the new date again, and a repeat keeps its anchor in step. A repeating task keeps
   // its due date: its next copies are counted from it.
   setDue(t, day, time) {
-    if (!day && t.repeat) return { ok: false, note: 'A repeating task needs a due date — stop the repeat first' };
+    if (!day && t.repeat) return { ok: false, note: 'A repeating task needs a due date: stop the repeat first' };
     const hhmm = time === undefined ? (t.due ? t.due.slice(11, 16) : ALL_DAY) : time || ALL_DAY;
     t.due = day ? `${day}T${hhmm}` : '';
     Reminders.rearm(t);
@@ -2687,9 +2687,9 @@ const TaskEdit = {
     const notes = [];
     if (!t.repeat && !t.period) {
       const s = splitPeriod(t.title);
-      if (s.period) { Object.assign(t, s); notes.push(`"${s.period}" is now the moving part — it moves forward with each repeat`); }
+      if (s.period) { Object.assign(t, s); notes.push(`"${s.period}" is now the moving part: it moves forward with each repeat`); }
     }
-    if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; notes.push('Repeating tasks need a due date, so it is set to today — change it if you like'); }
+    if (!t.due) { t.due = `${todayISO()}T${ALL_DAY}`; notes.push('Repeating tasks need a due date, so it is set to today: change it if you like'); }
     t.repeat = { interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', ...r };
     if (t.repeat.freq === 'weekly' && !t.repeat.days.length) t.repeat.days = [parseISO(t.due.slice(0, 10)).getDay()];
     this.anchor(t);
@@ -2745,12 +2745,12 @@ const Series = {
     const name = fullTitle(next);
     if (this.untouched(next)) {
       this.removeNext(t);
-      return { outcome: 'removed', next, note: `Removed the next copy (${name}) — it hadn't been changed` };
+      return { outcome: 'removed', next, note: `Removed the next copy (${name}): it hadn't been changed` };
     }
-    if (next.done) return { outcome: 'done', next, note: 'The next copy stays — it\'s already done' };
+    if (next.done) return { outcome: 'done', next, note: 'The next copy stays: it\'s already done' };
     const what = this.changes(next);
     return {
-      outcome: 'changed', next, note: `The next copy (${name}) stays — it was changed after it was made`,
+      outcome: 'changed', next, note: `The next copy (${name}) stays: it was changed after it was made`,
       question: `The next copy (${name}) was changed after it was made${what ? ` (${what})` : ''}. Remove it anyway?`,
     };
   },
@@ -2992,7 +2992,7 @@ function repeatBlock(t) {
     else if (f === 'after') next = `When you tick this off, the next one is due ${r.interval} ${esc(r.unit)} after that day.`;
     else {
       const nd = nextDue(t);
-      next = nd ? `When you tick this off, the next one is due <b>${esc(fmtDay(nd.slice(0, 10)))}</b>${endModeOf(r) === 'count' ? ` (${index + 1} of ${r.count})` : ''}.` : 'This is the last one — the end date comes before the next repeat.';
+      next = nd ? `When you tick this off, the next one is due <b>${esc(fmtDay(nd.slice(0, 10)))}</b>${endModeOf(r) === 'count' ? ` (${index + 1} of ${r.count})` : ''}.` : 'This is the last one: the end date comes before the next repeat.';
     }
   }
   return `
@@ -3017,7 +3017,7 @@ function periodField(t) {
   if (t.period) {
     const nd = t.repeat && t.due && !t.done ? nextDue(t) : null;
     const next = nd ? fullTitle({ ...t, period: rollPeriod(t.period, parseISO(taskDate(t)), parseISO(nd.slice(0, 10))) }) : '';
-    shows = `Shows as <b>${esc(fullTitle(t))}</b>${next ? ` · next: <b>${esc(next)}</b>` : ''}`;
+    shows = `Shows as <b>${esc(fullTitle(t))}</b>${next ? `, next: <b>${esc(next)}</b>` : ''}`;
   } else shows = 'e.g. "Oct 26" (October 2026), "26 Oct", "Q3", "Week 43" or "2026". It moves forward with each repeat.';
   return `
     <label class="row meta period-row">Moving part
@@ -3354,7 +3354,7 @@ function dataFileCard() {
   if (!DF.handle) {
     return `
       <h2>Data file</h2>
-      <p class="sub">Right now your data only lives in this browser. Link a data file (for example in OneDrive) and every change saves to it automatically — 2 seconds after you stop typing.</p>
+      <p class="sub">Right now your data only lives in this browser. Link a data file (for example in OneDrive) and every change saves to it automatically, 2 seconds after you stop typing.</p>
       <div class="row">
         <button class="btn primary" data-action="df-create">Create new data file</button>
         <button class="btn" data-action="df-open">Open existing data file</button>
@@ -3363,7 +3363,7 @@ function dataFileCard() {
   const label = { ok: unsaved ? 'Saving…' : 'Saved', reconnect: 'Waiting for permission', conflict: 'Needs a decision (see the banner at the top)', error: 'Save problem' }[DF.status] || DF.status;
   return `
     <h2>Data file</h2>
-    <p><span class="status-dot ${DF.status === 'ok' ? 'on' : DF.status === 'reconnect' ? 'warn' : 'bad'}"></span><b>${esc(DF.handle.name)}</b> — ${esc(label)}</p>
+    <p><span class="status-dot ${DF.status === 'ok' ? 'on' : DF.status === 'reconnect' ? 'warn' : 'bad'}"></span><b>${esc(DF.handle.name)}</b>: ${esc(label)}</p>
     ${DF.fileInfo ? `<p class="sub">Last saved ${esc(fmtStamp(DF.fileInfo.savedAt))} on ${esc(DF.fileInfo.savedFrom || '?')}</p>` : ''}
     <div class="row">
       ${DF.status === 'reconnect' ? '<button class="btn primary" data-action="df-reconnect">Reconnect</button>' : ''}
@@ -3371,7 +3371,7 @@ function dataFileCard() {
       <button class="btn danger" data-action="df-unlink">Unlink</button>
     </div>
     <h2 style="margin-top:18px">Daily backups</h2>
-    <p class="sub">${DF.backupDir ? `Backing up to the <b>${esc(DF.backupDir.name)}</b> folder — one dated copy on the first save of each day.` : 'Pick a folder and the first save of each day also writes a dated backup there.'}</p>
+    <p class="sub">${DF.backupDir ? `Backing up to the <b>${esc(DF.backupDir.name)}</b> folder: one dated copy on the first save of each day.` : 'Pick a folder and the first save of each day also writes a dated backup there.'}</p>
     <button class="btn" data-action="df-backup-folder">${DF.backupDir ? 'Change backup folder' : 'Choose backup folder'}</button>`;
 }
 
@@ -3433,7 +3433,7 @@ const TD = {
   GRAPH: 'https://graph.microsoft.com/v1.0',
   SCOPE: 'Tasks.ReadWrite offline_access',
   LIST_NAME: 'PA App',
-  APP_NAME: 'PA App',   // linkedResources.applicationName — marks the To Do tasks this app made
+  APP_NAME: 'PA App',   // linkedResources.applicationName: marks the To Do tasks this app made
   SYNC_MS: 5 * 60000,   // while open
   SOON_MS: 5000,        // after a change
   MASS: 10,             // never remove more than this many at once (and over half the list) without a person checking
@@ -3455,7 +3455,7 @@ const TD = {
   async signIn() {
     // Open the pop-up straight from the click, or the browser blocks it; it's pointed at Microsoft a moment later.
     const popup = window.open('', 'pa-ms-signin', 'width=480,height=640');
-    if (!popup) { toast('The sign-in pop-up was blocked — allow pop-ups for this site and try again'); return; }
+    if (!popup) { toast('The sign-in pop-up was blocked: allow pop-ups for this site and try again'); return; }
     try {
       const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
       const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
@@ -3467,7 +3467,7 @@ const TD = {
       popup.location.href = `${this.AUTH}/authorize?${q}`;
       const back = await this.waitForPopup(popup);
       if (back.get('error')) throw new Error(back.get('error_description') || back.get('error'));
-      if (back.get('state') !== check) throw new Error('The sign-in answer didn\'t match — try again');
+      if (back.get('state') !== check) throw new Error('The sign-in answer didn\'t match. Try again');
       await this.token({ grant_type: 'authorization_code', code: back.get('code'), redirect_uri: this.redirectUri(), code_verifier: verifier });
       this.error = '';
       toast(this.CONNECTED_NOTE);
@@ -3690,7 +3690,7 @@ const TD = {
     const linkedCount = tasks.filter((t) => t.todo && t.todo.id).length;
     // Tasks deleted in To Do stay here and aren't sent again — unless it's most of them, which smells of a mistake.
     if (gone.length > this.MASS && gone.length > linkedCount / 2) {
-      return { gone: [], take: [], fresh: [], error: `${gone.length} tasks are missing from the To Do list — nothing was changed. Check the "${this.LIST_NAME}" list in To Do.` };
+      return { gone: [], take: [], fresh: [], error: `${gone.length} tasks are missing from the To Do list: nothing was changed. Check the "${this.LIST_NAME}" list in To Do.` };
     }
     const take = [];
     for (const t of tasks) {
@@ -3741,7 +3741,7 @@ const TD = {
     for (const t of tasks) if (t.todo && t.todo.id) keep.add(t.todo.id);
     const remove = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id) && known.has(this.ourId(x)));
     if (remove.length > this.MASS && remove.length > remote.size / 2) {
-      return { send, remove: [], error: `Not removing ${remove.length} tasks from To Do at once — check that your tasks look right here.` };
+      return { send, remove: [], error: `Not removing ${remove.length} tasks from To Do at once: check that your tasks look right here.` };
     }
     return { send, remove, error: '' };
   },
@@ -3784,7 +3784,7 @@ const TD = {
       const inn = this.decideIn(DB.tasks, remote);
       if (inn.error) throw new Error(inn.error);
       for (const t of inn.gone) t.todo = t.done ? null : { removed: true };
-      if (inn.gone.length) toast(`${inn.gone.length} task${inn.gone.length === 1 ? ' was' : 's were'} deleted in To Do — kept here, not sent again`);
+      if (inn.gone.length) toast(`${inn.gone.length} task${inn.gone.length === 1 ? ' was' : 's were'} deleted in To Do: kept here, not sent again`);
       sent = inn.gone.length;
       for (const { t, x, take, was, there } of inn.take) {
         if (!DB.tasks.includes(t)) continue; // taken away meanwhile (an untick from the phone removed this next copy)
@@ -3848,7 +3848,7 @@ const TD = {
     device.remove('msAuth');
     device.remove('todoList');
     this.error = '';
-    toast(`Disconnected. The "${this.LIST_NAME}" list stays in To Do — delete it there if you don't want it`);
+    toast(`Disconnected. The "${this.LIST_NAME}" list stays in To Do: delete it there if you don't want it`);
     render();
   },
 };
@@ -3864,12 +3864,12 @@ function phoneTodoCard() {
   }
   const last = device.get('todoLast', 0);
   const onPhone = DB.tasks.filter((t) => t.todo && t.todo.id && !t.done).length;
-  const status = OD.needsSignIn() ? '<span class="status-dot warn"></span>Paused — sign in to Microsoft again'
+  const status = OD.needsSignIn() ? '<span class="status-dot warn"></span>Paused: sign in to Microsoft again'
     : state.readOnly ? '<span class="status-dot warn"></span>Paused while read-only (offline or signed out)'
     : TD.error ? '<span class="status-dot bad"></span>Sync problem' : '<span class="status-dot on"></span>Syncing from this phone';
   return `<div class="card"><h2>Phone reminders</h2><p class="sub">${intro}</p>
     <p>${status}</p>
-    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list · last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>
+    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list, last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>
     ${TD.error ? `<p class="sub" style="color:var(--danger)">${esc(TD.error)}</p>` : ''}
     <div class="row">${OD.needsSignIn() ? '<button class="btn primary" data-action="od-connect">Sign in again</button>' : `<button class="btn edit-only" data-action="td-sync" ${TD.busy ? 'disabled' : ''}>${TD.busy ? 'Syncing…' : 'Sync now'}</button>`}</div></div>`;
 }
@@ -3885,12 +3885,12 @@ function todoCard() {
   }
   const last = device.get('todoLast', 0);
   const onPhone = DB.tasks.filter((t) => t.todo && t.todo.id && !t.done).length;
-  const status = TD.needsSignIn() ? '<span class="status-dot warn"></span>Paused — sign in to Microsoft again'
-    : TD.waitingForFile() ? '<span class="status-dot warn"></span>Paused — reconnect the data file first (Data file, above)'
+  const status = TD.needsSignIn() ? '<span class="status-dot warn"></span>Paused: sign in to Microsoft again'
+    : TD.waitingForFile() ? '<span class="status-dot warn"></span>Paused: reconnect the data file first (Data file, above)'
     : TD.error ? '<span class="status-dot bad"></span>Sync problem' : '<span class="status-dot on"></span>Connected';
   return `<div class="card edit-only"><h2>Phone reminders</h2><p class="sub">${intro}</p>
     <p>${status}</p>
-    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list · last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>${err}
+    <p class="sub">${onPhone} task${onPhone === 1 ? '' : 's'} on your phone list, last synced ${last ? esc(fmtStamp(new Date(last).toISOString())) : 'not yet'}</p>${err}
     <div class="row">
       ${TD.needsSignIn() ? '<button class="btn primary" data-action="td-connect">Sign in again</button>' : `<button class="btn" data-action="td-sync" ${TD.busy ? 'disabled' : ''}>${TD.busy ? 'Syncing…' : 'Sync now'}</button>`}
       <button class="btn danger" data-action="td-disconnect">Disconnect</button>
@@ -4245,7 +4245,7 @@ function askNotifications() {
 
 // quiet = the message in the app only: To Do already rings for this one on this computer and the phone.
 function notify(title, body, quiet = false, task = '') {
-  toast(`🔔 ${title}${body ? ' — ' + body : ''}`, task);
+  toast(`🔔 ${title}${body ? ': ' + body : ''}`, task);
   if (!quiet && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, tag: title }); } catch { /* some browsers need a service worker; the toast already showed */ }
   }
@@ -4437,7 +4437,7 @@ document.addEventListener('click', (e) => {
       const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
       if (!a) break;
       const dot = a.name.lastIndexOf('.');
-      askText(`Rename attachment${a.keep ? ' (kept on every repeat — renames it for all of them)' : ''}`, dot > 0 ? a.name.slice(0, dot) : a.name, { yes: 'Rename' })
+      askText(`Rename attachment${a.keep ? ' (kept on every repeat: renames it for all of them)' : ''}`, dot > 0 ? a.name.slice(0, dot) : a.name, { yes: 'Rename' })
         .then((name) => { if (name != null) AT.rename(t, a.id, name); });
       break;
     }
@@ -4528,7 +4528,7 @@ document.addEventListener('click', (e) => {
     case 'od-refresh': OD.open(); break;
     case 'od-disconnect': OD.disconnect(); break;
     case 'td-sync':
-      if (TD.waitingForFile()) { toast('Reconnect the data file first — then it syncs straight away'); break; }
+      if (TD.waitingForFile()) { toast('Reconnect the data file first, then it syncs straight away'); break; }
       TD.sync(); render(); break;
     case 'td-disconnect': ask('Stop sending tasks to Microsoft To Do on this computer?', { yes: 'Disconnect', danger: true }).then((yes) => { if (yes) TD.disconnect(); }); break;
     case 'cycle-theme': cycleTheme(); break;

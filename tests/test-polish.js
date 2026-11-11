@@ -32,6 +32,22 @@ const { loadApp, check, done } = require('./helpers');
   // --- Priority pills: text mixed toward ink, for contrast ---
   check(/\.pill\.high\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--danger\) \d+%, var\(--text\)\)/.test(css) && /\.pill\.med\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--warn\) \d+%, var\(--text\)\)/.test(css), 'priority pills mix their colour toward ink, so they read');
 
+  // --- No em dashes or middle dots in what the screens show ---
+  const late = PA.addTask({ title: 'Was late', due: '2026-10-01T09:00' });
+  PA.Series.tick(late, new Date(2026, 9, 20, 18, 30), false);
+  changed('tasks');
+  const shownText = [];
+  for (const v of ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings']) {
+    doc.querySelector(`[data-view="${v}"]`).click();
+    shownText.push(doc.querySelector('#main').textContent, doc.querySelector('#banner').textContent);
+  }
+  PA.state.calMonth = new Date(2026, 9, 1);
+  PA.state.selectedDay = '2026-10-20';
+  doc.querySelector('[data-view="calendar"]').click();
+  shownText.push(doc.querySelector('#main').textContent);
+  const odd = shownText.join(' ').match(/.{0,30}( — | · ).{0,30}/);
+  check(!odd, 'no em dashes or middle dots on any screen' + (odd ? `: "${odd[0]}"` : ''));
+
   // --- My Day: headings go h1, then h2 ---
   doc.querySelector('[data-view="today"]').click();
   check(doc.querySelector('#main h2.tl-h') && !doc.querySelector('#main h3.tl-h'), 'My Day\'s section headings are one level under the title');

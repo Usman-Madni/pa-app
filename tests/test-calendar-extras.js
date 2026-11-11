@@ -31,7 +31,7 @@ const txt = (el) => { const c = el.cloneNode(true); c.querySelectorAll('svg').fo
   const chip = [...doc.querySelectorAll('.cal-day[data-day="2026-10-20"] .chip')].find((c) => c.textContent.includes('Pay water bill'));
   check(chip && chip.classList.contains('doneon') && txt(chip).startsWith('✓'), 'the done-day chip is a faded "✓ title"');
   const row = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Pay water bill'));
-  check(row && /Done this day — was due Thu, (Oct 1|1 Oct) \(19 days late\)/.test(row.textContent), `day list: "Done this day — was due Oct 1 (19 days late)"`);
+  check(row && /Done this day: was due Thu, (Oct 1|1 Oct) \(19 days late\)/.test(row.textContent), `day list: "Done this day: was due Oct 1 (19 days late)"`);
   row.querySelector('[data-action="open-task"]').click();
   check(PA.state.openTask === t.id, 'clicking it opens the task');
   check(/A task done late shows twice/.test(doc.querySelector('.cal-legend').textContent) && /≈ an estimate/.test(doc.querySelector('.cal-legend').textContent), 'legend explains the late and estimate chips (in a sentence under the swatches)');

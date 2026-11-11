@@ -89,7 +89,7 @@ const { loadApp, check, done } = require('./helpers');
   check(!doc.querySelector('#drawer [data-repeat="rollTitle"]'), 'the old "move dates forward" tick is gone');
   const field = doc.querySelector('#drawer [data-field="period"]');
   check(field && field.value === 'Aug', 'the moving part has its own box');
-  check(doc.querySelector('#drawer .period-hint').textContent === 'Shows as Elec bill (Aug) · next: Elec bill (Sep)', 'it shows how it looks now and next time');
+  check(doc.querySelector('#drawer .period-hint').textContent === 'Shows as Elec bill (Aug), next: Elec bill (Sep)', 'it shows how it looks now and next time');
   check(doc.querySelector(`#main [data-id="${t.id}"]`).closest('.item').querySelector('.tt').textContent === 'Elec bill (Aug)', 'the list shows "Elec bill (Aug)"');
   let next = PA.Series.tick(t).next;
   check(next.title === 'Elec bill' && next.period === 'Sep' && next.due === '2026-10-05T23:59', 'ticking it off makes "Elec bill (Sep)"');
