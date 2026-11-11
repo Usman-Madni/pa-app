@@ -1813,13 +1813,16 @@ function taskItem(t) {
 
 const labelPill = (l) => `<span class="label-pill" style="--lc:${labelInk(l.color)}">${esc(l.name)}</span>`;
 
+// A day's list on the calendar. Only states that tell you something get a label (overdue, due today); a done task is
+// just struck through. A late one gets a quiet line under its name: how late, and the other day.
 function dayItem(i) {
-  const statusText = { overdue: 'Overdue', today: 'Due today', upcoming: 'Task', done: 'Done' };
-  const tag = i.kind === 'task' ? `<span class="pill ${chipClass(i)}">${i.late
-      ? `Missed: done ${esc(i.doneDay ? fmtDay(i.doneDay) : 'later')} (${esc(lateText(DB.tasks.find((t) => t.id === i.id)).replace(/^Done /, ''))})`
-      : statusText[i.status]}</span>`
-    : i.kind === 'repeat' ? `<span class="pill">${ic('repeat')}${i.est ? '≈ Estimated repeat (after I finish it)' : ' Upcoming repeat'}</span>`
-    : i.kind === 'doneon' ? `<span class="pill doneon">${ic('check')} Done this day: was due ${esc(fmtDay(i.dueDay))} (${esc(i.lateBy.replace(/^Done /, ''))})</span>` : '';
+  const statusText = { overdue: 'Overdue', today: 'Due today' };
+  const howLate = (s) => String(s || '').replace(/^Done /, '');
+  const tag = i.kind === 'task' && !i.late && statusText[i.status] ? `<span class="pill ${chipClass(i)}">${statusText[i.status]}</span>` : '';
+  const sub = i.kind === 'task' && i.late
+      ? `<span class="late">Done ${esc(howLate(lateText(DB.tasks.find((t) => t.id === i.id))))}, on ${esc(i.doneDay ? fmtDay(i.doneDay) : 'a later day')}</span>`
+    : i.kind === 'doneon' ? `<span>${esc(howLate(i.lateBy))}, was due ${esc(fmtDay(i.dueDay))}</span>`
+    : i.kind === 'repeat' ? `<span>${ic('repeat', 'sm')}${i.est ? 'Estimated repeat (after I finish it)' : 'Next repeat'}</span>` : '';
   const del = i.kind === 'event' ? `<button class="icon-btn edit-only" data-action="delete-event" data-id="${esc(i.id)}" title="Delete" aria-label="Delete event">${ic('x')}</button>` : '';
   const open = i.kind === 'task' || i.kind === 'doneon' ? ` clickable" data-action="open-task" data-id="${esc(i.id)}` : '';
   // Tasks get a tick box right here (it opens the usual "Done on…" pop-up); events and previews don't.
@@ -1830,7 +1833,7 @@ function dayItem(i) {
     <li class="item day-item ${chipClass(i)} ${i.done && i.kind === 'task' && !i.late ? 'done' : ''}">
       ${tick}
       <span class="time">${i.time ? fmtTime(i.time) : 'All day'}</span>
-      <div class="body${open}"><div class="title"><span class="tt">${esc(i.title)}</span> ${tag}</div></div>
+      <div class="body${open}"><div class="title"><span class="tt">${esc(i.title)}</span> ${tag}</div>${sub ? `<div class="meta">${sub}</div>` : ''}</div>
       ${del}
     </li>`;
 }
@@ -3293,8 +3296,9 @@ function renderCalendar() {
       // Task chips open their task when clicked; clicking anywhere else in the day opens the day.
       const opens = it.kind === 'task' || it.kind === 'doneon' || it.kind === 'repeat' ? ` data-action="open-task" data-id="${esc(it.id)}" title="Open ${esc(it.title)}"` : '';
       // The name comes first so it isn't cut short; the time is in the day panel (and the tooltip).
-      const opensT = opens.replace(/ title="Open ([^"]*)"/, (m, t) => ` title="${it.time ? fmtTime(it.time) + ' ' : ''}${t}"`);
-      return `<span class="chip ${chipClass(it)}"${lateId}${opensT}><span class="chip-t">${chipPrefix(it)}${esc(it.title)}</span>${note ? `<span class="chip-note">${note}</span>` : ''}</span>`;
+      // The square shows only the name; the time and the late note ("due 16th") are in the tooltip and the day panel.
+      const opensT = opens.replace(/ title="Open ([^"]*)"/, (m, t) => ` title="${it.time ? fmtTime(it.time) + ' ' : ''}${t}${note ? `, ${note}` : ''}"`);
+      return `<span class="chip ${chipClass(it)}"${lateId}${opensT}><span class="chip-t">${chipPrefix(it)}${esc(it.title)}</span></span>`;
     }).join('');
     cells.push(`
       <button class="cal-day ${d.getMonth() !== m.getMonth() ? 'other' : ''} ${k === todayISO() ? 'today' : ''} ${k === state.selectedDay ? 'selected' : ''} ${items.length ? 'has-items' : ''} ${hasLate ? 'has-late' : ''}" data-day="${k}" aria-label="${esc(fmtDay(k))}${items.length ? `, ${plural(items.length, 'item')}${hasLate ? ', something late' : ''}` : ''}">
@@ -3319,7 +3323,7 @@ function renderCalendar() {
           <span><i class="chip t-overdue">Task</i>Late</span><span><i class="chip t-today">Task</i>Due today</span>
           <span><i class="chip t-upcoming">Task</i>Coming up</span><span><i class="chip t-done"><span class="chip-t">${ic('check')} Task</span></i>Done</span>
           <span><i class="chip event">Event</i>Event</span>
-          <p class="cal-legend-note">Dashed: the next repeat (≈ an estimate). A task done late shows twice: on its due day ("done 3rd") and, outlined, on the day you did it ("due 1st").</p>
+          <p class="cal-legend-note">Dashed: the next repeat (≈ an estimate). A task done late shows twice: in red on its due day, and crossed out with an outline on the day you did it. Point at one, or open the day, for how late.</p>
         </div>
         <div class="cal-legend phone-only">
           <span><i class="cal-mark"></i>Something on that day</span><span><i class="cal-mark late"></i>Something late</span><span>Tap a day to see it</span>

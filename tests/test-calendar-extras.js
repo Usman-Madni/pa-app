@@ -31,7 +31,7 @@ const txt = (el) => { const c = el.cloneNode(true); c.querySelectorAll('svg').fo
   const chip = [...doc.querySelectorAll('.cal-day[data-day="2026-10-20"] .chip')].find((c) => c.textContent.includes('Pay water bill'));
   check(chip && chip.classList.contains('doneon') && txt(chip).startsWith('✓'), 'the done-day chip is a faded "✓ title"');
   const row = [...doc.querySelectorAll('#main .day-item')].find((li) => li.textContent.includes('Pay water bill'));
-  check(row && /Done this day: was due Thu, (Oct 1|1 Oct) \(19 days late\)/.test(row.textContent), `day list: "Done this day: was due Oct 1 (19 days late)"`);
+  check(row && /19 days late, was due Thu, (Oct 1|1 Oct)/.test(row.querySelector('.meta').textContent) && !row.querySelector('.pill'), `day list: the name, and under it "19 days late, was due Oct 1" (no pill)`);
   row.querySelector('[data-action="open-task"]').click();
   check(PA.state.openTask === t.id, 'clicking it opens the task');
   check(/A task done late shows twice/.test(doc.querySelector('.cal-legend').textContent) && /≈ an estimate/.test(doc.querySelector('.cal-legend').textContent), 'legend explains the late and estimate chips (in a sentence under the swatches)');
@@ -47,15 +47,15 @@ const txt = (el) => { const c = el.cloneNode(true); c.querySelectorAll('svg').fo
   const dueChip = doc.querySelector('.cal-day[data-day="2026-10-24"] .chip[data-late]');
   const doneChip = doc.querySelector('.cal-day[data-day="2026-10-25"] .chip[data-late]');
   check(dueChip.classList.contains('t-latedue') && !dueChip.classList.contains('t-done'), 'due day: an orange "missed" box (not the done look)');
-  check(dueChip.querySelector('.chip-t').textContent === 'm' && dueChip.querySelector('.chip-note').textContent === 'done 25th', 'due day says "m" with the note "done 25th" (no ✓)');
-  check(doneChip.classList.contains('doneon') && txt(doneChip.querySelector('.chip-t')) === '✓ m' && doneChip.querySelector('.chip-note').textContent === 'due 24th', 'done day: "✓ m" with the note "due 24th", the done look with a late outline');
+  check(dueChip.querySelector('.chip-t').textContent === 'm' && !dueChip.querySelector('.chip-note') && /done 25th/.test(dueChip.title), 'due day shows just "m" (no ✓); "done 25th" is in its tooltip');
+  check(doneChip.classList.contains('doneon') && txt(doneChip.querySelector('.chip-t')) === '✓ m' && !doneChip.querySelector('.chip-note') && /due 24th/.test(doneChip.title), 'done day: "✓ m" with the late outline; "due 24th" is in its tooltip');
   const okChip = doc.querySelector('.cal-day[data-day="2026-10-16"] .chip');
   check(okChip.classList.contains('t-done') && txt(okChip.querySelector('.chip-t')) === '✓ On time' && !okChip.querySelector('.chip-note'), 'a task done on time: green "✓ name", no note');
   const otherMonth = doc.querySelector('.cal-day[data-day="2026-10-20"] .chip.doneon');
-  check(otherMonth && /due (1st|Oct 1)/.test(otherMonth.textContent), 'same month → "due 1st"');
+  check(otherMonth && /due (1st|Oct 1)/.test(otherMonth.title), 'same month: "due 1st" (in the tooltip)');
   // Long names: the note is its own part, so only the name gets shortened
   const longChip = doc.querySelector('.cal-day[data-day="2026-10-14"] .chip.doneon');
-  check(txt(longChip.querySelector('.chip-t')).startsWith('✓ Pay the quarterly') && longChip.querySelector('.chip-note').textContent === 'due 12th', 'a long name keeps its "due 12th" note separate');
+  check(txt(longChip.querySelector('.chip-t')).startsWith('✓ Pay the quarterly') && !longChip.querySelector('.chip-note'), 'a long name has the square to itself (the note is in the tooltip)');
   const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
   check(/\.chip-t\s*\{[^}]*text-overflow:\s*ellipsis/.test(css) && /\.chip-note\s*\{[^}]*flex:\s*0 0 auto/.test(css), 'the name shortens with … and the note never shrinks');
   check(/\n\.pill\s*\{[^}]*display:\s*inline-block[^}]*white-space:\s*nowrap/.test(css), 'a short pill like "Due today" moves to the next line whole, never split in two');

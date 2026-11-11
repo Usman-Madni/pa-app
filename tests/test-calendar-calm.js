@@ -37,6 +37,15 @@ const inMonth = (n) => iso(new Date(firstOfMonth.getFullYear(), firstOfMonth.get
   const chip = fine.querySelector('.chip');
   check(chip && chip.textContent.trim().startsWith('Later thing') && /9:00/.test(chip.title), 'a chip starts with the name (not the time); the time is in its tooltip');
 
+  // --- The day panel: no "Task" or "Done" labels, only ones that say something ---
+  const doneT = PA.addTask({ title: 'Finished one', due: `${inMonth(28)}T23:59` });
+  PA.Series.tick(doneT, new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 28, 12), true);
+  PA.state.selectedDay = inMonth(28);
+  PA.render();
+  const pills = [...doc.querySelectorAll('#main .day-item .pill')].map((p) => p.textContent.trim());
+  check(!pills.includes('Task') && !pills.includes('Done'), `no "Task" or "Done" label in the day list (got: ${pills.join(', ') || 'none'})`);
+  check([...doc.querySelectorAll('#main .day-item')].some((li) => li.classList.contains('done') && li.textContent.includes('Finished one')), 'a done task is shown struck through instead');
+
   // --- Two legends: names on a computer, marks on the phone ---
   const desk = doc.querySelector('.cal-legend.desk-only');
   const phone = doc.querySelector('.cal-legend.phone-only');
