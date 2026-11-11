@@ -103,6 +103,9 @@ button:disabled { cursor: not-allowed; }
 .nav-count { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-xs); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .nav-count[hidden] { display: none; }
 .lbl-short { display: none; } /* the phone's bottom bar uses the short label */
+.nav-count.muted { background: var(--panel-2); color: var(--muted); }
+.trash-nav { margin-bottom: 4px; }
+.trash-row .row { flex-wrap: nowrap; }
 .notice-list { padding: 6px 0; }
 .notice-day { padding: 14px 16px 4px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
 .notice-row { display: flex; gap: 14px; align-items: baseline; width: 100%; padding: 8px 16px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; }
@@ -595,6 +598,7 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
     <button class="nav-btn" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
     <button class="nav-btn" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <div class="side-foot">
+      <button class="nav-btn trash-nav" data-view="trash" title="Deleted tasks and notes, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
       <div class="df-badge" id="df-badge"></div>
       <button class="theme-btn" data-action="cycle-theme" id="theme-btn"></button>
       <a class="theme-btn" href="PA App Guide.html" target="_blank" rel="noopener"><svg class="i sm" aria-hidden="true"><use href="#i-help-circle"/></svg>Guide</a>
@@ -711,23 +715,26 @@ function toast(msg, task) {
 // A deleted task waits UNDO_MS with an Undo button before it's really deleted. Until then it's only hidden here:
 // nothing (the data file, the other device, To Do) sees a deletion that might be taken back. Leaving the page, or
 // the screen going to the background on a phone, carries it out at once.
-// One delete can hold several tasks (deleting a selection): one message, one Undo for all of them.
+// One delete can hold several tasks (deleting a selection): one message, one Undo for all of them. Notes use it too
+// (kind 'notes'). Once it happens, what was deleted goes to the Trash for 30 days.
 const PendingDelete = {
   UNDO_MS: 6000,
-  groups: new Map(), // group id → { ids: Set of task ids, timer, toast }
+  groups: new Map(), // group id → { kind, ids: Set of record ids, timer, toast }
   has(id) { for (const g of this.groups.values()) if (g.ids.has(id)) return true; return false; },
-  start(tasks) {
-    const list = [].concat(tasks);
+  start(records, kind = 'tasks') {
+    const list = [].concat(records);
     if (!list.length) return;
     const gid = uid();
     const toastEl = document.createElement('div');
     toastEl.className = 'toast toast-undo';
-    const what = list.length === 1 ? `Deleted "${esc(fullTitle(list[0]))}"` : `Deleted ${list.length} tasks`;
+    const name = (r) => (kind === 'notes' ? r.title || 'Untitled note' : fullTitle(r));
+    const what = list.length === 1 ? `Deleted "${esc(name(list[0]))}"` : `Deleted ${plural(list.length, kind === 'notes' ? 'note' : 'task')}`;
     toastEl.innerHTML = `<span>${what}</span><button type="button" class="toast-btn" data-action="undo-delete" data-id="${esc(gid)}">Undo</button>`;
     $('#toasts').append(toastEl);
     const timer = setTimeout(() => this.commit(gid), this.UNDO_MS);
-    this.groups.set(gid, { ids: new Set(list.map((t) => t.id)), timer, toast: toastEl });
-    if (list.some((t) => t.id === state.openTask)) closeTaskDrawer();
+    this.groups.set(gid, { kind, ids: new Set(list.map((t) => t.id)), timer, toast: toastEl });
+    if (kind === 'tasks' && list.some((t) => t.id === state.openTask)) closeTaskDrawer();
+    if (kind === 'notes' && list.some((n) => n.id === state.activeNote)) state.activeNote = null;
     render();
   },
   commit(gid) {
@@ -736,9 +743,12 @@ const PendingDelete = {
     clearTimeout(g.timer);
     g.toast.remove();
     this.groups.delete(gid);
-    const before = DB.tasks.length;
-    DB.tasks = DB.tasks.filter((x) => !g.ids.has(x.id));
-    if (DB.tasks.length !== before) changed('tasks');
+    const gone = DB[g.kind].filter((x) => g.ids.has(x.id));
+    if (gone.length) {
+      DB[g.kind] = DB[g.kind].filter((x) => !g.ids.has(x.id));
+      Trash.add(g.kind, gone);
+      changed(g.kind, 'trash');
+    }
     render();
   },
   undo(gid) {
@@ -752,6 +762,36 @@ const PendingDelete = {
   flush() { for (const gid of [...this.groups.keys()]) this.commit(gid); },
 };
 const hiddenTask = (t) => PendingDelete.has(t.id);
+
+// The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
+// To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
+// remove them for good; anything older than 30 days goes by itself. The Trash is shared data (both devices see it).
+const Trash = {
+  KEEP_MS: 30 * 864e5,
+  add(kind, records, at = Date.now()) {
+    for (const r of records) DB.trash.push({ id: uid(), kind, item: JSON.parse(JSON.stringify(r)), at });
+  },
+  title(e) { return e.kind === 'notes' ? e.item.title || 'Untitled note' : fullTitle(normalizeTask(e.item)); },
+  restore(id) {
+    const e = DB.trash.find((x) => x.id === id);
+    if (!e) return null;
+    DB.trash = DB.trash.filter((x) => x.id !== id);
+    if (!DB[e.kind].some((x) => x.id === e.item.id)) {
+      const item = { ...e.item };
+      if (e.kind === 'tasks') { item.todo = null; DB.tasks.push(normalizeTask(item)); } else DB.notes.push(item);
+    }
+    changed(e.kind, 'trash');
+    return e;
+  },
+  forget(id) { DB.trash = DB.trash.filter((x) => x.id !== id); changed('trash'); },
+  empty() { DB.trash = []; changed('trash'); },
+  // Drop what's been in the Trash over 30 days (only where this device may change data).
+  prune(now = Date.now()) {
+    if (state.readOnly) return;
+    const keep = DB.trash.filter((e) => e.at > now - this.KEEP_MS);
+    if (keep.length !== DB.trash.length) { DB.trash = keep; changed('trash'); }
+  },
+};
 
 // Selecting several tasks on Tasks (laptop and phone): Select, then tap tasks; the bar marks them done, moves them to
 // a bucket or deletes them (one Undo). Nothing is stored: the selection lives only on this screen.
@@ -821,8 +861,9 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
+// trash:   {id, kind:'tasks'|'notes', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -866,7 +907,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -890,7 +931,7 @@ const DB = {
   },
   // Nothing of yours here (messages shown and deleted markers don't count, so they never make a fresh browser
   // look like it has data).
-  isEmpty() { return RECORD_KEYS.every((k) => k === 'notices' || this[k].length === 0); },
+  isEmpty() { return RECORD_KEYS.every((k) => k === 'notices' || k === 'trash' || this[k].length === 0); },
 };
 
 // ===================== When each record last changed =====================
@@ -991,6 +1032,8 @@ function renderUnread() {
   const n = state.readOnly ? 0 : Notices.unread();
   el.textContent = n > 99 ? '99+' : String(n);
   el.hidden = !n;
+  const tc = $('#trash-count'); // how many things are in the Trash
+  if (tc) { tc.textContent = String(DB.trash.length); tc.hidden = !DB.trash.length; }
 }
 
 // ===================== Screen state =====================
@@ -1589,7 +1632,7 @@ function render() {
   document.body.classList.toggle('phone', state.phone);
   $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings, trash: renderTrash };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -3365,6 +3408,32 @@ function renderCalendar() {
     </div>`;
 }
 
+// The Trash: deleted tasks and notes, newest first, each with when it goes for good.
+function renderTrash() {
+  const list = [...DB.trash].sort((a, b) => b.at - a.at);
+  const daysLeft = (e) => Math.max(1, Math.ceil((e.at + Trash.KEEP_MS - Date.now()) / 864e5));
+  const rows = list.map((e) => `
+    <li class="item trash-row">
+      <span class="tl-mark" title="${e.kind === 'notes' ? 'Note' : 'Task'}">${ic(e.kind === 'notes' ? 'notes' : 'list-check')}</span>
+      <div class="body">
+        <div class="title">${esc(Trash.title(e))}</div>
+        <div class="meta"><span>${e.kind === 'notes' ? 'Note' : 'Task'}, deleted ${esc(fmtStamp(new Date(e.at).toISOString()))}</span><span>Gone for good in ${plural(daysLeft(e), 'day')}</span></div>
+      </div>
+      <span class="row edit-only">
+        <button class="btn small" data-action="trash-restore" data-id="${esc(e.id)}">${ic('arrow-up-right', 'sm')}Restore</button>
+        <button class="icon-btn" data-action="trash-forget" data-id="${esc(e.id)}" title="Delete forever" aria-label="Delete forever">${ic('x')}</button>
+      </span>
+    </li>`).join('');
+  return `
+    <div class="page-head">
+      <div><h1>Trash</h1><p class="sub">${list.length ? `${plural(list.length, 'thing')} deleted in the last 30 days. Restore puts one back as it was.` : 'Deleted tasks and notes wait here for 30 days.'}</p></div>
+      ${list.length ? '<button class="btn danger edit-only" data-action="trash-empty">Empty Trash</button>' : ''}
+    </div>
+    <div class="card trash-card">
+      <ul class="list">${rows || '<li class="empty">The Trash is empty</li>'}</ul>
+    </div>`;
+}
+
 // Notifications: every message shown in the last 30 days, newest first, by day. One about a task opens it.
 function renderNotices() {
   const list = [...DB.notices].sort((a, b) => b.at - a.at);
@@ -3390,7 +3459,7 @@ function renderNotices() {
 
 function renderNotes() {
   const q = state.noteQuery.toLowerCase();
-  const notes = [...DB.notes]
+  const notes = DB.notes.filter((n) => !PendingDelete.has(n.id))
     .sort((a, b) => b.updated - a.updated)
     .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q));
   if (!DB.notes.some((n) => n.id === state.activeNote)) state.activeNote = notes[0]?.id || null;
@@ -3477,6 +3546,9 @@ function renderSettings() {
             <button class="btn" data-action="export">${ic('download', 'sm')}Export backup</button>
             <label class="btn">${ic('upload', 'sm')}Import backup<input type="file" accept="application/json" data-input="import" hidden></label>
           </div>
+          <h2>Trash</h2>
+          <p class="sub">Deleted tasks and notes wait ${DB.trash.length ? `here (${plural(DB.trash.length, 'thing')} now)` : 'in the Trash'} for 30 days, ready to restore.</p>
+          <div class="row"><button class="btn" data-view="trash">${ic('trash', 'sm')}Open Trash</button></div>
         </div>
       </div>
     </section>
@@ -4379,7 +4451,7 @@ function checkReminders() {
 
 // ===================== Events =====================
 const EDIT_ACTIONS = new Set([
-  'toggle-task', 'delete-task', 'undo-delete', 'select-mode', 'select-cancel', 'select-task', 'select-all', 'bulk-done', 'bulk-delete', 'clear-done', 'delete-event', 'new-note', 'delete-note',
+  'toggle-task', 'delete-task', 'undo-delete', 'select-mode', 'select-cancel', 'select-task', 'select-all', 'bulk-done', 'bulk-delete', 'trash-restore', 'trash-forget', 'trash-empty', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
@@ -4632,20 +4704,31 @@ document.addEventListener('click', (e) => {
       renderDrawer();
       break;
     }
-    case 'clear-done': DB.tasks = DB.tasks.filter((x) => !x.done); changed('tasks'); render(); break;
+    case 'clear-done': PendingDelete.start(DB.tasks.filter((x) => x.done && !hiddenTask(x))); break; // Undo, then the Trash
     case 'delete-event': DB.events = DB.events.filter((x) => x.id !== id); changed('events'); render(); break;
     case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
     case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
     case 'cal-today': state.calMonth = monthStart(new Date()); state.selectedDay = todayISO(); render(); break;
     case 'new-note': newNote(); break;
-    case 'delete-note':
-      ask('Delete this note?', { yes: 'Delete', danger: true }).then((yes) => {
-        if (!yes) return;
-        DB.notes = DB.notes.filter((n) => n.id !== state.activeNote);
-        state.activeNote = null;
-        changed('notes');
-        render();
-      });
+    case 'delete-note': {
+      const n = DB.notes.find((x) => x.id === state.activeNote);
+      if (n) PendingDelete.start(n, 'notes'); // Undo for a few seconds, then into the Trash
+      break;
+    }
+    case 'trash-restore': {
+      const e = Trash.restore(id);
+      if (e) toast(`Restored "${Trash.title(e)}" to ${e.kind === 'notes' ? 'Notes' : 'Tasks'}`);
+      render();
+      break;
+    }
+    case 'trash-forget': {
+      const e = DB.trash.find((x) => x.id === id);
+      if (!e) break;
+      ask(`Delete "${Trash.title(e)}" forever? It can't be brought back.`, { yes: 'Delete forever', danger: true }).then((yes) => { if (yes) { Trash.forget(id); render(); } });
+      break;
+    }
+    case 'trash-empty':
+      ask(`Empty the Trash? ${plural(DB.trash.length, 'thing')} will be deleted forever.`, { yes: 'Empty Trash', danger: true }).then((yes) => { if (yes) { Trash.empty(); render(); } });
       break;
     case 'df-create': DF.createNew().then(render); break;
     case 'df-open': DF.openExisting().then(render); break;
@@ -4990,6 +5073,7 @@ applyTheme();
 if (signInPopup) document.body.textContent = 'Signing in…';
 else {
   if (state.phone) RO.boot(); else DB.load();
+  Trash.prune(); // anything in the Trash over 30 days goes
   render();
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
