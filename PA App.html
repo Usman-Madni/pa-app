@@ -499,6 +499,15 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
 .status-dot.bad { background: var(--danger); }
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
 .toast { background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: var(--r-md); box-shadow: var(--shadow-float); max-width: 320px; animation: pop .2s ease-out; }
+/* Selecting several tasks */
+.select-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin: 0 0 12px; border-radius: var(--r-md); background: var(--accent-soft); }
+.select-count { margin-right: auto; }
+.select-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.select-move { padding: 4px 8px; font-size: var(--t-sm); }
+.select-row .body { cursor: pointer; }
+.select-row.selected { background: var(--accent-soft); border-radius: var(--r-sm); }
+.task-card.select-row.selected { border-color: var(--accent); }
+[data-action="select-mode"][aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .toast-undo { display: flex; align-items: center; gap: 14px; }
 .toast-undo > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast-btn { border: 0; background: transparent; color: var(--accent-soft); font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: var(--r-sm); text-decoration: underline; text-underline-offset: 3px; }
@@ -684,42 +693,58 @@ function toast(msg, task) {
 // A deleted task waits UNDO_MS with an Undo button before it's really deleted. Until then it's only hidden here:
 // nothing (the data file, the other device, To Do) sees a deletion that might be taken back. Leaving the page, or
 // the screen going to the background on a phone, carries it out at once.
+// One delete can hold several tasks (deleting a selection): one message, one Undo for all of them.
 const PendingDelete = {
   UNDO_MS: 6000,
-  ids: new Map(), // task id → { timer, toast }
-  has(id) { return this.ids.has(id); },
-  start(t) {
+  groups: new Map(), // group id → { ids: Set of task ids, timer, toast }
+  has(id) { for (const g of this.groups.values()) if (g.ids.has(id)) return true; return false; },
+  start(tasks) {
+    const list = [].concat(tasks);
+    if (!list.length) return;
+    const gid = uid();
     const toastEl = document.createElement('div');
     toastEl.className = 'toast toast-undo';
-    toastEl.innerHTML = `<span>Deleted "${esc(fullTitle(t))}"</span><button type="button" class="toast-btn" data-action="undo-delete" data-id="${esc(t.id)}">Undo</button>`;
+    const what = list.length === 1 ? `Deleted "${esc(fullTitle(list[0]))}"` : `Deleted ${list.length} tasks`;
+    toastEl.innerHTML = `<span>${what}</span><button type="button" class="toast-btn" data-action="undo-delete" data-id="${esc(gid)}">Undo</button>`;
     $('#toasts').append(toastEl);
-    const timer = setTimeout(() => this.commit(t.id), this.UNDO_MS);
-    this.ids.set(t.id, { timer, toast: toastEl });
-    if (state.openTask === t.id) closeTaskDrawer();
+    const timer = setTimeout(() => this.commit(gid), this.UNDO_MS);
+    this.groups.set(gid, { ids: new Set(list.map((t) => t.id)), timer, toast: toastEl });
+    if (list.some((t) => t.id === state.openTask)) closeTaskDrawer();
     render();
   },
-  commit(id) {
-    const p = this.ids.get(id);
-    if (!p) return;
-    clearTimeout(p.timer);
-    p.toast.remove();
-    this.ids.delete(id);
+  commit(gid) {
+    const g = this.groups.get(gid);
+    if (!g) return;
+    clearTimeout(g.timer);
+    g.toast.remove();
+    this.groups.delete(gid);
     const before = DB.tasks.length;
-    DB.tasks = DB.tasks.filter((x) => x.id !== id);
+    DB.tasks = DB.tasks.filter((x) => !g.ids.has(x.id));
     if (DB.tasks.length !== before) changed('tasks');
     render();
   },
-  undo(id) {
-    const p = this.ids.get(id);
-    if (!p) return;
-    clearTimeout(p.timer);
-    p.toast.remove();
-    this.ids.delete(id);
+  undo(gid) {
+    const g = this.groups.get(gid);
+    if (!g) return;
+    clearTimeout(g.timer);
+    g.toast.remove();
+    this.groups.delete(gid);
     render();
   },
-  flush() { for (const id of [...this.ids.keys()]) this.commit(id); },
+  flush() { for (const gid of [...this.groups.keys()]) this.commit(gid); },
 };
 const hiddenTask = (t) => PendingDelete.has(t.id);
+
+// Selecting several tasks on Tasks (laptop and phone): Select, then tap tasks; the bar marks them done, moves them to
+// a bucket or deletes them (one Undo). Nothing is stored: the selection lives only on this screen.
+const Selection = {
+  ids: new Set(),
+  on() { return state.selecting && state.view === 'tasks' && !state.readOnly; },
+  start() { state.selecting = true; this.ids.clear(); render(); },
+  stop() { state.selecting = false; this.ids.clear(); render(); },
+  toggle(id) { if (this.ids.has(id)) this.ids.delete(id); else this.ids.add(id); render(); },
+  tasks() { return DB.tasks.filter((t) => this.ids.has(t.id) && !hiddenTask(t)); },
+};
 
 // ===================== Questions =====================
 // The app's own question box, in its style, instead of the browser's grey one. ask() answers true/false;
@@ -980,6 +1005,7 @@ const state = {
   remEdit: null,           // id of the reminder being changed in that form (null = adding a new one)
   donePrompt: null,        // id of the task whose "Done on…" pop-up is open
   labelManage: false,      // the panel's label list is open for renaming / recolouring / deleting
+  selecting: false,        // Tasks is in "select several" mode (Selection)
 };
 
 // ===================== Data file (auto-save) =====================
@@ -1768,8 +1794,15 @@ function taskSummary(t, { noDue = false } = {}) {
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
 }
 
+// While selecting, a row's box and body select it (instead of ticking or opening it).
+const selectRow = (t, inner) => `
+    <li class="item select-row ${Selection.ids.has(t.id) ? 'selected' : ''} ${t.done ? 'done' : ''}">
+      <input type="checkbox" class="check" data-action="select-task" data-id="${esc(t.id)}" ${Selection.ids.has(t.id) ? 'checked' : ''} aria-label="Select ${esc(fullTitle(t))}">
+      <div class="body clickable" data-action="select-task" data-id="${esc(t.id)}">${inner}</div>
+    </li>`;
 function taskItem(t) {
   if (hiddenTask(t)) return '';
+  if (Selection.on()) return selectRow(t, taskSummary(t));
   return `
     <li class="item ${t.done ? 'done' : ''}">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
@@ -2168,19 +2201,41 @@ function renderTasks() {
         ${opt('', 'All labels', state.taskLabel)}${DB.labels.map((l) => opt(l.id, l.name, state.taskLabel)).join('')}
       </select>` : ''}
       <span style="flex:1"></span>
-      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">+ New task</button>
+      <button class="btn edit-only" data-action="select-mode" aria-pressed="${Selection.on()}">${ic('checklist', 'sm')}Select</button>
+      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
       <div class="tabs">
         <button class="tab ${layout === 'list' ? 'active' : ''}" data-action="layout" data-layout="list">${ic('list', 'sm')}List</button>
         <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">${ic('layout-kanban', 'sm')}Board</button>
       </div>
     </div>
+    ${Selection.on() ? selectBar(list) : ''}
     </div>
-    ${quickAddBar('tasks')}
+    ${Selection.on() ? '' : quickAddBar('tasks')}
     ${layout === 'board' ? renderBoard(list) : `<div class="card">
       ${groups ? groups.map((g) => `<h3 class="group-h">${esc(g.label)} <span>${g.items.length}</span></h3><ul class="list">${listHtml(g.items)}</ul>`).join('') || '<p class="empty">No tasks here</p>'
         : `<ul class="list">${listHtml(list) || '<li class="empty">No tasks here</li>'}</ul>`}
       ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
     </div>`}`;
+}
+
+// The bar shown while selecting: how many, and what to do with them.
+function selectBar(list) {
+  const n = Selection.tasks().length;
+  const opt = (v, label) => `<option value="${esc(v)}">${esc(label)}</option>`;
+  const allOn = list.length && list.every((t) => Selection.ids.has(t.id));
+  return `
+    <div class="select-bar" role="toolbar" aria-label="Selected tasks">
+      <b class="select-count" aria-live="polite">${n ? `${plural(n, 'task')} selected` : 'Tap tasks to select them'}</b>
+      <button class="btn small" data-action="select-all">${allOn ? 'Select none' : 'Select all'}</button>
+      <span class="select-acts">
+        <button class="btn small" data-action="bulk-done" ${n ? '' : 'disabled'}>${ic('check', 'sm')}Mark done</button>
+        <select class="input select-move" data-input="bulk-bucket" aria-label="Move to a bucket" ${n ? '' : 'disabled'}>
+          ${opt('', 'Move to…')}${opt('-', 'No bucket')}${sortedBuckets().map((b) => opt(b.id, b.name)).join('')}
+        </select>
+        <button class="btn small danger" data-action="bulk-delete" ${n ? '' : 'disabled'}>${ic('trash', 'sm')}Delete</button>
+      </span>
+      <button class="btn small" data-action="select-cancel">Cancel</button>
+    </div>`;
 }
 
 // One column per bucket (plus "No bucket" when it has tasks). Cards drag between columns: with the mouse, or by
@@ -2216,6 +2271,13 @@ function renderBoard(list) {
 
 function taskCard(t) {
   if (hiddenTask(t)) return '';
+  if (Selection.on()) {
+    return `
+    <div class="task-card select-row ${Selection.ids.has(t.id) ? 'selected' : ''} ${t.done ? 'done' : ''}" data-card="${esc(t.id)}">
+      <input type="checkbox" class="check" data-action="select-task" data-id="${esc(t.id)}" ${Selection.ids.has(t.id) ? 'checked' : ''} aria-label="Select ${esc(fullTitle(t))}">
+      <div class="body clickable" data-action="select-task" data-id="${esc(t.id)}">${taskSummary(t)}</div>
+    </div>`;
+  }
   return `
     <div class="task-card ${t.done ? 'done' : ''}" draggable="${state.readOnly ? 'false' : 'true'}" data-card="${esc(t.id)}">
       <input type="checkbox" class="check" data-action="toggle-task" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${state.readOnly ? 'disabled' : ''} aria-label="Mark done">
@@ -4154,6 +4216,7 @@ if (state.phone) Object.assign(TD, { AUTH_KEY: OD.AUTH_KEY, SCOPE: OD.SCOPE });
 
 // ===================== Actions =====================
 function setView(view) {
+  if (view !== 'tasks') { state.selecting = false; Selection.ids.clear(); }
   state.view = view;
   device.set('view', view);
   if (view === 'notices') Notices.markRead();
@@ -4279,7 +4342,7 @@ function checkReminders() {
 
 // ===================== Events =====================
 const EDIT_ACTIONS = new Set([
-  'toggle-task', 'delete-task', 'undo-delete', 'clear-done', 'delete-event', 'new-note', 'delete-note',
+  'toggle-task', 'delete-task', 'undo-delete', 'select-mode', 'select-cancel', 'select-task', 'select-all', 'bulk-done', 'bulk-delete', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
@@ -4378,6 +4441,36 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'undo-delete': PendingDelete.undo(id); break;
+    case 'select-mode': if (Selection.on()) Selection.stop(); else Selection.start(); break;
+    case 'select-cancel': Selection.stop(); break;
+    case 'select-task': e.preventDefault(); Selection.toggle(id); break;
+    case 'select-all': {
+      const shown = [...document.querySelectorAll('#main [data-action="select-task"].check')].map((x) => x.dataset.id);
+      const all = shown.length && shown.every((x) => Selection.ids.has(x));
+      shown.forEach((x) => (all ? Selection.ids.delete(x) : Selection.ids.add(x)));
+      render();
+      break;
+    }
+    case 'bulk-done': {
+      const open = Selection.tasks().filter((t) => !t.done);
+      let nexts = 0;
+      const now = new Date();
+      for (const t of open) if (Series.tick(t, now, false).next) nexts++;
+      if (open.length) changed('tasks');
+      Selection.stop();
+      toast(open.length ? `Marked ${plural(open.length, 'task')} done${nexts ? `, ${nexts} next ${nexts === 1 ? 'copy' : 'copies'} made` : ''}` : 'Those were already done');
+      break;
+    }
+    case 'bulk-delete': {
+      const list = Selection.tasks();
+      if (!list.length) break;
+      const rich = list.filter((t) => t.notes.trim() || t.checklist.length || t.attachments.length).length;
+      const go = () => { Selection.stop(); PendingDelete.start(list); };
+      if (!rich) { go(); break; }
+      ask(`Delete ${plural(list.length, 'task')}? ${rich === 1 ? 'One has' : `${rich} have`} notes, steps or files, and they go too.`, { yes: 'Delete', danger: true })
+        .then((yes) => { if (yes) go(); });
+      break;
+    }
     case 'open-task': openTaskDrawer(id); break;
     case 'clear-notices':
       ask('Clear all notifications? This can\'t be undone.', { yes: 'Clear all', danger: true }).then((yes) => { if (yes) { Notices.clear(); render(); } });
@@ -4611,6 +4704,7 @@ document.addEventListener('keydown', (e) => {
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
+  if (Selection.on() && !state.openTask) { Selection.stop(); return; }
   if (state.openTask) closeTaskDrawer();
 });
 // Keyboard shortcuts, for when you're not typing in a box: 1 to 6 switch screens, N puts the cursor in quick add
@@ -4632,6 +4726,17 @@ function shortcut(e) {
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });
+// Selecting: "Move to…" puts every selected task in that bucket ('-' = no bucket).
+document.addEventListener('change', (e) => {
+  if (e.target.dataset?.input !== 'bulk-bucket' || state.readOnly || !e.target.value) return;
+  const to = e.target.value === '-' ? '' : e.target.value;
+  const list = Selection.tasks();
+  list.forEach((t) => { t.bucket = to; });
+  if (list.length) changed('tasks');
+  const name = to ? (DB.buckets.find((b) => b.id === to) || {}).name : 'no bucket';
+  Selection.stop();
+  toast(`Moved ${plural(list.length, 'task')} to ${name}`);
+});
 // Quick add: preview what was understood as you type or pick.
 document.addEventListener('input', (e) => {
   if (e.target.matches?.('[data-qa]')) updateQuickPreview(e.target.form);
@@ -4691,7 +4796,7 @@ const TouchDrag = {
   dragging: false,
   start(e) {
     this.cancel();
-    if (state.readOnly || e.touches.length !== 1) return;
+    if (state.readOnly || Selection.on() || e.touches.length !== 1) return;
     const card = e.target.closest?.('.board [data-card]');
     if (!card || e.target.closest('input, button, select, a')) return;
     const p = e.touches[0];
