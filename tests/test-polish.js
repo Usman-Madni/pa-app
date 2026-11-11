@@ -39,6 +39,14 @@ const { loadApp, check, done } = require('./helpers');
   void t;
   app.close();
 
+  // --- The phone's banner: a few words on a phone-sized screen, the full text on wider ones and in Settings ---
+  const ph = loadApp({ fsa: false });
+  const banner = ph.doc.querySelector('#banner .banner');
+  check(banner.classList.contains('has-short') && banner.querySelector('.ro-short').textContent === 'Sign in to edit.' && /Open your data file/.test(banner.querySelector('.ro-more').textContent), 'the phone banner has short words and the full text');
+  check(/max-width:\s*680px[\s\S]*\.banner\.has-short \.ro-more\s*\{\s*display:\s*none/.test(css) && /\.ro-short\s*\{\s*display:\s*none/.test(css), 'a phone-sized screen shows only the short words; wider screens the full text');
+  check(!banner.querySelector('label.btn.primary'), 'one filled button in the banner, not two');
+  ph.close();
+
   // --- Read-only phone: a task's time is still shown ---
   check(/body\.phone:not\(\.readonly\) \.p-input\[type="time"\]:disabled\s*\{\s*display:\s*none/.test(css) && !/\nbody\.phone \.p-input\[type="time"\]:disabled\s*\{\s*display:\s*none/.test(css), 'read-only phones keep a set time on show');
   done();

@@ -490,6 +490,7 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
 .banner { padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .banner > span:first-child { display: flex; align-items: flex-start; gap: 8px; min-width: 0; flex: 1 1 260px; }
 .banner > span:first-child > .i { margin-top: 2px; }
+.ro-short { display: none; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
 .banner.error { background: color-mix(in srgb, var(--danger) 12%, var(--panel)); }
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
@@ -526,6 +527,9 @@ body.phone .p-input[type="time"] { flex: 1 1 120px !important; }
   .main { padding: 20px 16px 90px; }
   /* The phone's status banner is one compact line, so today's tasks are on the first screen */
   .banner { padding: 8px 12px; font-size: var(--t-sm); gap: 8px; margin-bottom: 12px; }
+  .banner.has-short .ro-more { display: none; }
+  .banner.has-short .ro-short { display: inline; }
+  .banner.has-short > span:first-child { flex: 1 1 130px; }
   .banner .btn.small { padding: 4px 9px; }
   .page-head { margin-bottom: 16px; }
   .page-head h1 { font-size: var(--t-xl); }
@@ -1588,25 +1592,29 @@ function statusBadge() {
 function roState(small = '') {
   const i = RO.info;
   const shown = i ? `Showing <b>${esc(i.fileName)}</b>${i.from ? ` from ${esc(i.from)}` : ''}, saved ${esc(fmtStamp(i.savedAt))} on ${esc(i.savedFrom || '?')}.` : '';
-  const pick = `<label class="btn ${small} ${OD.connected() ? '' : 'primary'}">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>`;
+  const pick = `<label class="btn ${small}">${i ? 'Open newer file' : 'Open data file'}<input type="file" accept=".json,application/json" data-input="ro-open" hidden></label>`;
+  // short: the few words a phone's banner shows (the full text is in Settings › Data file on OneDrive)
   if (!OD.connected()) {
-    return { text: shown || 'Open your data file to see your tasks, notes and events, or sign in to OneDrive to always see the latest.', buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in to OneDrive</button>${pick}` };
+    return { text: shown || 'Open your data file to see your tasks, notes and events, or sign in to OneDrive to always see the latest.', short: 'Sign in to edit.', buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in to OneDrive</button>${pick}` };
   }
-  if (OD.needsSignIn()) return { text: `${shown} Sign in to OneDrive again to see the latest.`, buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in again</button>` };
+  if (OD.needsSignIn()) return { text: `${shown} Sign in to OneDrive again to see the latest.`, short: 'Sign in again to see the latest.', buttons: `<button class="btn ${small} primary" data-action="od-connect">Sign in again</button>` };
   const where = `OneDrive › Apps › ${esc(OD.folder || 'PA App')}`;
   if (OD.empty) return { text: `Signed in. Now move your data file into <b>${where} › ${OD.DATA_DIR}</b> on the laptop (see the Guide), then tap Refresh.`, buttons: `<button class="btn ${small} primary" data-action="od-refresh">Refresh</button>` };
-  const note = OD.offline ? ` <b>Offline</b> — showing the last copy${device.get('odUnsaved', false) ? '; your last change saves when you\'re back online' : ''}.`
+  const note = OD.offline ? ` <b>Offline</b>: showing the last copy${device.get('odUnsaved', false) ? '; your last change saves when you\'re back online' : ''}.`
     : OD.error ? ` <span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
+  const shortNote = OD.offline ? 'Offline: the last copy.' : OD.error ? `<span style="color:var(--danger)">${esc(OD.error)}</span>` : '';
   const refresh = `<button class="btn ${small} primary" data-action="od-refresh" ${OD.reading ? 'disabled' : ''}>${OD.reading ? 'Reading…' : 'Refresh'}</button>`;
-  if (!state.readOnly) return { text: `${shown}${note}`, buttons: refresh, editing: true };
-  return { text: `${shown || 'Reading from OneDrive…'}${note}`, buttons: refresh };
+  if (!state.readOnly) return { text: `${shown}${note}`, short: shortNote || 'Saves to OneDrive.', buttons: refresh, editing: true };
+  return { text: `${shown || 'Reading from OneDrive…'}${note}`, short: shortNote || (OD.reading ? 'Reading…' : 'Showing the last copy.'), buttons: refresh };
 }
 
 function statusBanner() {
   if (state.phone) {
     const s = roState('small');
-    if (s.editing) return `<div class="banner"><span>${ic('pencil')}<span><b>Editing.</b> Every change saves to OneDrive. ${s.text}</span></span><span class="row">${s.buttons}</span></div>`;
-    return `<div class="banner warn"><span>${ic('eye')}<span><b>Read-only view.</b> ${s.text}</span></span><span class="row">${s.buttons}</span></div>`;
+    // On a phone-sized screen only the short words show (.ro-short); wider screens show the full text (.ro-more).
+    const words = (full) => `<span class="ro-more">${full}</span>${s.short ? `<span class="ro-short">${s.short}</span>` : ''}`;
+    if (s.editing) return `<div class="banner ${s.short ? 'has-short' : ''}"><span>${ic('pencil')}<span><b>Editing.</b> ${words(`Every change saves to OneDrive. ${s.text}`)}</span></span><span class="row">${s.buttons}</span></div>`;
+    return `<div class="banner warn ${s.short ? 'has-short' : ''}"><span>${ic('eye')}<span><b>Read-only view.</b> ${words(s.text)}</span></span><span class="row">${s.buttons}</span></div>`;
   }
   switch (DF.status) {
     case 'reconnect':
