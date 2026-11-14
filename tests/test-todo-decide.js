@@ -86,6 +86,24 @@ const { loadApp, tick, check, done } = require('./helpers');
   // --- Two devices adopt the same new To Do task: the same task here, so merging keeps one ---
   check(TD.adoptId({ id: 'AAMkADQ1=' }) === TD.adoptId({ id: 'AAMkADQ1=' }) && TD.adoptId({ id: 'AAMkADQ1=' }) !== TD.adoptId({ id: 'AAMkADQ2=' }), 'a task added in To Do gets an id made from its To Do id');
 
+  // --- People: only tasks you're on go to your To Do ---
+  PA.DB.people.push({ id: 'p2', name: 'Sam', zakat: null });
+  const mineOld = task('Mine from before People'); // no people = yours
+  const theirs = linked(task('Their errand', { people: ['p2'] }), 'T');
+  const lostMark = linked(task('Theirs, mark lost', { people: ['p2'] }), 'L');
+  const shared = task('Shared errand', { people: ['p2', 'me'] });
+  const neverSent = task('Theirs, never sent', { people: ['p2'] });
+  const all = [mineOld, theirs, lostMark, shared, neverSent];
+  const beforeAll = JSON.stringify(all);
+  out = TD.decideOut(all, remoteOf(copyOf(theirs, 'T'), copyOf(lostMark, 'L', { linkedResources: [] })));
+  const sentTasks = out.send.map((s) => s.t);
+  check(sentTasks.includes(mineOld) && sentTasks.includes(shared), 'a task from before People, and one you share, go to To Do');
+  check(!sentTasks.includes(theirs) && !sentTasks.includes(neverSent) && !sentTasks.includes(lostMark), 'someone else\'s task is never sent');
+  check(out.remove.some((x) => x.id === 'T') && out.remove.some((x) => x.id === 'L'), 'a task given to someone else has its To Do copy removed (even one that lost its mark)');
+  check(out.unlink.includes(theirs) && out.unlink.includes(lostMark) && !out.unlink.includes(neverSent), 'and its link is to be cleared, so being given back sends a fresh copy');
+  check(JSON.stringify(all) === beforeAll, 'deciding still changes nothing');
+  PA.DB.people.length = 0;
+
   check(app.errors.length === 0, 'no script errors' + (app.errors.length ? ': ' + app.errors[0] : ''));
   done();
 })();

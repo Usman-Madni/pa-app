@@ -46,6 +46,23 @@ _Avoid_: alert, log entry
 A change to a task that brings follow-up changes with it: a new due date (reminders count from it again, the anchor moves), a rename (every copy of the series gets the title) or a new repeat (a date in the title becomes the moving part). The same task edit behaves the same wherever it's made: in the task panel, in quick add or on the phone through To Do.
 _Avoid_: field update
 
+## People
+
+**Person**:
+Someone a task, note or event belongs to: you, or someone you added (a family member). Each person can have a zakat day.
+_Avoid_: user, account (until people sign in themselves), owner
+
+**You**:
+The person this app belongs to, always there and never removed. Anything with no people is yours. Only tasks you're on remind you and go to your To Do.
+_Avoid_: me (in what the app says), self
+
+**Showing**:
+Whose things the screens show on this device: Everyone or one person. It filters what you see; it never changes who anything belongs to.
+_Avoid_: profile, switch user, filter (in conversation)
+
+**Zakat day**:
+A person's yearly zakat date, kept as an Islamic day and month (for example 15th Sha'ban).
+
 ## Storage and devices
 
 **Data file**:

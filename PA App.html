@@ -105,6 +105,21 @@ button:disabled { cursor: not-allowed; }
 .lbl-short { display: none; } /* the phone's bottom bar uses the short label */
 .nav-count.muted { background: var(--panel-2); color: var(--muted); }
 .trash-nav { margin-bottom: 4px; }
+/* People: who the screens show (sidebar; a phone-sized screen has it above the page), and who a task or note is for */
+.person-pick { display: flex; align-items: center; gap: 8px; margin: -8px 0 12px; padding: 0 10px; color: var(--muted); }
+.person-pick select { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); color: var(--text); padding: 5px 6px; font-size: var(--t-sm); }
+.who-bar { display: none; }
+.avatar { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 600; flex: none; line-height: 1; }
+.person-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 2px; border-radius: 999px; background: var(--panel); font-size: var(--t-sm); }
+.person-chip .chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; display: inline-grid; place-items: center; }
+.person-chip .chip-x:hover { color: var(--danger); }
+.who-badges { display: inline-flex; gap: 2px; vertical-align: middle; }
+.who-badges .avatar { width: 18px; height: 18px; font-size: 9px; }
+.note-people { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.person-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.person-row:first-of-type { border-top: 0; }
+.person-row .grow { flex: 1 1 120px; min-width: 0; }
+.person-row select { width: auto; }
 .trash-row .row { flex-wrap: nowrap; }
 .notice-list { padding: 6px 0; }
 .notice-day { padding: 14px 16px 4px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
@@ -540,7 +555,9 @@ body.phone .p-when-time { flex: 1 1 auto; }
     flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--border);
   }
-  .brand, .side-foot { display: none; }
+  .brand, .side-foot, .person-pick { display: none; }
+  .who-bar:not(:empty) { display: block; margin-bottom: 12px; }
+  .who-bar .person-pick { display: flex; margin: 0; padding: 0; }
   .nav-btn { flex-direction: column; gap: 2px; font-size: var(--t-xs); padding: 6px 2px; flex: 1; min-width: 0; align-items: center; }
   .nav-btn > span:not(.ico):not(.nav-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav-btn .nav-count { position: absolute; margin: 0 0 0 22px; top: 4px; }
@@ -597,6 +614,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <div class="app">
   <nav class="sidebar">
     <div class="brand"><span class="logo" aria-hidden="true">B</span><span>Butler</span></div>
+    <div id="person-pick"></div>
     <button class="nav-btn" data-view="today" title="My Day (1)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span>My Day</span></button>
     <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
@@ -610,7 +628,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
       <a class="theme-btn" href="PA App Guide.html" target="_blank" rel="noopener"><svg class="i sm" aria-hidden="true"><use href="#i-help-circle"/></svg>Guide</a>
     </div>
   </nav>
-  <main class="main"><div id="banner"></div><div id="main"></div></main>
+  <main class="main"><div id="banner"></div><div id="who-bar" class="who-bar"></div><div id="main"></div></main>
 </div>
 <div class="drawer-backdrop" data-action="close-task"></div>
 <aside id="drawer" class="drawer" aria-label="Task details"></aside>
@@ -658,6 +676,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-tag" viewBox="0 0 24 24"><path d="M7.5 7.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3z"/></symbol>
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 9l5 -5l5 5"/><path d="M12 4l0 12"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
 
@@ -767,7 +786,83 @@ const PendingDelete = {
   },
   flush() { for (const gid of [...this.groups.keys()]) this.commit(gid); },
 };
-const hiddenTask = (t) => PendingDelete.has(t.id);
+// Not on the screens: waiting for its Undo to run out, or someone else's while this device shows one person.
+const hiddenTask = (t) => PendingDelete.has(t.id) || !People.shows(t);
+
+// ===================== People =====================
+// Whose a task, note or event is: `people`, a list of person ids. You are always 'me' (a fixed id, so the laptop and
+// the phone can never each make their own you); a record with no people is yours, so records from before People need
+// no change. DB.people holds everyone else and, once you've named yourself, you: {id, name, zakat}, zakat being the
+// person's zakat day as an Islamic date {day 1-30, month 1-12} or null. Which person this device shows ('all' or an
+// id, dev_person) is per device. Only tasks that include you go to To Do and remind here.
+const ME = 'me';
+const HIJRI_MONTHS = ['Muharram', 'Safar', "Rabi' al-awwal", "Rabi' al-thani", 'Jumada al-ula', 'Jumada al-akhirah', 'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', "Dhu al-Qa'dah", 'Dhu al-Hijjah'];
+const People = {
+  list() {
+    const me = DB.people.find((p) => p.id === ME) || { id: ME, name: 'Me', zakat: null };
+    return [me, ...DB.people.filter((p) => p.id !== ME)];
+  },
+  get(id) { return this.list().find((p) => p.id === id) || null; },
+  name(id) { return this.get(id)?.name || 'Unnamed'; },
+  initials(id) { return this.name(id).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'; },
+  // Who a record belongs to (people no longer on the list are left out; nobody left = you).
+  of(r) {
+    const ids = Array.isArray(r.people) ? r.people.filter((id) => id === ME || DB.people.some((p) => p.id === id)) : [];
+    return ids.length ? [...new Set(ids)] : [ME];
+  },
+  mine(r) { return this.of(r).includes(ME); },
+  several() { return DB.people.some((p) => p.id !== ME); },
+  viewing() { const v = device.get('person', 'all'); return v !== 'all' && this.get(v) ? v : 'all'; },
+  view(v) { device.set('person', v); },
+  shows(r) { const v = this.viewing(); return v === 'all' || this.of(r).includes(v); },
+  // A new record belongs to the person shown (you when showing everyone), so it doesn't vanish from view.
+  forNew() { const v = this.viewing(); return [v === 'all' ? ME : v]; },
+  zakatText(p) { return p.zakat ? `${ordinal(p.zakat.day)} ${HIJRI_MONTHS[p.zakat.month - 1]}` : ''; },
+  // The stored record for a person (you get one the first time you're named or given a zakat day).
+  stored(id) {
+    if (id === ME && !DB.people.some((p) => p.id === ME)) DB.people.unshift({ id: ME, name: 'Me', zakat: null });
+    return DB.people.find((p) => p.id === id) || null;
+  },
+  add(name) {
+    const p = { id: uid(), name: name.trim(), zakat: null };
+    DB.people.push(p);
+    changed('people');
+    return p;
+  },
+  rename(id, name) {
+    const p = this.stored(id);
+    if (!p || !name.trim()) return false;
+    p.name = name.trim();
+    changed('people');
+    return true;
+  },
+  setZakat(id, day, month) {
+    const p = this.stored(id);
+    if (!p) return;
+    p.zakat = day && month ? { day: Number(day), month: Number(month) } : null;
+    changed('people');
+  },
+  // What would be left with nobody if this person went (those records become yours).
+  onlyTheirs(id) { return ['tasks', 'notes', 'events'].reduce((n, k) => n + DB[k].filter((r) => { const o = this.of(r); return o.length === 1 && o[0] === id; }).length, 0); },
+  remove(id) {
+    if (id === ME) return;
+    for (const k of ['tasks', 'notes', 'events']) {
+      for (const r of DB[k]) if (Array.isArray(r.people) && r.people.includes(id)) r.people = r.people.filter((x) => x !== id);
+    }
+    DB.people = DB.people.filter((p) => p.id !== id);
+    if (device.get('person', 'all') === id) this.view('all');
+    changed('people', 'tasks', 'notes', 'events');
+  },
+  // Put someone on a record or take them off (never the last one: a record always belongs to someone).
+  toggle(r, id) {
+    const now = this.of(r);
+    if (now.includes(id)) {
+      if (now.length === 1) return false;
+      r.people = now.filter((x) => x !== id);
+    } else r.people = [...now, id]; // a new list, never one shared with a copy
+    return true;
+  },
+};
 
 // The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
 // To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
@@ -868,8 +963,10 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
 // trash:   {id, kind:'tasks'|'notes', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
+// people:  {id, name, zakat: {day, month} | null} — whose tasks, notes and events they are (see People)
+// Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -913,7 +1010,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -1619,10 +1716,10 @@ const chipPrefix = (it) => (it.kind === 'repeat' ? (it.est ? `${ic('repeat')}≈
 
 // previews: optional {date: [upcoming repeats]} from repeatPreviews()
 function itemsForDay(key, previews) {
-  const events = DB.events.filter((e) => e.date === key).map((e) => ({ ...e, kind: 'event' }));
+  const events = DB.events.filter((e) => e.date === key && People.shows(e)).map((e) => ({ ...e, kind: 'event' }));
   const tasks = DB.tasks.filter((t) => taskDate(t) === key && !hiddenTask(t)).map((t) => ({ id: t.id, title: fullTitle(t), time: taskTime(t), done: t.done, kind: 'task', status: taskStatus(t), late: lateDays(t) > 0, lateBy: lateDays(t), doneDay: t.done && t.completedAt ? toISO(new Date(t.completedAt)) : '' }));
   // A task done late also shows (faded, ✓) on the day it was actually done.
-  const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key).map((t) => ({
+  const doneHere = DB.tasks.filter((t) => lateDays(t) >= 1 && toISO(new Date(t.completedAt)) === key && !hiddenTask(t)).map((t) => ({
     id: t.id, title: fullTitle(t), time: t.completedAllDay ? '' : fmtClock(t.completedAt), done: true, kind: 'doneon', dueDay: taskDate(t), lateBy: lateText(t),
   }));
   const repeats = (previews && previews[key]) || [];
@@ -1638,6 +1735,7 @@ function render() {
   document.body.classList.toggle('phone', state.phone);
   $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
+  renderPersonPick();
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings, trash: renderTrash };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
@@ -1858,7 +1956,7 @@ function taskSummary(t, { noDue = false } = {}) {
   if (bucket && !onBoard) meta.push(`<span>${ic('layout-kanban', 'sm')}${esc(bucket.name)}</span>`);
   const labels = t.labels.map((id) => DB.labels.find((l) => l.id === id)).filter(Boolean);
   return `
-    <div class="title"><span class="tt">${esc(fullTitle(t)) || '<span class="meta">New task…</span>'}</span> ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
+    <div class="title"><span class="tt">${esc(fullTitle(t)) || '<span class="meta">New task…</span>'}</span> ${whoBadges(t)} ${t.priority !== 'low' ? `<span class="pill ${t.priority}">${t.priority === 'high' ? 'High' : 'Medium'}</span>` : ''} ${labels.map(labelPill).join(' ')}</div>
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}`;
 }
 
@@ -2142,7 +2240,8 @@ function todayPlan(now = new Date()) {
   const late = sortTasks(open.filter((t) => isOverdue(t) && taskDate(t) < tk));
   const lateIds = new Set(late.map((t) => t.id));
   const today = all.filter((t) => !lateIds.has(t.id) && ((!t.done && taskDate(t) === tk) || inMyDay(t)));
-  const events = DB.events.filter((e) => e.date === tk);
+  const shownEvents = DB.events.filter((e) => People.shows(e));
+  const events = shownEvents.filter((e) => e.date === tk);
   const timed = [
     ...today.filter((t) => !t.done && taskTime(t) && taskDate(t) === tk).map((t) => ({ kind: 'task', time: taskTime(t), t })),
     ...events.filter((e) => e.time).map((e) => ({ kind: 'event', time: e.time, e })),
@@ -2157,7 +2256,7 @@ function todayPlan(now = new Date()) {
   const week = toISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
   const coming = [
     ...open.filter((t) => taskDate(t) > tk && taskDate(t) <= week).map((t) => ({ kind: 'task', date: taskDate(t), time: taskTime(t), t })),
-    ...DB.events.filter((e) => e.date > tk && e.date <= week).map((e) => ({ kind: 'event', date: e.date, time: e.time || '', e })),
+    ...shownEvents.filter((e) => e.date > tk && e.date <= week).map((e) => ({ kind: 'event', date: e.date, time: e.time || '', e })),
   ].sort((a, b) => a.date.localeCompare(b.date) || (a.time || '99').localeCompare(b.time || '99')).slice(0, 6);
   return { late, timed, anyTime, doneToday, noDate, coming, taskCount: timed.filter((x) => x.kind === 'task').length + anyTime.filter((x) => x.kind === 'task').length, eventCount: events.length };
 }
@@ -2255,7 +2354,7 @@ function renderTasks() {
   return `
     <div class="sticky-top">
     <div class="page-head">
-      <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done).length} open</p></div>
+      <div><h1>Tasks</h1><p class="sub">${DB.tasks.filter((t) => !t.done && !hiddenTask(t)).length} open</p></div>
       <div class="tabs">${Object.entries(TASK_TABS).map(([k, v]) => tab(k, v.label)).join('')}</div>
     </div>
     <div class="row toolbar">
@@ -2428,6 +2527,61 @@ async function deleteLabel(id) {
   changed('labels', 'tasks');
 }
 
+// ----- People on screen -----
+const avatar = (id) => `<span class="avatar" aria-hidden="true">${esc(People.initials(id))}</span>`;
+// Whose things the screens show: Everyone or one person. Only once there's someone besides you.
+function personPicker() {
+  if (!People.several()) return '';
+  const v = People.viewing();
+  const o = (val, label) => `<option value="${esc(val)}" ${v === val ? 'selected' : ''}>${esc(label)}</option>`;
+  return `<label class="person-pick" title="Whose tasks, notes and events to show">${ic('users', 'sm')}<select data-input="person-view" aria-label="Show whose things">${o('all', 'Everyone')}${People.list().map((p) => o(p.id, p.id === ME ? `${p.name} (you)` : p.name)).join('')}</select></label>`;
+}
+function renderPersonPick() {
+  const html = personPicker();
+  $('#person-pick').innerHTML = html;
+  $('#who-bar').innerHTML = html;
+}
+// Small initials beside a task or note that isn't only the person being shown.
+function whoBadges(r) {
+  if (!People.several()) return '';
+  const on = People.of(r);
+  const v = People.viewing();
+  if (on.length === 1 && on[0] === (v === 'all' ? ME : v)) return '';
+  return `<span class="who-badges" title="${esc(on.map((id) => People.name(id)).join(', '))}">${on.map(avatar).join('')}</span>`;
+}
+// Who a task or note is for, with + Add and a × on each (never on the last one). kind: 'tasks' | 'notes'.
+function peopleChips(r, kind) {
+  const on = People.of(r);
+  const off = People.list().filter((p) => !on.includes(p.id));
+  return `${on.map((id) => `<span class="person-chip">${avatar(id)}${esc(People.name(id))}${on.length > 1 ? `<button type="button" class="chip-x edit-only" data-action="person-off" data-kind="${kind}" data-id="${esc(r.id)}" data-person="${esc(id)}" title="Take ${esc(People.name(id))} off" aria-label="Take ${esc(People.name(id))} off">${ic('x', 'sm')}</button>` : ''}</span>`).join('')}
+    ${off.length ? `<select class="p-select person-add edit-only" style="flex:0 0 auto;width:auto" data-person-add="${kind}" data-id="${esc(r.id)}" aria-label="Add someone"><option value="">+ Add</option>${off.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>` : ''}`;
+}
+function peopleBlock(t) {
+  if (!People.several()) return '';
+  return `<div class="p-row p-wrap"><span class="p-ico">${ic('users')}</span><span class="p-lbl">People</span><div class="label-row" style="flex:1">${peopleChips(t, 'tasks')}</div></div>`;
+}
+// Settings: everyone, each with their zakat day; you can't be removed.
+function peopleCard() {
+  const days = (cur) => `<option value="">Day</option>${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}" ${cur === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}`;
+  const months = (cur) => `<option value="">Month</option>${HIJRI_MONTHS.map((m, i) => `<option value="${i + 1}" ${cur === i + 1 ? 'selected' : ''}>${esc(m)}</option>`).join('')}`;
+  const ro = state.readOnly ? 'disabled' : '';
+  return `
+    <div class="card" id="people-card">
+      <h2>People</h2>
+      <p class="sub">Tasks, notes and events can belong to one or more people. Once there's someone besides you, pick whose things to show at the top of the sidebar (on a phone, above the page). Only tasks that include you go to To Do. The zakat day is an Islamic date, used by Zakat.</p>
+      ${People.list().map((p) => `
+        <div class="person-row" data-person-row="${esc(p.id)}">
+          ${avatar(p.id)}
+          <span class="grow"><b>${esc(p.name)}</b>${p.id === ME ? ' <span style="color:var(--muted);font-size:var(--t-sm)">(you)</span>' : ''}</span>
+          <select class="input" data-zakat-day="${esc(p.id)}" aria-label="${esc(p.name)}: zakat day" ${ro}>${days(p.zakat?.day)}</select>
+          <select class="input" data-zakat-month="${esc(p.id)}" aria-label="${esc(p.name)}: zakat month" ${ro}>${months(p.zakat?.month)}</select>
+          <button type="button" class="icon-btn edit-only" data-action="rename-person" data-id="${esc(p.id)}" title="Rename" aria-label="Rename ${esc(p.name)}">${ic('pencil')}</button>
+          ${p.id === ME ? `<span class="icon-btn edit-only" aria-hidden="true" style="visibility:hidden">${ic('x')}</span>` : `<button type="button" class="icon-btn edit-only" data-action="remove-person" data-id="${esc(p.id)}" title="Remove" aria-label="Remove ${esc(p.name)}">${ic('x')}</button>`}
+        </div>`).join('')}
+      <form class="row edit-only" data-form="add-person" style="margin-top:8px"><input class="input grow" name="title" placeholder="Add a person, e.g. a family member" autocomplete="off" maxlength="40" aria-label="New person's name"><button class="btn small">Add</button></form>
+    </div>`;
+}
+
 function labelBlock(t) {
   return `
     <div class="p-row p-wrap"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg></span>
@@ -2544,6 +2698,7 @@ function renderDrawer() {
           <select class="p-select" data-field="progress">${opt('not', 'Not started', t.progress)}${opt('doing', 'In progress', t.progress)}</select></div>
         <div class="p-row"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-player-play"/></svg></span><span class="p-lbl">Start</span>
           <input class="p-input" type="date" data-field="start" value="${esc(t.start)}" aria-label="Start date"></div>
+        ${peopleBlock(t)}
         ${labelBlock(t)}
       </section>
 
@@ -3465,15 +3620,16 @@ function renderNotices() {
 
 function renderNotes() {
   const q = state.noteQuery.toLowerCase();
-  const notes = DB.notes.filter((n) => !PendingDelete.has(n.id))
+  const shown = DB.notes.filter((n) => !PendingDelete.has(n.id) && People.shows(n));
+  const notes = shown
     .sort((a, b) => b.updated - a.updated)
     .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q));
-  if (!DB.notes.some((n) => n.id === state.activeNote)) state.activeNote = notes[0]?.id || null;
+  if (!shown.some((n) => n.id === state.activeNote)) state.activeNote = notes[0]?.id || null;
   const active = DB.notes.find((n) => n.id === state.activeNote);
   const ro = state.readOnly ? 'readonly' : '';
   return `
     <div class="page-head">
-      <div><h1>Notes</h1><p class="sub">${plural(DB.notes.length, 'note')}${state.readOnly ? '' : ', saved as you type'}</p></div>
+      <div><h1>Notes</h1><p class="sub">${plural(shown.length, 'note')}${state.readOnly ? '' : ', saved as you type'}</p></div>
       <button class="btn primary edit-only" data-action="new-note">${ic('plus', 'sm')}New note</button>
     </div>
     <div class="notes-layout">
@@ -3482,7 +3638,7 @@ function renderNotes() {
         <div class="note-list">
           ${notes.map((n) => `
             <button class="note-card ${n.id === state.activeNote ? 'active' : ''}" data-note="${esc(n.id)}">
-              <div class="t">${esc(n.title || 'Untitled')}</div>
+              <div class="t">${esc(n.title || 'Untitled')} ${whoBadges(n)}</div>
               <div class="p">${esc(n.body.slice(0, 80) || 'Empty note')}</div>
             </button>`).join('') || '<div class="empty">No notes yet</div>'}
         </div>
@@ -3493,6 +3649,7 @@ function renderNotes() {
             <span class="meta"><span>Edited ${esc(fmtStamp(active.updated))}</span></span>
             <button class="icon-btn edit-only" data-action="delete-note" title="Delete note" aria-label="Delete note">${ic('trash')}</button>
           </div>
+          ${People.several() ? `<div class="note-people">${ic('users', 'sm')}${peopleChips(active, 'notes')}</div>` : ''}
           <input class="note-title" data-input="note-title" value="${esc(active.title)}" placeholder="Title" aria-label="Note title" ${ro}>
           <textarea data-input="note-body" placeholder="Start writing" aria-label="Note" ${ro}>${esc(active.body)}</textarea>
         ` : `<div class="empty">${state.readOnly ? 'No notes in this file' : 'Create a note to get started'}</div>`}
@@ -3579,6 +3736,7 @@ function renderSettings() {
     <section class="settings-group" aria-labelledby="sg-org">
       <h2 class="settings-h" id="sg-org">Files and organising</h2>
       <div class="grid settings-grid">
+        ${peopleCard()}
         ${state.phone ? '' : attachCard()}
         ${manageCard()}
       </div>
@@ -3887,7 +4045,8 @@ const TD = {
   },
   // What goes out. send: per task, create it (no id), use a lost link again (relink), put back a lost PA App mark,
   // update it (patch), and/or record how both sides now look (rebase). remove: To Do tasks this app made whose task is
-  // gone here. error: refused.
+  // gone here, or isn't yours any more. unlink: tasks that aren't yours but still have a link (cleared once their
+  // copy is removed, so being given back to you sends a fresh one). error: refused.
   // deletedIds: tasks deleted here (their 30-day markers). Both devices sync the same list, so a To Do task made for a
   // task this device doesn't know (the other device's, its save still on the way) is never removed.
   decideOut(tasks, remote, deletedIds = []) {
@@ -3895,7 +4054,9 @@ const TD = {
     const byOurId = new Map([...remote.values()].filter((x) => this.ourId(x)).map((x) => [this.ourId(x), x]));
     const send = [];
     const keep = new Set();
+    const unlink = tasks.filter((t) => t.todo && !People.mine(t));
     for (const t of tasks) {
+      if (!People.mine(t)) continue; // only tasks you're on go to your To Do
       if (t.todo && t.todo.removed) continue;
       if (!t.todo && t.done) continue; // only open tasks go; a done one only finishes off its phone copy
       const body = this.payload(t);
@@ -3914,12 +4075,13 @@ const TD = {
       });
     }
     // Deleted here: delete the phone copy too (only tasks this app made; ones added on the phone are left alone).
-    for (const t of tasks) if (t.todo && t.todo.id) keep.add(t.todo.id);
-    const remove = [...remote.values()].filter((x) => this.ourId(x) && !keep.has(x.id) && known.has(this.ourId(x)));
+    for (const t of tasks) if (t.todo && t.todo.id && People.mine(t)) keep.add(t.todo.id);
+    const notYours = new Set(unlink.filter((t) => t.todo.id).map((t) => t.todo.id)); // even one that lost its mark
+    const remove = [...remote.values()].filter((x) => (this.ourId(x) && !keep.has(x.id) && known.has(this.ourId(x))) || notYours.has(x.id));
     if (remove.length > this.MASS && remove.length > remote.size / 2) {
-      return { send, remove: [], error: `Not removing ${remove.length} tasks from To Do at once: check that your tasks look right here.` };
+      return { send, remove: [], unlink: [], error: `Not removing ${remove.length} tasks from To Do at once: check that your tasks look right here.` };
     }
-    return { send, remove, error: '' };
+    return { send, remove, unlink, error: '' };
   },
 
   // Tasks were edited. During a sync the edit may have missed it, so another runs straight after; the sync's own
@@ -4001,6 +4163,7 @@ const TD = {
         try { await this.graph('DELETE', `/me/todo/lists/${list}/tasks/${x.id}`); } catch (e) { if (e.status !== 404) throw e; }
         sent++;
       }
+      for (const t of out.unlink) { t.todo = null; sent++; } // not yours any more: its copy is gone from your To Do
       if (sent) this.saveOwn();
       this.error = '';
       device.set('todoLast', Date.now());
@@ -4348,6 +4511,7 @@ function addTask(data) {
     due: data.due || '',
     priority: data.priority || 'low',
     reminders: Array.isArray(data.reminders) ? data.reminders : [],
+    people: Array.isArray(data.people) ? [...data.people] : People.forNew(),
     created: Date.now(),
     myDay: data.myDay || '',
     bucket: data.bucket != null ? data.bucket : state.view === 'tasks' ? filterBucket : '',
@@ -4360,7 +4524,7 @@ function addTask(data) {
 }
 
 function addEvent(data) {
-  DB.events.push({ id: uid(), title: data.title.trim(), date: data.date, time: data.time || '' });
+  DB.events.push({ id: uid(), title: data.title.trim(), date: data.date, time: data.time || '', people: People.forNew() });
   changed('events');
   state.selectedDay = data.date;
   const d = parseISO(data.date);
@@ -4368,7 +4532,7 @@ function addEvent(data) {
 }
 
 function newNote() {
-  const n = { id: uid(), title: '', body: '', updated: Date.now() };
+  const n = { id: uid(), title: '', body: '', updated: Date.now(), people: People.forNew() };
   DB.notes.push(n);
   state.activeNote = n.id;
   state.noteQuery = '';
@@ -4435,7 +4599,7 @@ const MISSED_MS = 10 * 60000;
 function checkReminders() {
   const now = Date.now();
   let changedAny = false;
-  const due = Reminders.due(DB.tasks, now, state.remindedHere);
+  const due = Reminders.due(DB.tasks.filter((t) => People.mine(t)), now, state.remindedHere); // only tasks you're on
   const missed = due.filter((d) => d.at < now - MISSED_MS).sort((a, b) => a.at - b.at);
   for (const { t, r, at } of due) {
     if (at >= now - MISSED_MS) {
@@ -4462,7 +4626,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
-  'td-connect', 'td-sync', 'td-disconnect', 'clear-notices',
+  'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -4701,13 +4865,34 @@ document.addEventListener('click', (e) => {
       else {
         t.checklist = t.checklist.filter((x) => x !== s);
         if (action === 'promote-step') {
-          addTask({ title: s.text || 'Untitled step', bucket: t.bucket });
+          addTask({ title: s.text || 'Untitled step', bucket: t.bucket, people: People.of(t) });
           toast('Step turned into its own task');
         }
       }
       changed('tasks');
       render();
       renderDrawer();
+      break;
+    }
+    case 'person-off': {
+      const kind = btn.dataset.kind;
+      const r = DB[kind] && DB[kind].find((x) => x.id === id);
+      if (r && People.toggle(r, btn.dataset.person)) { changed(kind); render(); if (kind === 'tasks') renderDrawer(); }
+      break;
+    }
+    case 'rename-person': {
+      const p = People.get(id);
+      if (!p) break;
+      askText('New name', p.name, { yes: 'Rename' }).then((name) => { if (name && People.rename(id, name)) render(); });
+      break;
+    }
+    case 'remove-person': {
+      const p = People.get(id);
+      if (!p) break;
+      const n = People.onlyTheirs(id);
+      const left = n === 1 ? ' One task, note or event is only theirs: it becomes yours.' : n ? ` ${n} tasks, notes and events are only theirs: they become yours.` : '';
+      ask(`Remove ${p.name}?${left}`, { yes: 'Remove', danger: true })
+        .then((yes) => { if (yes) { People.remove(id); render(); renderDrawer(); } });
       break;
     }
     case 'clear-done': PendingDelete.start(DB.tasks.filter((x) => x.done && !hiddenTask(x))); break; // Undo, then the Trash
@@ -4798,6 +4983,7 @@ document.addEventListener('submit', (e) => {
   else if (kind === 'add-event') addEvent(data);
   else if (kind === 'add-step') addStep(data.title);
   else if (kind === 'add-bucket') addBucket(data.title);
+  else if (kind === 'add-person') People.add(data.title);
   else if (kind === 'add-label') addLabel(data.title, data.color, inDrawer ? currentTask() : null);
   render();
   if (inDrawer) { renderDrawer(); $(`#drawer [data-form="${kind}"] [name="title"]`)?.focus(); }
@@ -5021,6 +5207,7 @@ document.addEventListener('input', (e) => {
   if (kind === 'task-label') { state.taskLabel = e.target.value; render(); return; }
   if (kind === 'task-sort') { device.set('taskSort', e.target.value); render(); return; }
   if (kind === 'task-group') { device.set('taskGroup', e.target.value); render(); return; }
+  if (kind === 'person-view') { People.view(e.target.value); Selection.ids.clear(); render(); return; } // this device only
   if (state.readOnly) return;
   const n = DB.notes.find((x) => x.id === state.activeNote);
   if (!n || (kind !== 'note-title' && kind !== 'note-body')) return;
@@ -5047,6 +5234,18 @@ document.addEventListener('change', (e) => {
     if (v.startsWith('custom-')) { state.remCustom = v.slice(7); state.remEdit = null; renderDrawer(); return; }
     if (say(Reminders.add(t, presetReminder(v))).ok) { askNotifications(); changed('tasks'); render(); }
     renderDrawer();
+    return;
+  }
+  if (e.target.dataset?.personAdd && !state.readOnly) {
+    const kind = e.target.dataset.personAdd;
+    const r = DB[kind] && DB[kind].find((x) => x.id === e.target.dataset.id);
+    if (r && e.target.value && People.toggle(r, e.target.value)) { changed(kind); render(); if (kind === 'tasks') renderDrawer(); }
+    return;
+  }
+  if ((e.target.dataset?.zakatDay || e.target.dataset?.zakatMonth) && !state.readOnly) {
+    const id = e.target.dataset.zakatDay || e.target.dataset.zakatMonth;
+    const row = e.target.closest('[data-person-row]');
+    People.setZakat(id, row.querySelector('[data-zakat-day]').value, row.querySelector('[data-zakat-month]').value);
     return;
   }
   if (e.target.dataset?.labelColor && !state.readOnly) {

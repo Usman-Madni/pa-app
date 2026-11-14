@@ -9,7 +9,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 ## Building
 - Keep the app one self-contained file. **Ask first** before renaming it, splitting it, adding a build step or a runtime dependency, or changing the shape of stored data (`pa_*` keys or the data file).
 - **Dates:** use `toISO(date)` (local `YYYY-MM-DD`). Never slice `.toISOString()` into a date, because it's UTC and shifts the day in any timezone ahead of or behind UTC. `toISOString()` is only for exact instants such as `savedAt`.
-- **Two kinds of storage.** Shared data (`pa_tasks`, `pa_notes`, `pa_events`, `pa_buckets`, `pa_labels`, `pa_notices`, `pa_trash`) goes in the data file.
+- **Two kinds of storage.** Shared data (`pa_tasks`, `pa_notes`, `pa_events`, `pa_buckets`, `pa_labels`, `pa_notices`, `pa_trash`, `pa_people`) goes in the data file.
 - **Deleting tasks and notes goes through `PendingDelete`** (Undo, then the record moves to the `Trash` for 30 days). Don't filter `DB.tasks` or `DB.notes` directly to delete. Per-device settings (`dev_*`: theme, view, device name, save bookkeeping) never do.
 - **Every edit goes through `changed(key)`.** That saves in the browser and queues the data-file save. Don't write `localStorage` directly for data. It also stamps each changed record's `updated` and marks deletions (`Stamps`), which the merge between devices (`mergeData`) relies on: an edit that skips `changed()` could lose to an older copy.
 - **Every feature works on both the laptop and the phone.** A new feature is built for both in the same change (and tested on both); if a part truly can't work on one, say so and ask before leaving it out.
@@ -20,6 +20,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - **Due date, rename and repeat changes go through `TaskEdit`** (`setDue`, `rename`, `setRepeat`), wherever they come from. It does the follow-up steps and returns a note for the caller to show. Words for things are in `GLOSSARY.md`.
 - **Ticking, unticking, done dates and duplicates go through `Series`** (`tick`, `untick`, `setDone`, `duplicate`). It owns the next copy and its `spawnSig` snapshot, and reports what it found; the caller asks or shows the message.
 - **To Do sync rules live in `TD.decideIn` / `TD.decideOut`**, which change nothing and talk to nothing; `TD.sync` only carries out their plan. A new rule goes there, with a test in `test-todo-decide.js`.
+- **Whose a task, note or event is goes through `People`** (`of`, `mine`, `shows`, `forNew`, `toggle`). A record with no `people` is yours (`'me'`); never assume every record has the field. Lists the screens show must leave out what `People.shows` hides (tasks: `hiddenTask`). Only tasks you're on remind and go to To Do.
 - **Reminder rules live in `Reminders`** (when, wording, adding, re-arming, copying, which are due, the one To Do holds). Ask it rather than reading or changing `t.reminders` directly.
 
 ## Running commands (keeps permission prompts down)
