@@ -52,7 +52,18 @@ const { loadApp, check, done } = require('./helpers');
   doc.querySelector('[data-view="today"]').click();
   check(doc.querySelector('#main h2.tl-h') && !doc.querySelector('#main h3.tl-h'), 'My Day\'s section headings are one level under the title');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
-  void t;
+  // --- Task panel: the time, "no time" and × move under the date when the panel is narrow, never cut off ---
+  PA.TaskEdit.setDue(t, `${PA.toISO(new Date())}T12:25`);
+  PA.state.openTask = t.id;
+  PA.renderDrawer();
+  const when = doc.querySelector('#drawer [data-field="dueDate"]').parentElement;
+  const wt = when.querySelector('.p-when-time');
+  check(when.classList.contains('p-when') && wt && wt.querySelector('[data-field="dueTime"]') && wt.querySelector('[data-action="clear-time"]') && wt.querySelector('[data-action="clear-due"]'), 'the due time, "no time" and × sit together in the date\'s group');
+  check(/\.p-when\s*\{[^}]*flex-wrap:\s*wrap/.test(css) && /\.p-when\s*\{[^}]*min-width:\s*0/.test(css), 'that group wraps instead of running off the panel');
+  PA.Series.tick(t, new Date(), false);
+  PA.renderDrawer();
+  const dwt = doc.querySelector('#drawer [data-field="doneTime"]').parentElement;
+  check(dwt.classList.contains('p-when-time') && dwt.querySelector('[data-action="clear-done-time"]') && dwt.parentElement.classList.contains('p-when'), 'the Done on row works the same way');
   app.close();
 
   // --- The phone's banner: a few words on a phone-sized screen, the full text on wider ones and in Settings ---
