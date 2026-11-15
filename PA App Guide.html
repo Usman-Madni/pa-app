@@ -229,6 +229,18 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li><b>Rates</b> are the same as on the Assets page.</li>
           </ul>
         </section>
+        <section id="airtable" data-title="Bringing in an Airtable zakat base">
+          <h3>Bringing in an Airtable zakat base</h3>
+          <p>If you kept zakat in an Airtable base with the tables <b>Gold</b>, <b>Silver</b>, <b>Overview</b>, <b>Zakat Summary</b> and <b>Zakat Payments</b>, Butler can bring it all in:</p>
+          <ol>
+            <li>In Airtable, open each table, then its view's menu › <b>Download CSV</b>.</li>
+            <li>In Butler, <b>Settings › Bring in from Airtable › Choose CSV files</b>, and pick all five at once. Each is recognised by its columns, whatever its name.</li>
+            <li>Say who each name in the base is: you, someone already in People, a new person, or left out.</li>
+            <li>Gold and silver that weren't linked to anyone there weren't counted, so they're left out unless you say whose they are.</li>
+            <li><b>Bring in.</b> Rates, savings, gold and silver become assets; each person gets their zakat day; every year becomes a done record with what was due; every payment goes to its year.</li>
+          </ol>
+          <p>It's read on your device only. Bringing the same files in again adds nothing twice. Photos stay in Airtable, and an old year keeps only what was due, not the workings behind it.</p>
+        </section>
       </div>
 
       <!-- ===================== 2 ===================== -->

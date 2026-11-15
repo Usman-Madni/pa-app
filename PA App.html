@@ -1281,6 +1281,194 @@ const Zakat = {
 };
 // After anything that can change the zakat tasks: make or tick them, and save.
 function zakatTasks() { if (Zakat.ensureTasks()) changed('tasks'); }
+
+// ===================== Bringing in an Airtable zakat base =====================
+// From the CSV files Airtable downloads (one per table: Gold, Silver, Overview, Zakat Summary, Zakat Payments), read on
+// this device only. Each file is recognised by its columns, not its name. People are named in the base (the Overview
+// rows, the Person fields, the gold and silver "Totals" links); the user says who each one is here. Gold and silver
+// not linked to anyone weren't counted there, so by default they're left out. Bringing the same files in twice adds
+// nothing twice. Photos stay in Airtable (their links expire), and old years keep only what was due.
+const CSV = {
+  // Rows of cells; quotes, commas and line breaks inside quotes, and a leading BOM are handled.
+  parse(text) {
+    const rows = [];
+    let row = [], cell = '', q = false;
+    const s = String(text).replace(/^﻿/, '');
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) {
+        if (c === '"' && s[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && s[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((x) => x.trim() !== ''));
+  },
+  // [{column: value}] using the first row as the column names.
+  objects(text) {
+    const [head = [], ...rest] = this.parse(text);
+    const cols = head.map((h) => h.trim());
+    return { cols, rows: rest.map((r) => Object.fromEntries(cols.map((c, i) => [c, (r[i] ?? '').trim()]))) };
+  },
+};
+const MONTH_ALIASES = [
+  ['muharram', 'muharam'], ['safar'],
+  ['rabialawwal', 'rabiulawwal', 'rabiulawal', 'rabialawal', 'rabiulavval', 'rabi1'],
+  ['rabialthani', 'rabiussani', 'rabiulakhir', 'rabiuthani', 'rabialakhir', 'rabiulsani', 'rabi2'],
+  ['jumadaalula', 'jumadalula', 'jamadiulawwal', 'jumadaalawwal', 'jamadiulawal', 'jumadiulawal', 'jumada1'],
+  ['jumadaalakhirah', 'jumadalakhira', 'jumadaalakhira', 'jamadiussani', 'jumadaalthani', 'jamadiulakhir', 'jamadiulsani', 'jumada2'],
+  ['rajab'], ['shaban', 'shabaan'], ['ramadan', 'ramzan', 'ramadhan'], ['shawwal', 'shawal'],
+  ['dhualqadah', 'zulqadah', 'dhulqadah', 'zilqad', 'dhualqidah', 'zulqaadah', 'dhulqidah', 'zilqadah'],
+  ['dhualhijjah', 'zulhijjah', 'dhulhijjah', 'zilhaj', 'zilhijjah', 'zulhijja'],
+];
+const AirtableImport = {
+  // "Rs. 9,00,000" / "-3000" / "1.5" → a number (null when empty).
+  num(s) {
+    const t = String(s ?? '').replace(/rs\.?/ig, '').replace(/[,\s]/g, '');
+    if (!t) return null;
+    const n = Number(t.replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  },
+  // "14/2/2025" (Airtable's European dates) or "2025-02-14" → "2025-02-14"; '' when it can't tell.
+  date(s) {
+    const t = String(s ?? '').trim();
+    let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+    m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? `${m[3]}-${pad(+m[2])}-${pad(+m[1])}` : '';
+  },
+  month(name) {
+    const n = String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const i = MONTH_ALIASES.findIndex((list) => list.includes(n));
+    return i < 0 ? 0 : i + 1;
+  },
+  // "15th Shaban 1446" → {day, month, year}; the year is optional ("15th Shaban").
+  islamic(s) {
+    const m = String(s ?? '').match(/(\d{1,2})\s*(?:st|nd|rd|th)?\s+([A-Za-z'’ -]+?)(?:\s+(\d{4}))?(?:\s|$|-)/);
+    if (!m) return null;
+    const month = this.month(m[2]);
+    return month ? { day: Number(m[1]), month, year: m[3] ? Number(m[3]) : 0 } : null;
+  },
+  names(s) { return String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean); },
+  // Which table a file is, by its columns.
+  kind(cols) {
+    const has = (c) => cols.includes(c);
+    if (has('Karat') && has('Weight (g)')) return 'gold';
+    if (has('Weight (g)')) return 'silver';
+    if (has('Rates Date')) return 'overview';
+    if (has('Islamic Date')) return 'summary';
+    if (has('Amount') && has('Person')) return 'payments';
+    return '';
+  },
+  // Read the files into a plan: the tables found, the names used, what's in them. Changes nothing.
+  async read(files) {
+    const plan = { tables: {}, unknown: [], names: [] };
+    for (const f of files) {
+      const { cols, rows } = CSV.objects(await f.text());
+      const k = this.kind(cols);
+      if (k) plan.tables[k] = rows; else plan.unknown.push(f.name);
+    }
+    const t = plan.tables;
+    const names = [
+      ...(t.overview || []).map((r) => r.Name),
+      ...(t.summary || []).map((r) => r.Person), ...(t.payments || []).map((r) => r.Person),
+      ...[...(t.gold || []), ...(t.silver || [])].flatMap((r) => this.names(r.Totals)),
+    ].filter(Boolean);
+    plan.names = [...new Set(names)];
+    plan.unlinked = [...(t.gold || []), ...(t.silver || [])].filter((r) => !this.names(r.Totals).length).length;
+    return plan;
+  },
+  // Who each name probably is: someone already in People by that name; else, the base's first person is you while you
+  // have no name yet; else a new person.
+  guess(plan) {
+    const meNamed = DB.people.some((p) => p.id === ME && p.name !== 'Me');
+    return Object.fromEntries(plan.names.map((n, i) => {
+      const found = People.list().find((p) => p.name.trim().toLowerCase() === n.trim().toLowerCase());
+      return [n, found ? found.id : !meNamed && i === 0 ? ME : 'new'];
+    }));
+  },
+  // Bring it in. who: {name: person id | 'new' | 'skip'}; unlinkedTo: a person id or 'skip'. Returns what was added.
+  apply(plan, who, unlinkedTo = 'skip') {
+    const t = plan.tables;
+    const out = { people: 0, assets: 0, rates: 0, records: 0, payments: 0, days: 0, skipped: 0, notes: [] };
+    const ids = {};
+    for (const n of plan.names) {
+      let id = who[n] || 'skip';
+      if (id === 'new') {
+        id = (People.list().find((p) => p.name.toLowerCase() === n.toLowerCase()) || People.add(n)).id;
+        out.people++;
+      } else if (id === ME && People.get(ME).name === 'Me') People.rename(ME, n); // you, named as in the base
+      ids[n] = id;
+    }
+    const personOf = (name) => (ids[name] && ids[name] !== 'skip' ? ids[name] : null);
+    // Overview: each person's rates on its date, their savings, and their zakat day.
+    for (const r of t.overview || []) {
+      const date = this.date(r['Rates Date']);
+      const gold = Object.fromEntries(KARATS.map((k) => [k, this.num(r[`${k}K G Rs/T`])]).filter(([, v]) => v));
+      const silver = this.num(r['Silver Rs/T']);
+      if (date && (Object.keys(gold).length || silver)) {
+        const old = DB.rates.find((x) => x.date === date);
+        Assets.setRates({ date, gold: { ...(old?.gold || {}), ...gold }, silver: silver || old?.silver || 0, fx: old?.fx || {} });
+        out.rates++;
+      }
+      const p = personOf(r.Name);
+      if (!p) continue;
+      const day = this.islamic(r['Zakat Date']);
+      if (day && !People.get(p).zakat) { People.setZakat(p, day.day, day.month); out.days++; }
+      const savings = this.num(r.Savings);
+      if (savings != null && date) {
+        let a = DB.assets.find((x) => x.kind === 'cash' && x.name === 'Savings' && Assets.shareOf(x, p) === 1);
+        if (!a) { a = Assets.add({ kind: 'cash', name: 'Savings', currency: 'PKR', owners: [{ id: p, share: 100 }] }); out.assets++; }
+        Assets.setValue(a, date, savings);
+      }
+    }
+    // Gold and silver: the owner is the person their "Totals" link names.
+    for (const kind of ['gold', 'silver']) {
+      for (const r of t[kind] || []) {
+        const linked = this.names(r.Totals).map(personOf).filter(Boolean);
+        const owner = linked[0] || (unlinkedTo !== 'skip' && !this.names(r.Totals).length ? unlinkedTo : null);
+        if (!owner) { out.skipped++; continue; }
+        const tola = this.num(r['Weight (tola)']);
+        const grams = tola ? tola * TOLA_G : this.num(r['Weight (g)']) || 0;
+        const name = r.Name || (kind === 'gold' ? 'Gold' : 'Silver');
+        if (DB.assets.some((a) => a.kind === kind && a.name === name && Math.abs(a.grams - grams) < 0.01)) continue; // brought in before
+        let karat = kind === 'gold' ? String(this.num(r.Karat) || '') : '';
+        if (kind === 'gold' && !KARATS.includes(karat)) { karat = '22'; out.notes.push(`"${name}" had no karat: set as 22K`); }
+        Assets.add({ kind, name, karat, grams, acquired: this.date(r['Date Acquired']), notes: r.Comments || '', owners: [{ id: owner, share: 100 }] });
+        out.assets++;
+      }
+    }
+    // Zakat Summary: one done record per person and year, keeping what was due (that's all the base kept).
+    for (const r of t.summary || []) {
+      const p = personOf(r.Person);
+      const day = this.islamic(r['Islamic Date']);
+      const date = this.date(r['Equivalent Date']);
+      if (!p || !day || !day.year || !date) { if (r.Person) out.notes.push(`A Zakat Summary row couldn't be read: ${r['Islamic Date'] || 'no Islamic date'}`); continue; }
+      if (!People.get(p).zakat) { People.setZakat(p, day.day, day.month); out.days++; }
+      if (Zakat.recordFor(p, day.year)) continue;
+      const due = this.num(r.Due) || 0;
+      DB.zakat.push({ id: uid(), person: p, hyear: day.year, date, status: 'done', imported: true, rates: { gold: {}, silver: 0, fx: {} }, items: [], roundUp: false, excess: 'carry', total: 0, nisab: 0, raw: due, due, made: Date.now(), doneAt: Date.now() });
+      out.records++;
+    }
+    // Zakat Payments: each to the record its link names (person and Islamic year).
+    for (const r of t.payments || []) {
+      const p = personOf(r.Person);
+      const day = this.islamic(r.Link);
+      const rec = p && day && Zakat.recordFor(p, day.year);
+      const amount = this.num(r.Amount);
+      const date = this.date(r.Date);
+      if (!rec || !amount || !date) { if (p) out.notes.push(`A payment of ${r.Amount || '?'} on ${r.Date || '?'} has no year it belongs to: left out`); continue; }
+      if (DB.zakatPay.some((x) => x.person === p && x.date === date && x.amount === amount && x.record === rec.id)) continue;
+      DB.zakatPay.push({ id: uid(), person: p, date, amount, to: r.Description || '', record: rec.id });
+      out.payments++;
+    }
+    return out;
+  },
+};
 // Rupees grouped the local way (9,00,000); a minus goes in front: -Rs 5,000.
 const rupees = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '-' : ''}Rs ${Math.abs(v).toLocaleString('en-IN')}`; };
 const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
@@ -4347,6 +4535,26 @@ function renderAssetForm() {
       <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro || !save || f.type === 'zakat-record' ? 'Close' : 'Cancel'}</button>${ro || !save ? '' : `<button class="btn primary">${esc(save)}</button>`}</div>
     </form>`;
   let html = '';
+  if (f.type === 'import') {
+    const plan = f.plan;
+    const t = plan.tables;
+    const label = { gold: 'Gold', silver: 'Silver', overview: 'Overview', summary: 'Zakat Summary', payments: 'Zakat Payments' };
+    const found = Object.keys(label).filter((k) => t[k]).map((k) => `${label[k]} (${plural(t[k].length, 'row')})`);
+    const guess = AirtableImport.guess(plan);
+    const others = People.list().filter((p) => p.id !== ME);
+    const whoSel = (n, i) => `<label class="bal-row"><span>${esc(n)}</span><select class="input" name="who-${i}">
+      <option value="${ME}" ${guess[n] === ME ? 'selected' : ''}>You</option>
+      ${others.map((p) => `<option value="${esc(p.id)}" ${guess[n] === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+      <option value="new" ${guess[n] === 'new' ? 'selected' : ''}>A new person, ${esc(n)}</option>
+      <option value="skip">Leave out</option></select></label>`;
+    $('#modal').innerHTML = box('Bring in from Airtable', `
+      ${found.length ? `<p class="meta" style="margin:0">Found: ${esc(found.join(', '))}.${plan.unknown.length ? ` Not recognised: ${esc(plan.unknown.join(', '))}.` : ''}</p>` : '<p>None of these look like the zakat base\'s tables (Gold, Silver, Overview, Zakat Summary, Zakat Payments).</p>'}
+      ${plan.names.length ? `<div class="balance-list"><div class="meta">Who is who</div>${plan.names.map(whoSel).join('')}</div>` : ''}
+      ${plan.unlinked ? `<label class="field">Gold and silver not linked to anyone there (${plan.unlinked}), so not counted<select class="input" name="unlinked"><option value="skip">Leave them out</option><option value="${ME}">They're yours</option>${others.map((p) => `<option value="${esc(p.id)}">They're ${esc(p.name)}'s</option>`).join('')}</select></label>` : ''}
+      <p class="meta" style="margin:0">Brought in: rates, savings and gold and silver as assets, each person's zakat day, every year's record (what was due) and every payment. Photos stay in Airtable. Bringing the same files in again adds nothing twice. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
+    $('#modal select, #modal button.primary')?.focus();
+    return;
+  }
   if (f.type.startsWith('zakat-')) { $('#modal').innerHTML = zakatForm(f, box); $('#modal input:not([type=hidden]):not([disabled]), #modal select')?.focus(); return; }
   if (f.type === 'asset') {
     const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
@@ -4455,9 +4663,9 @@ function zakatForm(f, box) {
       </div>`).join('');
     const sums = `
       <div class="zk-sums">
-        <div><span>Total counted</span><b>${rupees(r.total)}</b></div>
+        ${r.imported ? '' : `<div><span>Total counted</span><b>${rupees(r.total)}</b></div>
         <div><span>Nisab: ${NISAB_TOLA} tola of silver</span><b>${r.nisab ? rupees(r.nisab) : 'Needs the silver rate'}</b></div>
-        <div><span>Zakat, 2.5%</span><b>${r.nisab && r.total > r.nisab ? rupees(r.raw) : 'Nothing: below the nisab'}</b></div>
+        <div><span>Zakat, 2.5%</span><b>${r.nisab && r.total > r.nisab ? rupees(r.raw) : 'Nothing: below the nisab'}</b></div>`}
         ${draft ? `<label class="zk-round"><input type="checkbox" name="zround" ${r.roundUp ? 'checked' : ''} data-zrec> Round up to the next 1,000</label>` : ''}
         <div class="zk-due"><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span><b>${rupees(r.due)}</b></div>
         ${carried ? `<div><span>Carried in from the year before</span><b>-${rupees(carried)}</b></div>` : ''}
@@ -4465,6 +4673,14 @@ function zakatForm(f, box) {
       </div>`;
     const pays = !draft ? Zakat.payments(r).map((p) => `<div class="vh-row"><span>${esc(fmtDay(p.date))}${p.to ? `, to ${esc(p.to)}` : ''}</span><span>${rupees(p.amount)}</span><span></span></div>`).join('') : '';
     const problems = draft ? Zakat.problems(r) : [];
+    if (r.imported) { // brought in from Airtable: the base kept what was due, not what it was worked out from
+      return box(`${you ? '' : `${name}: `}${zakatTitle(r)}`, `
+        <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. Brought in from Airtable, which kept only the amount due.</p>
+        ${sums}
+        <label class="field">If more than is due is paid<select class="input" name="zexcess" data-zrec ${ro ? 'disabled' : ''}><option value="carry" ${r.excess !== 'charity' ? 'selected' : ''}>Count it towards next year</option><option value="charity" ${r.excess === 'charity' ? 'selected' : ''}>Keep it as extra charity</option></select></label>
+        ${pays ? `<div class="value-history"><div class="meta">Payments</div>${pays}</div>` : ''}`,
+      Zakat.remaining(r) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="zakat-pay" data-record="${esc(r.id)}" style="margin-right:auto">Add payment</button>` : '', '', ro);
+    }
     const inner = `
       <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. ${draft ? 'Untick anything that doesn\'t count; type a value to replace the worked-out one (leave it empty to go back). Changes save as you make them.' : `Done ${r.doneAt ? esc(fmtDay(toISO(new Date(r.doneAt)))) : ''}: frozen, so later changes to assets or rates don't touch it.`}</p>
       ${draft ? `<div class="row"><label class="field">Date<input class="input" type="date" name="zdate" value="${esc(r.date)}" data-zrec></label></div>` : ''}
@@ -4586,6 +4802,14 @@ function submitAssetForm(type, data) {
       n++;
     }
     if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDay(data.date)}`); }
+  } else if (type === 'import') {
+    const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
+    const out = AirtableImport.apply(f.plan, who, data.unlinked || 'skip');
+    changed(...DATA_KEYS.filter((k) => k !== 'deleted'));
+    zakatTasks();
+    const parts = [out.assets && plural(out.assets, 'asset'), out.rates && plural(out.rates, 'day') + ' of rates', out.records && plural(out.records, 'zakat year'), out.payments && plural(out.payments, 'payment'), out.people && (out.people === 1 ? '1 person' : `${out.people} people`)].filter(Boolean);
+    toast(parts.length ? `Brought in ${andList(parts)}` : 'Nothing new to bring in: it was all here already');
+    out.notes.forEach((n) => toast(n));
   } else if (type === 'zakat-make') {
     const hy = Number(data.hyear);
     if (!hy || !data.date) return formError('Pick a zakat day.');
@@ -4786,6 +5010,11 @@ function renderSettings() {
       <h2 class="settings-h" id="sg-org">Files and organising</h2>
       <div class="grid settings-grid">
         ${peopleCard()}
+        <div class="card edit-only">
+          <h2>Bring in from Airtable</h2>
+          <p class="sub">Your zakat base's tables (Gold, Silver, Overview, Zakat Summary, Zakat Payments): in Airtable, open each table's view menu › Download CSV, then pick all the files here. They're read on this device only.</p>
+          <div class="row"><label class="btn">${ic('upload', 'sm')}Choose CSV files<input type="file" accept=".csv,text/csv" multiple data-input="airtable" hidden></label></div>
+        </div>
         ${state.phone ? '' : attachCard()}
         ${manageCard()}
       </div>
@@ -6375,6 +6604,7 @@ document.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   if (kind === 'import' && !state.readOnly) importData(file);
+  if (kind === 'airtable' && !state.readOnly) AirtableImport.read([...e.target.files]).then((plan) => openAssetForm('import', { plan }));
   if (kind === 'attach') AT.add(currentTask(), [...e.target.files]);
   if (kind === 'ro-open') RO.open(file);
   e.target.value = '';
