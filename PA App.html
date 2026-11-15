@@ -120,6 +120,60 @@ button:disabled { cursor: not-allowed; }
 .person-row:first-of-type { border-top: 0; }
 .person-row .grow { flex: 1 1 120px; min-width: 0; }
 .person-row select { width: auto; }
+/* ===== Assets ===== */
+.page-actions { gap: 8px; }
+.asset-tabs { margin-bottom: 16px; width: fit-content; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+.stat-label { font-size: var(--t-sm); color: var(--muted); }
+.stat-card .stat { font-size: var(--t-xl); }
+.chart-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+.chart-grid h2 { margin: 0 0 12px; font-size: var(--t-md); }
+.worth-chart { width: 100%; min-width: 0; }
+.chart { max-width: 100%; height: auto; display: block; overflow: visible; }
+.chart .grid-line { stroke: var(--border); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .chart-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.chart .hit { fill: transparent; }
+.chart .chart-pt:hover .dot { r: 6; }
+.chart-table { margin-top: 8px; font-size: var(--t-sm); color: var(--muted); }
+.chart-table summary { cursor: pointer; }
+.chart-table table { margin-top: 6px; border-collapse: collapse; font-variant-numeric: tabular-nums; color: var(--text); }
+.chart-table td { padding: 2px 16px 2px 0; }
+.kind-bars { display: flex; flex-direction: column; gap: 10px; }
+.kind-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
+.kb-name { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); min-width: 0; }
+.kb-val { font-size: var(--t-sm); font-variant-numeric: tabular-nums; text-align: right; }
+.kb-track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.kb-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.kb-fill.minus { background: var(--muted); }
+.asset-row .asset-value { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.asset-row.done .title { color: var(--muted); }
+.rate-line { gap: 4px 14px; }
+.empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.empty-state p { margin: 0; }
+/* The Assets pop-ups: wider, and scrolls on a short screen */
+.modal.wide { width: min(560px, calc(100% - 32px)); top: 50%; transform: translate(-50%, -50%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.modal fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.modal .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); color: var(--muted); }
+.modal .field .input { color: var(--text); font-size: 14px; }
+.modal .field.grow { flex: 2 1 200px; }
+.modal textarea.input { resize: vertical; font: inherit; }
+.form-error { margin: 0; color: var(--danger); font-size: var(--t-sm); }
+.owner-box { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px 12px; margin: 0; }
+.owner-box legend { font-size: var(--t-sm); color: var(--muted); padding: 0 4px; }
+.owner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 12px; }
+.owner-grid label { display: grid; grid-template-columns: auto 1fr 72px; align-items: center; gap: 6px; font-size: var(--t-sm); }
+.owner-grid .input { padding: 5px 8px; text-align: right; }
+.value-history { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.vh-row { display: grid; grid-template-columns: 1fr auto 28px; gap: 10px; align-items: center; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.balance-list { display: flex; flex-direction: column; gap: 6px; }
+.bal-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; align-items: center; font-size: var(--t-sm); }
+.bal-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.bal-row .input { text-align: right; }
+.rate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
 .trash-row .row { flex-wrap: nowrap; }
 .notice-list { padding: 6px 0; }
 .notice-day { padding: 14px 16px 4px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
@@ -558,7 +612,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
   .brand, .side-foot, .person-pick { display: none; }
   .who-bar:not(:empty) { display: block; margin-bottom: 12px; }
   .who-bar .person-pick { display: flex; margin: 0; padding: 0; }
-  .nav-btn { flex-direction: column; gap: 2px; font-size: var(--t-xs); padding: 6px 2px; flex: 1; min-width: 0; align-items: center; }
+  .nav-btn { flex-direction: column; gap: 2px; font-size: 10.5px; padding: 6px 0; flex: 1; min-width: 0; align-items: center; } /* seven fit at 375px */
   .nav-btn > span:not(.ico):not(.nav-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav-btn .nav-count { position: absolute; margin: 0 0 0 22px; top: 4px; }
   .nav-btn { position: relative; }
@@ -619,6 +673,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
+    <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
     <button class="nav-btn" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
     <button class="nav-btn" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <div class="side-foot">
@@ -677,6 +732,16 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 9l5 -5l5 5"/><path d="M12 4l0 12"/></symbol>
 <symbol id="i-users" viewBox="0 0 24 24"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24"><path d="M17 8v-3a1 1 0 0 0 -1 -1h-10a2 2 0 0 0 0 4h12a1 1 0 0 1 1 1v3m0 4v3a1 1 0 0 1 -1 1h-12a2 2 0 0 1 -2 -2v-12"/><path d="M20 12v4h-4a2 2 0 0 1 0 -4h4"/></symbol>
+<symbol id="i-diamond" viewBox="0 0 24 24"><path d="M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5"/><path d="M10 12l-2 -2.2l.6 -1"/></symbol>
+<symbol id="i-building-bank" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7 -3l7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M5 12h-2l9 -9l9 9h-2"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol>
+<symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
+<symbol id="i-chart-line" viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M4 15l4 -6l4 2l4 -5l4 4"/></symbol>
+<symbol id="i-arrow-back-up" viewBox="0 0 24 24"><path d="M9 14l-4 -4l4 -4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2l-3 2"/><path d="M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5m2 0v1.5m0 -9v1.5"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12v9"/><path d="M12 12l-8 -4.5"/></symbol>
+<symbol id="i-arrows-exchange" viewBox="0 0 24 24"><path d="M7 10h14l-4 -4"/><path d="M17 14h-14l4 4"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
 
@@ -842,16 +907,20 @@ const People = {
     p.zakat = day && month ? { day: Number(day), month: Number(month) } : null;
     changed('people');
   },
-  // What would be left with nobody if this person went (those records become yours).
-  onlyTheirs(id) { return ['tasks', 'notes', 'events'].reduce((n, k) => n + DB[k].filter((r) => { const o = this.of(r); return o.length === 1 && o[0] === id; }).length, 0); },
+  // What would be left with nobody if this person went (those records become yours), assets they own outright included.
+  onlyTheirs(id) {
+    return ['tasks', 'notes', 'events'].reduce((n, k) => n + DB[k].filter((r) => { const o = this.of(r); return o.length === 1 && o[0] === id; }).length, 0)
+      + DB.assets.filter((a) => Assets.shareOf(a, id) === 1).length;
+  },
   remove(id) {
     if (id === ME) return;
     for (const k of ['tasks', 'notes', 'events']) {
       for (const r of DB[k]) if (Array.isArray(r.people) && r.people.includes(id)) r.people = r.people.filter((x) => x !== id);
     }
+    Assets.forgetPerson(id);
     DB.people = DB.people.filter((p) => p.id !== id);
     if (device.get('person', 'all') === id) this.view('all');
-    changed('people', 'tasks', 'notes', 'events');
+    changed('people', 'tasks', 'notes', 'events', 'assets');
   },
   // Put someone on a record or take them off (never the last one: a record always belongs to someone).
   toggle(r, id) {
@@ -863,6 +932,144 @@ const People = {
     return true;
   },
 };
+
+// ===================== Assets =====================
+// What people own or owe. Gold and silver have a weight (kept in grams; 1 tola = 11.7 g) and gold a karat; they're
+// worth the weight at that day's rate. Everything else has dated amounts (`values`: a balance, a value, money owed or
+// a debt) in its own currency, worth the latest amount on or before the day, times that day's exchange rate. Debts
+// count as minus. Owners go by date (`owners`: [{from, people: [{id, share %}]}], '' = from the start), so moving an
+// asset to someone from a date on keeps who owned it before: zakat on an earlier day counts the owner then. Prices by
+// date are `rates`: {date, gold: {'24','22','21','18'} rupees per tola, silver rupees per tola, fx: {USD: rupees}}.
+// Everything is worked out here; nothing in it draws or asks.
+const TOLA_G = 11.7;
+const KARATS = ['24', '22', '21', '18'];
+const ASSET_KINDS = [
+  { id: 'gold', name: 'Gold', icon: 'diamond', metal: true },
+  { id: 'silver', name: 'Silver', icon: 'circle', metal: true },
+  { id: 'cash', name: 'Cash and accounts', icon: 'building-bank' },
+  { id: 'property', name: 'Property', icon: 'home' },
+  { id: 'vehicle', name: 'Vehicles', icon: 'car' },
+  { id: 'investment', name: 'Investments', icon: 'chart-line' },
+  { id: 'owed', name: 'Owed to you', icon: 'arrow-back-up' },
+  { id: 'debt', name: 'Debts', icon: 'receipt', minus: true },
+  { id: 'other', name: 'Other', icon: 'box' },
+];
+const CURRENCIES = ['PKR', 'USD', 'GBP', 'EUR', 'AED', 'SAR'];
+const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+const Assets = {
+  kind(id) { return ASSET_KINDS.find((k) => k.id === id) || ASSET_KINDS[ASSET_KINDS.length - 1]; },
+  metal(a) { return !!this.kind(a.kind).metal; },
+  tola(a) { return (Number(a.grams) || 0) / TOLA_G; },
+  // Who owned it on a date: the latest owners from on or before it (the first ones before any), people no longer on the
+  // list left out; nobody left = you.
+  ownersOn(a, date = todayISO()) {
+    const periods = (Array.isArray(a.owners) ? a.owners : []).slice().sort((x, y) => (x.from || '').localeCompare(y.from || ''));
+    const p = periods.filter((o) => !o.from || o.from <= date).pop() || periods[0];
+    const ok = (p ? p.people : []).filter((o) => o.share > 0 && (o.id === ME || DB.people.some((q) => q.id === o.id)));
+    return ok.length ? ok : [{ id: ME, share: 100 }];
+  },
+  shareOf(a, who, date = todayISO()) {
+    const o = this.ownersOn(a, date);
+    const total = o.reduce((s, x) => s + Number(x.share), 0) || 100;
+    return (Number(o.find((x) => x.id === who)?.share) || 0) / total;
+  },
+  // The assets someone has a share in today (everyone's for 'all'), in the order they were added.
+  list(who = People.viewing(), date = todayISO()) { return DB.assets.filter((a) => who === 'all' || this.shareOf(a, who, date) > 0); },
+  held(a, date) { return (!a.acquired || a.acquired <= date) && (!a.closed || a.closed > date); },
+  amountOn(a, date) {
+    const v = (a.values || []).filter((x) => x.date <= date).sort(byDate).pop();
+    return v ? Number(v.amount) : null;
+  },
+  latest(a) { return (a.values || []).slice().sort(byDate).pop() || null; },
+  ratesOn(date) { return DB.rates.filter((r) => r.date <= date).sort(byDate).pop() || null; },
+  fx(currency, rates) { return !currency || currency === 'PKR' ? 1 : Number(rates?.fx?.[currency]) || null; },
+  // Rupees for the whole asset on a date: 0 when not held then, null when a price it needs is missing.
+  valueOn(a, date = todayISO(), rates = this.ratesOn(date)) {
+    if (!this.held(a, date)) return 0;
+    if (a.kind === 'gold') { const r = Number(rates?.gold?.[a.karat]); return r ? this.tola(a) * r : null; }
+    if (a.kind === 'silver') { const r = Number(rates?.silver); return r ? this.tola(a) * r : null; }
+    const amount = this.amountOn(a, date);
+    if (amount == null) return 0;
+    const fx = this.fx(a.currency, rates);
+    return fx == null ? null : amount * fx * (this.kind(a.kind).minus ? -1 : 1);
+  },
+  // Someone's part of it (their share), or the whole thing for 'all'.
+  partOn(a, who, date = todayISO(), rates = this.ratesOn(date)) {
+    const v = this.valueOn(a, date, rates);
+    return v == null ? null : who === 'all' ? v : v * this.shareOf(a, who, date);
+  },
+  // Totals for a person (or everyone) on a date: by kind, net worth, metal weights in tola, and what has no price.
+  totals(who = People.viewing(), date = todayISO()) {
+    const rates = this.ratesOn(date);
+    const byKind = Object.fromEntries(ASSET_KINDS.map((k) => [k.id, 0]));
+    const tola = { gold: 0, silver: 0 };
+    const missing = [];
+    for (const a of DB.assets) {
+      const share = who === 'all' ? 1 : this.shareOf(a, who, date);
+      if (!share || !this.held(a, date)) continue;
+      if (this.metal(a)) tola[a.kind] += this.tola(a) * share;
+      const v = this.partOn(a, who, date, rates);
+      if (v == null) missing.push(a); else byKind[a.kind] += v;
+    }
+    const net = Object.values(byKind).reduce((s, v) => s + v, 0);
+    return { byKind, net, tola, missing, rates };
+  },
+  // ----- Changing them (callers save with changed('assets') / changed('rates')) -----
+  cleanOwners(people) {
+    const list = (people || []).map((p) => ({ id: p.id, share: Math.round(Number(p.share) * 100) / 100 })).filter((p) => p.share > 0);
+    return list.length ? list : [{ id: ME, share: 100 }];
+  },
+  sharesOk(people) { const s = (people || []).reduce((t, p) => t + (Number(p.share) || 0), 0); return Math.abs(s - 100) < 0.01; },
+  add(data) {
+    const a = {
+      id: uid(), kind: data.kind, name: (data.name || '').trim() || this.kind(data.kind).name, notes: data.notes || '',
+      karat: data.kind === 'gold' ? String(data.karat || '22') : '', grams: this.metal(data) ? Number(data.grams) || 0 : 0,
+      currency: this.metal(data) ? '' : data.currency || 'PKR', values: [],
+      owners: [{ from: '', people: this.cleanOwners(data.owners || People.forNew().map((id) => ({ id, share: 100 }))) }],
+      acquired: data.acquired || '', closed: '', created: Date.now(),
+    };
+    if (!this.metal(a) && data.amount !== '' && data.amount != null) a.values.push({ date: data.date || todayISO(), amount: Number(data.amount) || 0 });
+    DB.assets.push(a);
+    return a;
+  },
+  // A balance or value on a date (one per date: a second one that day replaces the first).
+  setValue(a, date, amount) {
+    a.values = [...(a.values || []).filter((v) => v.date !== date), { date, amount: Number(amount) || 0 }].sort(byDate);
+  },
+  removeValue(a, date) { a.values = (a.values || []).filter((v) => v.date !== date); },
+  // Change who owns it now (a correction: the latest owners are replaced, the history before stays).
+  setOwnersNow(a, people) {
+    const periods = (a.owners || []).slice().sort((x, y) => (x.from || '').localeCompare(y.from || ''));
+    const last = periods.pop() || { from: '' };
+    a.owners = [...periods, { from: last.from, people: this.cleanOwners(people) }];
+  },
+  // From this date on it's someone else's (or shared differently); who had it before is kept.
+  transfer(a, date, people) {
+    a.owners = [...(a.owners || []).filter((o) => o.from !== date), { from: date, people: this.cleanOwners(people) }]
+      .sort((x, y) => (x.from || '').localeCompare(y.from || ''));
+  },
+  // A person removed from People: their shares become yours (so nothing is left without an owner).
+  forgetPerson(id) {
+    for (const a of DB.assets) {
+      if (!(a.owners || []).some((o) => o.people.some((p) => p.id === id))) continue;
+      a.owners = a.owners.map((o) => {
+        const mine = o.people.filter((p) => p.id === id || p.id === ME).reduce((s, p) => s + Number(p.share), 0);
+        return { from: o.from, people: [...o.people.filter((p) => p.id !== id && p.id !== ME), ...(mine ? [{ id: ME, share: mine }] : [])] };
+      });
+    }
+  },
+  // Prices on a date (one entry per date: entering that date again replaces it).
+  setRates(r) {
+    const entry = { id: DB.rates.find((x) => x.date === r.date)?.id || uid(), date: r.date, gold: r.gold || {}, silver: Number(r.silver) || 0, fx: r.fx || {} };
+    DB.rates = [...DB.rates.filter((x) => x.date !== r.date), entry].sort(byDate);
+    return entry;
+  },
+  // Currencies other than rupees that some asset is kept in (they need an exchange rate).
+  foreign() { return [...new Set(DB.assets.filter((a) => !this.metal(a) && a.currency && a.currency !== 'PKR').map((a) => a.currency))].sort(); },
+};
+// Rupees grouped the local way (9,00,000); a minus goes in front: -Rs 5,000.
+const rupees = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '-' : ''}Rs ${Math.abs(v).toLocaleString('en-IN')}`; };
+const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
 
 // The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
 // To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
@@ -965,8 +1172,11 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // trash:   {id, kind:'tasks'|'notes', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
 // people:  {id, name, zakat: {day, month} | null} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
+// assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
+//           acquired, closed, notes, created} — what people own or owe (see Assets)
+// rates:   {id, date, gold: {'24','22','21','18'}, silver, fx: {USD, …}} — rupees per tola / per unit on a date
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -1010,7 +1220,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -1171,6 +1381,7 @@ const state = {
   labelManage: false,      // the panel's label list is open for renaming / recolouring / deleting
   selecting: false,        // Tasks is in "select several" mode (Selection)
   daySheet: false,         // the phone's calendar shows the picked day as a sheet from the bottom
+  assetForm: null,         // the Assets pop-up that's open: {type, id?, kind?}
 };
 
 // ===================== Data file (auto-save) =====================
@@ -1736,7 +1947,7 @@ function render() {
   $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
   renderPersonPick();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, notices: renderNotices, settings: renderSettings, trash: renderTrash };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, notices: renderNotices, settings: renderSettings, trash: renderTrash };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -1751,6 +1962,7 @@ function render() {
   $('.main').classList.toggle('wide', state.view === 'tasks' && taskLayout() === 'board');
   // Board: the page fits the window and only the board scrolls, so the top stays put and column names stick.
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
+  drawCharts();
   renderStatus();
 }
 
@@ -3595,6 +3807,311 @@ function renderTrash() {
     </div>`;
 }
 
+// ===================== Assets page =====================
+// Tabs: Overview (cards and charts), one per kind that has something, and Rates. The person picker decides whose
+// assets and whose shares are shown. Actions on the right of the title stay whichever tab is open.
+function assetTabs(list) {
+  return ['overview', ...ASSET_KINDS.filter((k) => list.some((a) => a.kind === k.id)).map((k) => k.id), 'rates'];
+}
+function renderAssets() {
+  const who = People.viewing();
+  const list = Assets.list(who);
+  const tabs = assetTabs(list);
+  let tab = device.get('assetTab', 'overview');
+  if (!tabs.includes(tab)) tab = 'overview';
+  const t = Assets.totals(who);
+  const label = (k) => (k === 'overview' ? 'Overview' : k === 'rates' ? 'Rates' : Assets.kind(k).name);
+  const body = tab === 'overview' ? assetOverview(who, list, t) : tab === 'rates' ? ratesTab() : assetKindTab(tab, who, list);
+  return `
+    <div class="page-head">
+      <div><h1>Assets</h1><p class="sub">${list.length ? `Net worth ${rupees(t.net)}${who === 'all' ? '' : ` for ${esc(People.name(who))}`}, at the latest rates` : 'What you own and owe, in one place'}</p></div>
+      <div class="row edit-only page-actions">
+        ${tab === 'rates' ? `<button class="btn primary" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>`
+          : `<button class="btn primary" data-action="asset-form" data-form-type="asset" data-kind="${tab === 'overview' ? 'cash' : esc(tab)}">${ic('plus', 'sm')}Add asset</button>`}
+        ${list.length ? `<button class="btn" data-action="asset-form" data-form-type="transfer">${ic('arrows-exchange', 'sm')}Transfer</button>` : ''}
+        ${list.some((a) => !Assets.metal(a) && !a.closed) ? `<button class="btn" data-action="asset-form" data-form-type="balances">Update balances</button>` : ''}
+      </div>
+    </div>
+    <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-asset-tab="${k}" role="tab" aria-selected="${k === tab}">${label(k)}</button>`).join('')}</div>
+    <div class="asset-body">${body}</div>`;
+}
+
+function assetOverview(who, list, t) {
+  if (!list.length) {
+    return `<div class="card empty-state"><p><b>Nothing here yet.</b> Add a bank account, gold, property or a debt, and Butler keeps its value by date.</p>
+      <button class="btn primary edit-only" data-action="asset-form" data-form-type="asset" data-kind="cash">${ic('plus', 'sm')}Add asset</button></div>`;
+  }
+  const cash = t.byKind.cash;
+  const debts = t.byKind.debt;
+  const card = (title, big, sub = '') => `<div class="card stat-card"><div class="stat-label">${title}</div><div class="stat">${big}</div>${sub ? `<div class="meta">${sub}</div>` : ''}</div>`;
+  const metal = (k) => (t.tola[k] ? card(Assets.kind(k).name, fmtTola(t.tola[k]), t.rates?.[k === 'gold' ? 'gold' : 'silver'] ? rupees(t.byKind[k]) : 'Add rates to see its value') : '');
+  const r = t.rates;
+  return `
+    ${t.missing.length ? `<div class="banner warn"><span>${ic('exclamation-mark')}<span>${plural(t.missing.length, 'asset')} can't be valued yet: ${esc(t.missing.slice(0, 3).map((a) => a.name).join(', '))}${t.missing.length > 3 ? ' and more' : ''} need${t.missing.length === 1 ? 's' : ''} a rate (gold, silver or exchange).</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="rates">Add rates</button></div>` : ''}
+    <div class="stat-grid">
+      ${card('Net worth', rupees(t.net), r ? `Rates from ${esc(fmtDay(r.date))}` : 'No rates yet')}
+      ${metal('gold')}${metal('silver')}
+      ${cash ? card('Cash and accounts', rupees(cash)) : ''}
+      ${debts ? card('Debts', rupees(debts)) : ''}
+    </div>
+    <div class="grid chart-grid">
+      <div class="card"><h2>Net worth over the last year</h2>${worthChart(who)}</div>
+      <div class="card"><h2>By kind</h2>${kindBars(t)}</div>
+    </div>`;
+}
+
+// One kind's assets as rows: name, owners, details, value now. A row opens it.
+function assetKindTab(kind, who, list) {
+  const rows = list.filter((a) => a.kind === kind).map((a) => {
+    const v = Assets.partOn(a, who);
+    const owners = Assets.ownersOn(a);
+    const shared = People.several() && !(owners.length === 1 && owners[0].id === (who === 'all' ? ME : who));
+    const latest = Assets.latest(a);
+    const detail = Assets.metal(a)
+      ? `${a.kind === 'gold' ? `${esc(a.karat)}K, ` : ''}${fmtTola(Assets.tola(a))} (${Math.round(a.grams * 100) / 100} g)`
+      : `${latest ? `${esc(a.currency || 'PKR')} ${Math.round(latest.amount).toLocaleString('en-IN')} on ${esc(fmtDay(latest.date))}` : 'No amount yet'}`;
+    return `
+      <li class="item asset-row ${a.closed ? 'done' : ''}">
+        <span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>
+        <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
+          <div class="title">${esc(a.name)} ${shared ? `<span class="who-badges" title="${esc(owners.map((o) => `${People.name(o.id)} ${o.share}%`).join(', '))}">${owners.map((o) => avatar(o.id)).join('')}</span>` : ''}</div>
+          <div class="meta"><span>${detail}</span>${a.closed ? `<span>Closed ${esc(fmtDay(a.closed))}</span>` : ''}${shared && who !== 'all' ? `<span>${Math.round(Assets.shareOf(a, who) * 100)}% share</span>` : ''}</div>
+        </div>
+        <span class="asset-value">${v == null ? '<span class="meta">Needs a rate</span>' : rupees(v)}</span>
+      </li>`;
+  }).join('');
+  return `<div class="card"><ul class="list">${rows || '<li class="empty">Nothing here</li>'}</ul></div>`;
+}
+
+function ratesTab() {
+  const list = [...DB.rates].sort(byDate).reverse();
+  const fx = (r) => Object.entries(r.fx || {}).filter(([, v]) => Number(v)).map(([c, v]) => `${esc(c)} ${Number(v).toLocaleString('en-IN')}`);
+  const rows = list.map((r) => `
+    <li class="item">
+      <span class="tl-date">${esc(fmtDay(r.date))}</span>
+      <div class="body"><div class="meta rate-line">
+        ${KARATS.filter((k) => Number(r.gold?.[k])).map((k) => `<span>${k}K ${rupees(r.gold[k])}</span>`).join('')}
+        ${Number(r.silver) ? `<span>Silver ${rupees(r.silver)}</span>` : ''}
+        ${fx(r).map((s) => `<span>${s}</span>`).join('')}
+      </div></div>
+      <button class="icon-btn edit-only" data-action="delete-rates" data-id="${esc(r.id)}" title="Delete these rates" aria-label="Delete the rates of ${esc(fmtDay(r.date))}">${ic('x')}</button>
+    </li>`).join('');
+  return `<p class="sub">Gold and silver in rupees per tola (11.7 g); other currencies in rupees for one. Each value uses the latest rates on or before its day.</p>
+    <div class="card"><ul class="list">${rows || '<li class="empty">No rates yet</li>'}</ul></div>`;
+}
+
+// Net worth at the end of each of the last 12 months (the last point is today): one line, one colour, a dot per month
+// with its value on hover, and the same numbers as a table. The drawing is made at the card's real width once the
+// page is on screen (drawCharts), so its text stays 11px instead of shrinking with the card.
+function worthPoints(who) {
+  const now = new Date();
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = toISO(i === 11 ? now : new Date(now.getFullYear(), now.getMonth() - 10 + i, 0)); // end of each earlier month
+    return { d, v: Assets.totals(who, d).net };
+  });
+}
+function worthChart(who) {
+  const pts = worthPoints(who);
+  return `<div class="worth-chart" data-worth="${esc(JSON.stringify(pts))}">${worthSvg(pts, 600)}</div>
+    <details class="chart-table"><summary>Show as a table</summary>
+      <table>${pts.map((p, i) => `<tr><td>${esc(i === 11 ? 'Today' : fmtDay(p.d))}</td><td>${esc(rupees(p.v))}</td></tr>`).join('')}</table>
+    </details>`;
+}
+function drawCharts() {
+  for (const el of $$('#main .worth-chart')) {
+    const w = Math.round(el.clientWidth);
+    if (w > 0 && w !== Number(el.dataset.w)) { el.dataset.w = w; el.innerHTML = worthSvg(JSON.parse(el.dataset.worth), w); }
+  }
+}
+let chartTimer;
+window.addEventListener('resize', () => { clearTimeout(chartTimer); chartTimer = setTimeout(drawCharts, 150); });
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function worthSvg(pts, W) {
+  const H = 200, L = 52, R = 12, T = 12, B = 26;
+  const vals = pts.map((p) => p.v);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  if (hi === lo) hi = lo + 1;
+  const x = (i) => L + (i * (W - L - R)) / (pts.length - 1);
+  const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+  const compact = (v) => new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+  const ticks = [lo, (lo + hi) / 2, hi];
+  const month = (d) => MONTHS_SHORT[parseISO(d).getMonth()];
+  const every = W < 420 ? 3 : 2; // fewer month names on a narrow card
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+  return `
+    <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Net worth at the end of each month for the last year, from ${esc(rupees(pts[0].v))} to ${esc(rupees(pts[11].v))}">
+      ${ticks.map((v) => `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text class="axis" x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${esc(compact(v))}</text>`).join('')}
+      ${pts.map((p, i) => ((11 - i) % every === 0 ? `<text class="axis" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${i === 11 ? 'Now' : month(p.d)}</text>` : '')).join('')}
+      <path class="chart-line" d="${line}"/>
+      ${pts.map((p, i) => `<g class="chart-pt"><circle class="hit" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="14"/><circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4"/><title>${esc(i === 11 ? 'Today' : fmtDay(p.d))}: ${esc(rupees(p.v))}</title></g>`).join('')}
+    </svg>`;
+}
+
+// What it's made of, as bars of one colour (debts muted, taken off), each named and valued in text.
+function kindBars(t) {
+  const rows = ASSET_KINDS.filter((k) => t.byKind[k.id]).map((k) => ({ k, v: t.byKind[k.id] }));
+  if (!rows.length) return '<p class="meta">Values show here once assets have amounts and rates.</p>';
+  const max = Math.max(...rows.map((r) => Math.abs(r.v)));
+  return `<div class="kind-bars">${rows.map(({ k, v }) => `
+    <div class="kind-bar" title="${esc(k.name)}: ${esc(rupees(v))}">
+      <span class="kb-name">${ic(k.icon, 'sm')}${esc(k.name)}${k.minus ? ' <span class="meta">(taken off)</span>' : ''}</span>
+      <span class="kb-track"><span class="kb-fill ${k.minus ? 'minus' : ''}" style="width:${Math.max(2, (Math.abs(v) / max) * 100).toFixed(1)}%"></span></span>
+      <span class="kb-val">${rupees(v)}</span>
+    </div>`).join('')}</div>`;
+}
+
+// ----- Assets pop-ups: add or change an asset, transfer, update balances, rates -----
+// state.assetForm = {type: 'asset'|'transfer'|'balances'|'rates', id?, kind?}. Read-only shows an asset without Save.
+function ownerInputs(people, note = '') {
+  if (!People.several()) return '';
+  const share = (id) => people.find((p) => p.id === id)?.share || '';
+  return `<fieldset class="owner-box"><legend>Owners, % share</legend>
+    <div class="owner-grid">${People.list().map((p) => `<label>${avatar(p.id)}<span>${esc(p.name)}</span><input class="input" type="number" min="0" max="100" step="any" name="share-${esc(p.id)}" value="${esc(share(p.id))}" aria-label="${esc(p.name)}'s share in %"></label>`).join('')}</div>
+    <p class="meta" style="margin:6px 0 0">${note || 'The shares add up to 100. Leave someone empty if they own none of it.'}</p></fieldset>`;
+}
+const readOwners = (data) => (People.several()
+  ? People.list().map((p) => ({ id: p.id, share: Number(data[`share-${p.id}`]) || 0 })).filter((p) => p.share > 0)
+  : [{ id: ME, share: 100 }]);
+const currencyOptions = (cur) => [...new Set([...CURRENCIES, ...Assets.foreign(), cur || 'PKR'])].map((c) => `<option ${c === (cur || 'PKR') ? 'selected' : ''}>${esc(c)}</option>`).join('');
+
+function openAssetForm(type, opts = {}) {
+  state.assetForm = { type, ...opts };
+  renderAssetForm();
+}
+function closeAssetForm() { state.assetForm = null; $('#modal').innerHTML = ''; }
+function renderAssetForm() {
+  const f = state.assetForm;
+  if (!f) return;
+  const ro = state.readOnly;
+  const box = (title, inner, foot) => `
+    <div class="modal-back" data-action="asset-cancel"></div>
+    <form class="modal wide" data-form="asset-${f.type}" role="dialog" aria-label="${esc(title)}" autocomplete="off">
+      <h3>${esc(title)}</h3>
+      <fieldset class="plain" ${ro ? 'disabled' : ''}>${inner}</fieldset>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro ? 'Close' : 'Cancel'}</button>${ro ? '' : '<button class="btn primary">Save</button>'}</div>
+    </form>`;
+  let html = '';
+  if (f.type === 'asset') {
+    const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
+    const kind = a ? a.kind : f.kind || 'cash';
+    const metal = !!Assets.kind(kind).metal;
+    const owners = a ? Assets.ownersOn(a) : People.forNew().map((id) => ({ id, share: 100 }));
+    const history = a && !metal ? (a.values || []).slice().sort(byDate).reverse() : [];
+    html = box(a ? a.name : 'Add asset', `
+      <div class="row">
+        ${a ? '' : `<label class="field">Kind<select class="input" name="kind" data-asset-kind>${ASSET_KINDS.map((k) => `<option value="${k.id}" ${k.id === kind ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}</select></label>`}
+        <label class="field grow">Name<input class="input" name="name" value="${esc(a ? a.name : '')}" placeholder="${esc({ cash: 'e.g. Savings account', gold: 'e.g. Gold set', silver: 'e.g. Silver ring', property: 'e.g. Plot 12', vehicle: 'e.g. Family car', debt: 'e.g. Car loan', owed: 'e.g. Loan to a friend' }[kind] || 'Name')}" maxlength="80" required></label>
+      </div>
+      ${metal ? `
+        <div class="row">
+          ${kind === 'gold' ? `<label class="field">Karat<select class="input" name="karat">${KARATS.map((k) => `<option value="${k}" ${String(a ? a.karat : '22') === k ? 'selected' : ''}>${k}K</option>`).join('')}</select></label>` : ''}
+          <label class="field">Weight<input class="input" type="number" min="0" step="any" name="weight" value="${a ? Math.round(a.grams * 1000) / 1000 : ''}" required></label>
+          <label class="field">In<select class="input" name="unit"><option value="g">grams</option><option value="tola">tola (11.7 g)</option></select></label>
+        </div>` : `
+        <div class="row">
+          <label class="field">Currency<select class="input" name="currency">${currencyOptions(a ? a.currency : 'PKR')}</select></label>
+          <label class="field">${kind === 'cash' ? 'Balance' : kind === 'debt' ? 'Still owed' : kind === 'owed' ? 'Owed to you' : 'Value'}<input class="input" type="number" step="any" name="amount" value="" ${a ? '' : 'required'} placeholder="${a ? 'New amount' : ''}"></label>
+          <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}"></label>
+        </div>
+        ${history.length ? `<div class="value-history"><div class="meta">Amounts kept</div>${history.map((v) => `<div class="vh-row"><span>${esc(fmtDay(v.date))}</span><span>${esc(a.currency || 'PKR')} ${Number(v.amount).toLocaleString('en-IN')}</span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDay(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
+      <div class="row">
+        <label class="field">Since (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
+        ${a ? `<label class="field">Sold or closed on<input class="input" type="date" name="closed" value="${esc(a.closed || '')}"></label>` : ''}
+      </div>
+      ${ownerInputs(owners, a && (a.owners || []).length > 1 ? 'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
+      <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
+      a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '');
+  } else if (f.type === 'transfer') {
+    const list = Assets.list().filter((a) => !a.closed);
+    const a = DB.assets.find((x) => x.id === f.id) || list[0];
+    html = box('Transfer', `
+      <p class="meta" style="margin:0">From the date you pick, the asset belongs to the new owners. Who had it before is kept, so earlier values and zakat still count them.</p>
+      <div class="row">
+        <label class="field grow">Asset<select class="input" name="asset" data-transfer-asset>${list.map((x) => `<option value="${esc(x.id)}" ${a && x.id === a.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+        <label class="field">From<input class="input" type="date" name="from" value="${todayISO()}" required></label>
+      </div>
+      ${a ? `<p class="meta" style="margin:0">Now: ${esc(Assets.ownersOn(a).map((o) => `${People.name(o.id)} ${o.share}%`).join(', '))}</p>` : ''}
+      ${People.several() ? ownerInputs([], 'The new shares, adding up to 100.') : '<p class="meta">Add people in Settings › People first: an asset can only move to someone on the list.</p>'}`);
+  } else if (f.type === 'balances') {
+    const list = Assets.list().filter((a) => !Assets.metal(a) && !a.closed);
+    html = box('Update balances', `
+      <p class="meta" style="margin:0">Type the amounts as they are on the day. Leave one as it is to keep it.</p>
+      <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
+      <div class="balance-list">${list.map((a) => `<label class="bal-row"><span>${ic(Assets.kind(a.kind).icon, 'sm')}${esc(a.name)} <span class="meta">${esc(a.currency || 'PKR')}</span></span><input class="input" type="number" step="any" name="bal-${esc(a.id)}" value="${Assets.latest(a) ? esc(Assets.latest(a).amount) : ''}"></label>`).join('')}</div>`);
+  } else if (f.type === 'rates') {
+    const last = Assets.ratesOn(todayISO()) || {};
+    const cur = Assets.foreign();
+    html = box('Add rates', `
+      <p class="meta" style="margin:0">Rupees per tola for gold and silver, and rupees for one of each other currency, on the day. Filled in from the last rates.</p>
+      <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
+      <div class="rate-grid">
+        ${KARATS.map((k) => `<label class="field">Gold ${k}K<input class="input" type="number" min="0" step="any" name="gold-${k}" value="${esc(last.gold?.[k] || '')}"></label>`).join('')}
+        <label class="field">Silver<input class="input" type="number" min="0" step="any" name="silver" value="${esc(last.silver || '')}"></label>
+        ${cur.map((c) => `<label class="field">${esc(c)}<input class="input" type="number" min="0" step="any" name="fx-${esc(c)}" value="${esc(last.fx?.[c] || '')}"></label>`).join('')}
+      </div>`);
+  }
+  $('#modal').innerHTML = html;
+  $('#modal input:not([type=hidden]), #modal select')?.focus();
+}
+
+function formError(msg) { const p = $('#modal .form-error'); if (p) { p.textContent = msg; p.hidden = false; } }
+
+// Saving a pop-up. Returns quietly (the pop-up stays, with a message) when something doesn't add up.
+function submitAssetForm(type, data) {
+  const f = state.assetForm;
+  if (!f || state.readOnly) return;
+  if (type === 'asset') {
+    const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
+    const kind = a ? a.kind : data.kind;
+    const owners = readOwners(data);
+    if (!Assets.sharesOk(owners)) return formError('The shares need to add up to 100%.');
+    const grams = Assets.kind(kind).metal ? (Number(data.weight) || 0) * (data.unit === 'tola' ? TOLA_G : 1) : 0;
+    if (data.closed && data.acquired && data.closed < data.acquired) return formError('It can\'t be closed before it was had.');
+    if (a) {
+      Object.assign(a, { name: data.name.trim() || a.name, notes: data.notes || '', acquired: data.acquired || '', closed: data.closed || '' });
+      if (Assets.metal(a)) { a.grams = grams; if (a.kind === 'gold') a.karat = data.karat; } else {
+        a.currency = data.currency || 'PKR';
+        if (data.amount !== '') Assets.setValue(a, data.date || todayISO(), data.amount);
+      }
+      Assets.setOwnersNow(a, owners);
+      toast(`Saved "${a.name}"`);
+    } else {
+      const n = Assets.add({ ...data, kind, grams, owners });
+      device.set('assetTab', n.kind);
+      toast(`Added "${n.name}"`);
+    }
+    changed('assets');
+  } else if (type === 'transfer') {
+    const a = DB.assets.find((x) => x.id === data.asset);
+    if (!a) return closeAssetForm();
+    const owners = readOwners(data);
+    if (!owners.length || !Assets.sharesOk(owners)) return formError('The new shares need to add up to 100%.');
+    Assets.transfer(a, data.from, owners);
+    changed('assets');
+    toast(`"${a.name}" belongs to ${owners.map((o) => People.name(o.id)).join(' and ')} from ${fmtDay(data.from)}`);
+  } else if (type === 'balances') {
+    let n = 0;
+    for (const a of Assets.list().filter((x) => !Assets.metal(x) && !x.closed)) {
+      const v = data[`bal-${a.id}`];
+      if (v === '' || v == null) continue;
+      if (Assets.amountOn(a, data.date) === Number(v) && (a.values || []).some((x) => x.date <= data.date)) continue; // unchanged
+      Assets.setValue(a, data.date, v);
+      n++;
+    }
+    if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDay(data.date)}`); }
+  } else if (type === 'rates') {
+    const gold = Object.fromEntries(KARATS.map((k) => [k, Number(data[`gold-${k}`]) || 0]).filter(([, v]) => v));
+    const fx = Object.fromEntries(Assets.foreign().map((c) => [c, Number(data[`fx-${c}`]) || 0]).filter(([, v]) => v));
+    if (!Object.keys(gold).length && !Number(data.silver) && !Object.keys(fx).length) return formError('Type at least one rate.');
+    Assets.setRates({ date: data.date, gold, silver: data.silver, fx });
+    changed('rates');
+    toast(`Rates saved for ${fmtDay(data.date)}`);
+  }
+  closeAssetForm();
+  render();
+}
+
 // Notifications: every message shown in the last 30 days, newest first, by day. One about a task opens it.
 function renderNotices() {
   const list = [...DB.notices].sort((a, b) => b.at - a.at);
@@ -4627,6 +5144,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -4653,6 +5171,9 @@ document.addEventListener('click', (e) => {
 
   const note = e.target.closest('[data-note]');
   if (note) { state.activeNote = note.dataset.note; return render(); }
+
+  const assetTab = e.target.closest('[data-asset-tab]');
+  if (assetTab) { device.set('assetTab', assetTab.dataset.assetTab); return render(); }
 
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -4874,6 +5395,27 @@ document.addEventListener('click', (e) => {
       renderDrawer();
       break;
     }
+    case 'asset-form': openAssetForm(btn.dataset.formType, { kind: btn.dataset.kind, id: btn.dataset.id }); break;
+    case 'open-asset': openAssetForm('asset', { id }); break;
+    case 'asset-cancel': closeAssetForm(); break;
+    case 'asset-value-off': {
+      const a = state.assetForm && DB.assets.find((x) => x.id === state.assetForm.id);
+      if (a) { Assets.removeValue(a, btn.dataset.date); changed('assets'); renderAssetForm(); render(); }
+      break;
+    }
+    case 'delete-asset': {
+      const a = state.assetForm && DB.assets.find((x) => x.id === state.assetForm.id);
+      if (!a) break;
+      closeAssetForm();
+      ask(`Delete "${a.name}"? Its amounts and owners go with it. To keep its history, set "Sold or closed on" instead.`, { yes: 'Delete', danger: true })
+        .then((yes) => { if (yes) { DB.assets = DB.assets.filter((x) => x !== a); changed('assets'); render(); } });
+      break;
+    }
+    case 'delete-rates': {
+      const r = DB.rates.find((x) => x.id === id);
+      if (r) ask(`Delete the rates of ${fmtDay(r.date)}?`, { yes: 'Delete', danger: true }).then((yes) => { if (yes) { DB.rates = DB.rates.filter((x) => x !== r); changed('rates'); render(); } });
+      break;
+    }
     case 'person-off': {
       const kind = btn.dataset.kind;
       const r = DB[kind] && DB[kind].find((x) => x.id === id);
@@ -4952,6 +5494,7 @@ document.addEventListener('submit', (e) => {
   if (state.readOnly) return toast('Read-only on this device');
   const data = Object.fromEntries(new FormData(form));
   if (form.dataset.form === 'done-date') { finishDonePrompt(data); return; }
+  if (form.dataset.form.startsWith('asset-')) { submitAssetForm(form.dataset.form.slice(6), data); return; }
   if (form.dataset.form === 'add-reminder') {
     const t = currentTask();
     const k = form.dataset.kind;
@@ -5017,6 +5560,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
+  if (state.assetForm) { closeAssetForm(); return; }
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (Selection.on() && !state.openTask) { Selection.stop(); return; }
   if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return; }
@@ -5026,7 +5570,7 @@ document.addEventListener('keydown', (e) => {
 // (on Tasks if this screen has none), ? lists them.
 const SHORTCUT_VIEWS = ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings'];
 function shortcut(e) {
-  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt) return false;
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false;
   if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return false;
   const n = SHORTCUT_VIEWS[Number(e.key) - 1];
   if (n) { setView(n); return true; }
@@ -5236,6 +5780,15 @@ document.addEventListener('change', (e) => {
     renderDrawer();
     return;
   }
+  // Assets pop-ups: a different kind (while adding) or asset (transfer) redraws the form for it.
+  if (e.target.matches?.('[data-asset-kind]') && state.assetForm) {
+    const name = $('#modal [name="name"]')?.value || '';
+    openAssetForm('asset', { kind: e.target.value });
+    const box = $('#modal [name="name"]');
+    if (box) box.value = name;
+    return;
+  }
+  if (e.target.matches?.('[data-transfer-asset]') && state.assetForm) { openAssetForm('transfer', { id: e.target.value }); return; }
   if (e.target.dataset?.personAdd && !state.readOnly) {
     const kind = e.target.dataset.personAdd;
     const r = DB[kind] && DB[kind].find((x) => x.id === e.target.dataset.id);

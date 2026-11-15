@@ -60,6 +60,22 @@ _Avoid_: me (in what the app says), self
 Whose things the screens show on this device: Everyone or one person. It filters what you see; it never changes who anything belongs to.
 _Avoid_: profile, switch user, filter (in conversation)
 
+**Asset**:
+Something a person owns or owes, of one kind: gold, silver, cash and accounts, property, a vehicle, an investment, money owed to you, a debt, or other. A debt is an asset that counts as minus.
+_Avoid_: holding, item (in conversation)
+
+**Amount**:
+What a non-metal asset was on a day: an account's balance, a property's value, what's still owed. Kept by date; the value on a day is the latest amount on or before it.
+_Avoid_: entry, snapshot
+
+**Rates**:
+A day's prices: gold per tola for each karat, silver per tola, and rupees for one of each other currency. Gold, silver and foreign amounts are valued with the latest rates on or before the day.
+_Avoid_: prices (in conversation), quotes
+
+**Transfer**:
+Giving an asset (or a share of it) to someone else from a date on. Who owned it before is kept, so earlier days still count them.
+_Avoid_: move, reassign
+
 **Zakat day**:
 A person's yearly zakat date, kept as an Islamic day and month (for example 15th Sha'ban).
 

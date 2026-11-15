@@ -193,13 +193,27 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <h3>People</h3>
           <p>Butler can keep things for your family too. Add each person in <b>Settings › People</b>, for example "Sam". Everything you already had is yours.</p>
           <ul>
-            <li><b>Whose things to show:</b> once there's someone besides you, a box at the top of the sidebar (on a phone, above the page) picks <b>Everyone</b> or one person. My Day, Tasks, the Calendar and Notes then show only that person's things. Each device remembers its own choice.</li>
+            <li><b>Whose things to show:</b> once there's someone besides you, a box at the top of the sidebar (on a phone, above the page) picks <b>Everyone</b> or one person. My Day, Tasks, the Calendar, Notes and Assets then show only that person's things. Each device remembers its own choice.</li>
             <li><b>New things</b> go to the person being shown (to you when showing Everyone).</li>
             <li><b>Several people:</b> a task's panel has a <b>People</b> row, and a note shows its people above it. <b>+ Add</b> puts someone on it, × takes them off. Something always belongs to at least one person.</li>
             <li><b>Initials</b> beside a task or note show who else it's for.</li>
             <li><b>Reminders and To Do:</b> only tasks you're on remind you and go to your To Do. A task that's only Sam's stays in Butler; if you want reminding, add yourself to it. Taking yourself off a task removes it from your To Do.</li>
             <li><b>Zakat day:</b> each person can have one, as an Islamic date (for example 15th Sha'ban).</li>
-            <li><b>Removing someone</b> asks first. Anything that was only theirs becomes yours.</li>
+            <li><b>Removing someone</b> asks first. Anything that was only theirs becomes yours, their share of an asset too.</li>
+          </ul>
+        </section>
+        <section id="assets" data-title="Assets">
+          <h3>Assets</h3>
+          <p><b>Assets</b> in the sidebar keeps what you own and owe, and what it's worth on any day.</p>
+          <ul>
+            <li><b>Tabs:</b> Overview, then one for each kind you have (Gold, Silver, Cash and accounts, Property, Vehicles, Investments, Owed to you, Debts, Other), then Rates. On a phone the tabs scroll sideways.</li>
+            <li><b>Add asset:</b> pick the kind and a name. Gold asks its karat and weight (grams or tola; 1 tola is 11.7 g), silver its weight. Everything else asks its currency and amount on a day: a balance, a value, money owed to you, or what's still owed on a debt.</li>
+            <li><b>Amounts by date:</b> open an asset and type a new amount to keep it beside the old ones, or use <b>Update balances</b> to type every account's balance for one day. A value on a day is the latest amount on or before it.</li>
+            <li><b>Rates:</b> gold (each karat) and silver in rupees per tola, and other currencies in rupees, by day. Gold, silver and foreign accounts are valued with the latest rates on or before the day. Something with no rate yet says so instead of counting as nothing.</li>
+            <li><b>Owners:</b> with people added, an asset can be shared, for example 50% each. <b>Transfer</b> gives it to someone else from a date on; who had it before is kept, so earlier days still count them.</li>
+            <li><b>Debts</b> are taken off your net worth. A sold car or a closed account gets a "sold or closed on" date, so it stops counting from then but its history stays.</li>
+            <li><b>Overview:</b> net worth and cards for gold, silver, cash and debts, a line of your net worth at the end of each month for the last year (point at a dot for its value, or open it as a table), and bars by kind.</li>
+            <li><b>Whose:</b> the person picker shows one person's assets and their share of each, or everyone's.</li>
           </ul>
         </section>
       </div>
