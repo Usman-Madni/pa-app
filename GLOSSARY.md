@@ -79,6 +79,17 @@ _Avoid_: move, reassign
 **Zakat day**:
 A person's yearly zakat date, kept as an Islamic day and month (for example 15th Sha'ban).
 
+**Zakat record**:
+One person's zakat for one year: what they had on their zakat day (their share of each asset, at that day's rates), the nisab, and what's due. A draft until marked done; done, it's frozen.
+_Avoid_: calculation, payable (in what the app says)
+
+**Nisab**:
+The least wealth on which zakat is due: 52.5 tola of silver at the day's silver rate.
+
+**Carried**:
+Paid more than a year's zakat and counted towards the next year, instead of kept as extra charity.
+_Avoid_: credit, advance
+
 ## Storage and devices
 
 **Data file**:

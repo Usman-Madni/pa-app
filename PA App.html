@@ -174,6 +174,31 @@ button:disabled { cursor: not-allowed; }
 .bal-row .input { text-align: right; }
 .rate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+/* ===== Zakat ===== */
+.pill.zk-left { background: color-mix(in srgb, var(--danger) 11%, transparent); color: color-mix(in srgb, var(--danger) 78%, var(--text)); }
+.pill.zk-paid { background: color-mix(in srgb, var(--ok) 14%, transparent); color: color-mix(in srgb, var(--ok) 75%, var(--text)); }
+.zk-person { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); margin: 8px 0 10px; }
+.zk-items { display: flex; flex-direction: column; gap: 4px; }
+.zk-item { display: grid; grid-template-columns: auto minmax(0, 1fr) 150px; gap: 10px; align-items: center; font-size: var(--t-sm); padding: 2px 0; }
+.zk-item.off .zk-name { color: var(--muted); text-decoration: line-through; }
+.zk-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--text); }
+.zk-item .input { text-align: right; padding: 5px 8px; }
+.zk-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.zk-sums { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); color: var(--muted); }
+.zk-sums > div { display: flex; justify-content: space-between; gap: 12px; }
+.zk-sums b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.zk-sums .zk-due { font-size: var(--t-md); color: var(--text); }
+.zk-round { display: flex; align-items: center; gap: 6px; }
+.zk-problem { color: var(--danger); margin: 0; }
+.zk-excess label { display: flex; align-items: center; gap: 8px; font-size: var(--t-sm); padding: 3px 0; }
+/* The phone's More (hidden on wider screens, where the sidebar has room for everything) */
+.more-btn { display: none; }
+.more-back { position: fixed; inset: 0; background: var(--scrim); z-index: 18; }
+.more-panel { position: fixed; z-index: 19; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-float); padding: 6px; display: flex; flex-direction: column; }
+.more-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; background: none; border-radius: var(--r-md); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.more-link.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.more-link .nav-count { margin-left: auto; }
+@media (min-width: 681px) { #more-sheet { display: none; } }
 .trash-row .row { flex-wrap: nowrap; }
 .notice-list { padding: 6px 0; }
 .notice-day { padding: 14px 16px 4px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
@@ -609,7 +634,9 @@ body.phone .p-when-time { flex: 1 1 auto; }
     flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--border);
   }
-  .brand, .side-foot, .person-pick { display: none; }
+  .brand, .side-foot, .person-pick, .nav-btn.more-item { display: none; }
+  .nav-btn.more-btn { display: flex; }
+  .zk-item { grid-template-columns: auto minmax(0, 1fr) 110px; }
   .who-bar:not(:empty) { display: block; margin-bottom: 12px; }
   .who-bar .person-pick { display: flex; margin: 0; padding: 0; }
   .nav-btn { flex-direction: column; gap: 2px; font-size: 10.5px; padding: 6px 0; flex: 1; min-width: 0; align-items: center; } /* seven fit at 375px */
@@ -674,8 +701,10 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
     <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
-    <button class="nav-btn" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
-    <button class="nav-btn" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
+    <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
+    <button class="nav-btn more-item" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
+    <button class="nav-btn more-item" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
+    <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
     <div class="side-foot">
       <button class="nav-btn trash-nav" data-view="trash" title="Deleted tasks and notes, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
       <div class="df-badge" id="df-badge"></div>
@@ -683,6 +712,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
       <a class="theme-btn" href="PA App Guide.html" target="_blank" rel="noopener"><svg class="i sm" aria-hidden="true"><use href="#i-help-circle"/></svg>Guide</a>
     </div>
   </nav>
+  <div id="more-sheet"></div>
   <main class="main"><div id="banner"></div><div id="who-bar" class="who-bar"></div><div id="main"></div></main>
 </div>
 <div class="drawer-backdrop" data-action="close-task"></div>
@@ -732,6 +762,8 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 9l5 -5l5 5"/><path d="M12 4l0 12"/></symbol>
 <symbol id="i-users" viewBox="0 0 24 24"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></symbol>
+<symbol id="i-coins" viewBox="0 0 24 24"><path d="M9 14c0 1.66 2.69 3 6 3s6 -1.34 6 -3s-2.69 -3 -6 -3s-6 1.34 -6 3z"/><path d="M9 14v4c0 1.66 2.69 3 6 3s6 -1.34 6 -3v-4"/><path d="M3 6c0 1.07 1.14 2.06 3 2.6s4.14 .54 6 0s3 -1.53 3 -2.6s-1.14 -2.06 -3 -2.6s-4.14 -.54 -6 0s-3 1.53 -3 2.6z"/><path d="M3 6v10c0 .89 .77 1.75 2 2.25"/><path d="M3 11c0 .89 .77 1.75 2 2.25"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
 <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M17 8v-3a1 1 0 0 0 -1 -1h-10a2 2 0 0 0 0 4h12a1 1 0 0 1 1 1v3m0 4v3a1 1 0 0 1 -1 1h-12a2 2 0 0 1 -2 -2v-12"/><path d="M20 12v4h-4a2 2 0 0 1 0 -4h4"/></symbol>
 <symbol id="i-diamond" viewBox="0 0 24 24"><path d="M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5"/><path d="M10 12l-2 -2.2l.6 -1"/></symbol>
 <symbol id="i-building-bank" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7 -3l7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></symbol>
@@ -1067,6 +1099,188 @@ const Assets = {
   // Currencies other than rupees that some asset is kept in (they need an exchange rate).
   foreign() { return [...new Set(DB.assets.filter((a) => !this.metal(a) && a.currency && a.currency !== 'PKR').map((a) => a.currency))].sort(); },
 };
+// ===================== Islamic dates =====================
+// The browser's own Umm al-Qura calendar, both ways. A local moon sighting is sometimes a day later, so a date
+// worked out here is a suggestion the user can change (a zakat record keeps the date chosen).
+const Hijri = {
+  fmt: null,
+  parts(iso) {
+    if (!this.fmt) {
+      this.fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' });
+    }
+    const [y, m, d] = iso.split('-').map(Number);
+    const p = Object.fromEntries(this.fmt.formatToParts(new Date(Date.UTC(y, m - 1, d, 12))).map((x) => [x.type, x.value]));
+    return { year: parseInt(p.year, 10), month: Number(p.month), day: Number(p.day) };
+  },
+  // The normal date of an Islamic day (year, month 1-12, day): start near it, then step until the calendar agrees.
+  toISO(hy, hm, hd) {
+    let t = Date.UTC(622, 6, 16, 12) + ((hy - 1) * 354.36667 + (hm - 1) * 29.5306 + (hd - 1)) * 864e5;
+    for (let i = 0; i < 40; i++) {
+      const d = new Date(t);
+      const p = this.parts(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`);
+      const diff = (hy - p.year) * 354.36667 + (hm - p.month) * 29.5306 + (hd - p.day);
+      if (Math.abs(diff) < 0.5) break;
+      t += (Math.round(diff) || Math.sign(diff)) * 864e5;
+    }
+    const d = new Date(t);
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  },
+  text(hy, hm, hd) { return `${ordinal(hd)} ${HIJRI_MONTHS[hm - 1]} ${hy}`; },
+};
+
+// ===================== Zakat =====================
+// One record per person per zakat year, dated their zakat day: what they had that day (their share of each asset,
+// valued at that day's rates), the nisab (52.5 tola of silver at that day's silver rate), and 2.5% of the total when
+// it's above the nisab, rounded up to the next 1,000 if chosen. It's made by a button (often a few days after the
+// day, still with that day's figures), checked as a draft, then marked done: frozen, so later changes to assets or
+// rates never touch it. It's due by the next zakat day. Payments count towards one record each (by default the
+// oldest with money left); paying more than is left is either carried to the next year or kept as extra charity.
+// Personal things (property, vehicles, other) start unticked; the user decides what counts.
+const NISAB_TOLA = 52.5;
+const ZAKAT_RATE = 0.025;
+const ZAKAT_SKIP = ['property', 'vehicle', 'other']; // usually for personal use: not counted unless ticked
+const Zakat = {
+  person(id) { return People.get(id); },
+  hasDay(id) { return !!this.person(id)?.zakat; },
+  dayFor(id, hy) { const z = this.person(id)?.zakat; return z ? Hijri.toISO(hy, z.month, z.day) : ''; },
+  // The person's zakat days around a date: the last one on or before it, and the next one after it.
+  around(id, date = todayISO()) {
+    const z = this.person(id)?.zakat;
+    if (!z) return null;
+    const hy = Hijri.parts(date).year;
+    const days = [hy - 1, hy, hy + 1].map((y) => ({ hyear: y, date: Hijri.toISO(y, z.month, z.day) }));
+    return { last: days.filter((d) => d.date <= date).pop() || null, next: days.find((d) => d.date > date) || null };
+  },
+  records(person = 'all') { return DB.zakat.filter((r) => person === 'all' || r.person === person).sort(byDate); },
+  recordFor(person, hy) { return DB.zakat.find((r) => r.person === person && r.hyear === hy) || null; },
+  payments(rec) { return DB.zakatPay.filter((p) => p.record === rec.id).sort(byDate); },
+  paid(rec) { return this.payments(rec).reduce((s, p) => s + Number(p.amount), 0); },
+  previous(rec) { return this.records(rec.person).filter((r) => r.date < rec.date).pop() || null; },
+  // An overpayment of the year before, when that year said to carry it.
+  carriedIn(rec, depth = 0) {
+    const p = this.previous(rec);
+    if (!p || p.excess !== 'carry' || p.status !== 'done' || depth > 50) return 0;
+    return Math.max(0, this.paid(p) + this.carriedIn(p, depth + 1) - p.due);
+  },
+  remaining(rec) { return rec.status === 'done' ? Math.max(0, rec.due - this.carriedIn(rec) - this.paid(rec)) : 0; },
+  extra(rec) { return rec.status === 'done' ? Math.max(0, this.paid(rec) + this.carriedIn(rec) - rec.due) : 0; },
+  dueBy(rec) { const n = this.around(rec.person, rec.date)?.next; return n ? n.date : toISO(addDays(parseISO(rec.date), 354)); },
+  // ----- A record (draft) -----
+  build(person, hy, date) {
+    const rates = Assets.ratesOn(date);
+    const rec = {
+      id: uid(), person, hyear: hy, date, status: 'draft', rates: rates ? { gold: { ...rates.gold }, silver: rates.silver, fx: { ...rates.fx } } : { gold: {}, silver: 0, fx: {} },
+      items: [], roundUp: true, excess: 'carry', total: 0, nisab: 0, raw: 0, due: 0, made: Date.now(), doneAt: 0,
+    };
+    rec.items = DB.assets.filter((a) => Assets.held(a, date) && Assets.shareOf(a, person, date) > 0 && (Assets.metal(a) || Assets.amountOn(a, date) != null)) // an account with no amount yet that day wasn't there
+      .map((a) => ({ asset: a.id, name: a.name, kind: a.kind, value: null, counted: !ZAKAT_SKIP.includes(a.kind), manual: false }));
+    this.revalue(rec);
+    return rec;
+  },
+  // Work a draft's figures out again: each item not typed by hand from its asset at the record's rates, then the sums.
+  revalue(rec) {
+    if (rec.status === 'done') return rec;
+    const r = { date: rec.date, ...rec.rates };
+    for (const it of rec.items) {
+      if (it.manual) continue;
+      const a = DB.assets.find((x) => x.id === it.asset);
+      it.value = a ? Assets.partOn(a, rec.person, rec.date, r) : null;
+    }
+    return this.sum(rec);
+  },
+  sum(rec) {
+    rec.total = rec.items.filter((i) => i.counted && i.value != null).reduce((s, i) => s + Number(i.value), 0);
+    rec.nisab = NISAB_TOLA * (Number(rec.rates.silver) || 0);
+    rec.raw = rec.nisab && rec.total > rec.nisab ? rec.total * ZAKAT_RATE : 0;
+    rec.due = rec.roundUp ? Math.ceil(rec.raw / 1000) * 1000 : Math.round(rec.raw);
+    return rec;
+  },
+  // What stops a draft being marked done (empty = nothing).
+  problems(rec) {
+    const out = [];
+    if (!Number(rec.rates.silver)) out.push('the silver rate (the nisab needs it)');
+    const unvalued = rec.items.filter((i) => i.counted && i.value == null);
+    if (unvalued.length) out.push(`a value for ${unvalued.map((i) => i.name).join(', ')}`);
+    return out;
+  },
+  // ----- Payments -----
+  // Where a payment goes by default: the person's oldest record with money left, else their latest.
+  defaultRecord(person) {
+    const list = this.records(person).filter((r) => r.status === 'done');
+    return list.find((r) => this.remaining(r) > 0) || list[list.length - 1] || null;
+  },
+  // Record a payment. More than is left on that record: 'carry' (the rest counts towards next year), 'charity' (kept as
+  // extra), or 'split' (what's left here, the rest to the next records with money left; anything over all of them is
+  // carried). Returns the payments made.
+  pay({ person, date, amount, to, record, excess }) {
+    const rec = DB.zakat.find((r) => r.id === record);
+    amount = Number(amount) || 0;
+    if (!rec || amount <= 0) return [];
+    const left = this.remaining(rec);
+    const made = [];
+    const add = (r, amt) => { const p = { id: uid(), person, date, amount: amt, to: to || '', record: r.id }; DB.zakatPay.push(p); made.push(p); };
+    if (amount > left && excess === 'split') {
+      let rest = amount;
+      for (const r of this.records(person).filter((x) => x.status === 'done' && x.date >= rec.date)) {
+        const l = this.remaining(r);
+        if (!l || rest <= 0) continue;
+        const amt = Math.min(l, rest);
+        add(r, amt);
+        rest -= amt;
+      }
+      if (rest > 0) { add(rec, rest); rec.excess = 'carry'; }
+    } else {
+      add(rec, amount);
+      if (amount > left && excess) rec.excess = excess;
+    }
+    return made;
+  },
+  // ----- The two tasks a year, for that person only -----
+  // "Make zakat record" due on the zakat day (made up to 60 days ahead; ticked once the record exists), and "Pay
+  // zakat" due a week before the next zakat day once a record is done (ticked when nothing is left). Their ids come
+  // from the person and the year, so the laptop and the phone never make two, and one the user deleted (its 30-day
+  // marker) isn't made again. Returns true if any task changed (the caller saves).
+  TASK_AHEAD_DAYS: 60,
+  ensureTasks(now = new Date()) {
+    if (state.readOnly) return false;
+    const today = toISO(now);
+    const gone = new Set(DB.deleted.filter((m) => m.key === 'tasks').map((m) => m.id));
+    let changedAny = false;
+    const prefix = (p) => (p.id === ME ? '' : `${p.name}: `);
+    const ensure = (id, title, due, person, note) => {
+      if (gone.has(id) || PendingDelete.has(id)) return null;
+      let t = DB.tasks.find((x) => x.id === id);
+      if (!t) {
+        t = normalizeTask({ id, title, due: `${due}T${ALL_DAY}`, people: [person], notes: note, created: Date.now() });
+        DB.tasks.push(t);
+        changedAny = true;
+      }
+      return t;
+    };
+    const finish = (t) => { if (t && !t.done) { Series.tick(t, now, true); changedAny = true; } };
+    for (const p of People.list().filter((x) => x.zakat)) {
+      const around = this.around(p.id, today);
+      for (const d of [around.last, around.next].filter(Boolean)) {
+        const id = `zk-make-${p.id}-${d.hyear}`;
+        const rec = this.recordFor(p.id, d.hyear);
+        if (rec) { finish(DB.tasks.find((x) => x.id === id)); continue; }
+        if (d.date > toISO(addDays(now, this.TASK_AHEAD_DAYS))) continue;
+        if (d === around.last && d.date < toISO(addDays(now, -330))) continue; // an old year with no record: let it be
+        ensure(id, `${prefix(p)}Make zakat record ${d.hyear}`, d.date, p.id, `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)}. Make it on Butler's Zakat page (Make record); it uses that day's balances and rates.`);
+      }
+    }
+    for (const rec of DB.zakat.filter((r) => r.status === 'done')) {
+      const p = People.get(rec.person);
+      if (!p) continue;
+      const id = `zk-pay-${rec.person}-${rec.hyear}`;
+      if (this.remaining(rec) <= 0) { finish(DB.tasks.find((x) => x.id === id)); continue; }
+      ensure(id, `${prefix(p)}Pay zakat ${rec.hyear}`, toISO(addDays(parseISO(this.dueBy(rec)), -7)), rec.person, `Due by ${fmtDay(this.dueBy(rec))}. Add payments on Butler's Zakat page.`);
+    }
+    return changedAny;
+  },
+};
+// After anything that can change the zakat tasks: make or tick them, and save.
+function zakatTasks() { if (Zakat.ensureTasks()) changed('tasks'); }
 // Rupees grouped the local way (9,00,000); a minus goes in front: -Rs 5,000.
 const rupees = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '-' : ''}Rs ${Math.abs(v).toLocaleString('en-IN')}`; };
 const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
@@ -1175,8 +1389,11 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
 //           acquired, closed, notes, created} — what people own or owe (see Assets)
 // rates:   {id, date, gold: {'24','22','21','18'}, silver, fx: {USD, …}} — rupees per tola / per unit on a date
+// zakat:   {id, person, hyear, date, status:'draft'|'done', rates, items: [{asset, name, kind, value, counted, manual}],
+//           roundUp, excess:'carry'|'charity', total, nisab, raw, due, made, doneAt} — a zakat record (see Zakat)
+// zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -1220,7 +1437,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -1345,6 +1562,8 @@ function renderUnread() {
   const n = state.readOnly ? 0 : Notices.unread();
   el.textContent = n > 99 ? '99+' : String(n);
   el.hidden = !n;
+  const mc = $('#more-count'); // the phone's More carries it too (Notifications is in there)
+  if (mc) { mc.textContent = el.textContent; mc.hidden = !n; }
   const tc = $('#trash-count'); // how many things are in the Trash
   if (tc) { tc.textContent = String(DB.trash.length); tc.hidden = !DB.trash.length; }
 }
@@ -1947,7 +2166,8 @@ function render() {
   $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
   renderPersonPick();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, notices: renderNotices, settings: renderSettings, trash: renderTrash };
+  renderMore();
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, notices: renderNotices, settings: renderSettings, trash: renderTrash };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -2737,6 +2957,20 @@ async function deleteLabel(id) {
   used.forEach((t) => { t.labels = t.labels.filter((x) => x !== id); });
   DB.labels = DB.labels.filter((x) => x.id !== id);
   changed('labels', 'tasks');
+}
+
+// ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
+const MORE_VIEWS = [['zakat', 'coins', 'Zakat'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+function renderMore() {
+  const btn = $('.more-btn');
+  if (!btn) return;
+  btn.classList.toggle('active', MORE_VIEWS.some(([v]) => v === state.view));
+  btn.setAttribute('aria-expanded', String(!!state.moreOpen));
+  const n = state.readOnly ? 0 : Notices.unread();
+  $('#more-sheet').innerHTML = state.moreOpen ? `
+    <div class="more-back" data-action="more"></div>
+    <div class="more-panel" role="menu">${MORE_VIEWS.map(([v, icon, label]) => `
+      <button class="more-link ${state.view === v ? 'active' : ''}" data-view="${v}" role="menuitem">${ic(icon)}<span>${label}</span>${v === 'notices' && n ? `<span class="nav-count">${n > 99 ? '99+' : n}</span>` : ''}</button>`).join('')}</div>` : '';
 }
 
 // ----- People on screen -----
@@ -3960,6 +4194,127 @@ function kindBars(t) {
     </div>`).join('')}</div>`;
 }
 
+// ===================== Zakat page =====================
+// Tabs: Overview, Records, Payments, Rates. Zakat is per person: with one person shown it's theirs; with Everyone,
+// the Overview has a card per person and the lists say whose each line is.
+const zakatTitle = (r) => { const p = People.get(r.person); return p?.zakat ? Hijri.text(r.hyear, p.zakat.month, p.zakat.day) : `Zakat ${r.hyear}`; };
+function zakatStatus(r) {
+  if (r.status !== 'done') return '<span class="pill zk-draft">Draft</span>';
+  const left = Zakat.remaining(r);
+  if (left > 0) return `<span class="pill zk-left">${rupees(left)} left</span>`;
+  const extra = Zakat.extra(r);
+  return `<span class="pill zk-paid">Paid${extra ? ` +${Math.round(extra).toLocaleString('en-IN')}` : ''}</span>`;
+}
+// Zakat days that have come with no record yet (for one person, or everyone).
+function zakatMissing(who) {
+  return People.list().filter((p) => p.zakat && (who === 'all' || p.id === who)).map((p) => ({ p, d: Zakat.around(p.id)?.last }))
+    .filter(({ p, d }) => d && !Zakat.recordFor(p.id, d.hyear) && d.date >= toISO(addDays(new Date(), -330)));
+}
+// Whose zakat the page is about: the person shown, or you when there's nobody else.
+const zakatWho = () => (People.several() ? People.viewing() : ME);
+function renderZakat() {
+  const who = zakatWho();
+  const tabs = ['overview', 'records', 'payments', 'rates'];
+  let tab = device.get('zakatTab', 'overview');
+  if (!tabs.includes(tab)) tab = 'overview';
+  const p = who === 'all' ? null : People.get(who);
+  const anyDone = Zakat.records(who).some((r) => r.status === 'done');
+  const label = { overview: 'Overview', records: 'Records', payments: 'Payments', rates: 'Rates' };
+  const body = tab === 'overview' ? zakatOverview(who) : tab === 'records' ? zakatRecordsTab(who) : tab === 'payments' ? zakatPaymentsTab(who) : ratesTab();
+  return `
+    <div class="page-head">
+      <div><h1>Zakat</h1><p class="sub">${p ? (p.zakat ? `${p.id === ME && !People.several() ? 'Your' : `${esc(p.name)}'s`} zakat day: ${esc(`${ordinal(p.zakat.day)} ${HIJRI_MONTHS[p.zakat.month - 1]}`)}` : `${p.id === ME && !People.several() ? 'You have' : `${esc(p.name)} has`} no zakat day yet`) : 'Records, payments and rates for everyone'}</p></div>
+      <div class="row edit-only page-actions">
+        ${tab === 'rates' ? `<button class="btn primary" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>`
+          : `<button class="btn primary" data-action="asset-form" data-form-type="zakat-make">${ic('plus', 'sm')}Make record</button>
+             ${anyDone ? `<button class="btn" data-action="asset-form" data-form-type="zakat-pay">Add payment</button>` : ''}`}
+      </div>
+    </div>
+    <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-zakat-tab="${k}" role="tab" aria-selected="${k === tab}">${label[k]}</button>`).join('')}</div>
+    <div class="asset-body">${body}</div>`;
+}
+
+function zakatOverview(who) {
+  const people = People.list().filter((p) => p.zakat && (who === 'all' || p.id === who));
+  const missing = zakatMissing(who);
+  const banner = missing.map(({ p, d }) => `<div class="banner warn"><span>${ic('calendar-event')}<span>${People.several() ? `${esc(p.name)}: ` : ''}${esc(Hijri.text(d.hyear, p.zakat.month, p.zakat.day))} (${esc(fmtDay(d.date))}) has no record yet.</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="zakat-make" data-person="${esc(p.id)}" data-hyear="${d.hyear}">Make record</button></div>`).join('');
+  if (!people.length) {
+    const p = who === 'all' ? People.get(ME) : People.get(who);
+    return `<div class="card empty-state"><p><b>${who === 'all' ? 'Nobody has a zakat day yet.' : `${esc(p.name)} has no zakat day yet.`}</b> Set it in Settings › People (an Islamic day and month, for example 15th Sha'ban). Butler then works out the date each year and reminds you to make the record.</p>
+      <button class="btn" data-view="settings">Open Settings</button></div>`;
+  }
+  const card = (title, big, sub = '') => `<div class="card stat-card"><div class="stat-label">${title}</div><div class="stat">${big}</div>${sub ? `<div class="meta">${sub}</div>` : ''}</div>`;
+  const today = todayISO();
+  const cardsFor = (p) => {
+    const near = Zakat.around(p.id);
+    const recs = Zakat.records(p.id);
+    const left = recs.reduce((s, r) => s + Zakat.remaining(r), 0);
+    const last = recs.filter((r) => r.status === 'done').pop();
+    const t = Assets.totals(p.id, today);
+    const nisab = NISAB_TOLA * (Number(t.rates?.silver) || 0);
+    const wealth = Object.entries(t.byKind).filter(([k]) => !ZAKAT_SKIP.includes(k)).reduce((s, [, v]) => s + v, 0); // what usually counts
+    const days = near.next ? Math.round((parseISO(near.next.date) - parseISO(today)) / 864e5) : 0;
+    return `
+      ${people.length > 1 ? `<h2 class="zk-person">${avatar(p.id)}${esc(p.name)}</h2>` : ''}
+      <div class="stat-grid">
+        ${card('Next zakat day', near.next ? esc(fmtDay(near.next.date)) : 'Not set', near.next ? `${esc(Hijri.text(near.next.hyear, p.zakat.month, p.zakat.day))}, in ${plural(days, 'day')}` : '')}
+        ${card('Left to pay', rupees(left), left ? 'Across all years' : 'Nothing left')}
+        ${last ? card(`${last.hyear} due`, rupees(last.due), `Paid ${rupees(Zakat.paid(last))}${Zakat.carriedIn(last) ? `, ${rupees(Zakat.carriedIn(last))} carried in` : ''}`) : ''}
+        ${card('Today', nisab ? (wealth > nisab ? 'Above the nisab' : 'Below the nisab') : 'No silver rate', nisab ? `Zakatable wealth ${rupees(wealth)}, nisab ${rupees(nisab)}` : 'Add rates to see')}
+      </div>`;
+  };
+  const recs = Zakat.records(who).filter((r) => r.status === 'done').slice(-6);
+  return `
+    ${banner}
+    ${people.map(cardsFor).join('')}
+    ${recs.length ? `<div class="card"><h2>Paid of due, by year</h2>${zakatBars(recs, who === 'all' && People.several())}</div>` : ''}`;
+}
+
+// Each year's payments against what was due: one colour, a track the length of the due amount.
+function zakatBars(recs, named) {
+  return `<div class="kind-bars">${recs.map((r) => {
+    const due = Math.max(r.due - Zakat.carriedIn(r), 0);
+    const paid = Zakat.paid(r);
+    const pct = due ? Math.min(100, (paid / due) * 100) : 100;
+    return `
+      <div class="kind-bar" title="${esc(zakatTitle(r))}: paid ${esc(rupees(paid))} of ${esc(rupees(due))}">
+        <span class="kb-name">${named ? `${esc(People.name(r.person))}, ` : ''}${r.hyear}</span>
+        <span class="kb-track"><span class="kb-fill" style="width:${pct.toFixed(1)}%"></span></span>
+        <span class="kb-val">${rupees(paid)} of ${rupees(due)}</span>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function zakatRecordsTab(who) {
+  const recs = Zakat.records(who).reverse();
+  const rows = recs.map((r) => `
+    <li class="item">
+      <span class="tl-mark">${ic('calendar-event')}</span>
+      <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
+        <div class="title">${esc(zakatTitle(r))}${who === 'all' && People.several() ? ` <span class="meta">${esc(People.name(r.person))}</span>` : ''}</div>
+        <div class="meta"><span>${esc(fmtDay(r.date))}</span>${r.status === 'done' ? `<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
+      </div>
+      ${zakatStatus(r)}
+    </li>`).join('');
+  return `<div class="card"><ul class="list">${rows || '<li class="empty">No records yet</li>'}</ul></div>`;
+}
+
+function zakatPaymentsTab(who) {
+  const pays = DB.zakatPay.filter((p) => who === 'all' || p.person === who).sort(byDate).reverse();
+  const rows = pays.map((p) => {
+    const r = DB.zakat.find((x) => x.id === p.record);
+    return `
+      <li class="item">
+        <span class="tl-date">${esc(fmtDay(p.date))}</span>
+        <div class="body clickable" data-action="open-zpay" data-id="${esc(p.id)}">
+          <div class="title">${rupees(p.amount)}${p.to ? ` <span class="meta">to ${esc(p.to)}</span>` : ''}</div>
+          <div class="meta">${who === 'all' && People.several() ? `<span>${esc(People.name(p.person))}</span>` : ''}<span>For ${r ? r.hyear : 'a removed record'}</span></div>
+        </div>
+      </li>`;
+  }).join('');
+  return `<div class="card"><ul class="list">${rows || '<li class="empty">No payments yet</li>'}</ul></div>`;
+}
+
 // ----- Assets pop-ups: add or change an asset, transfer, update balances, rates -----
 // state.assetForm = {type: 'asset'|'transfer'|'balances'|'rates', id?, kind?}. Read-only shows an asset without Save.
 function ownerInputs(people, note = '') {
@@ -3983,15 +4338,16 @@ function renderAssetForm() {
   const f = state.assetForm;
   if (!f) return;
   const ro = state.readOnly;
-  const box = (title, inner, foot) => `
+  const box = (title, inner, foot, save = 'Save', locked = ro) => `
     <div class="modal-back" data-action="asset-cancel"></div>
     <form class="modal wide" data-form="asset-${f.type}" role="dialog" aria-label="${esc(title)}" autocomplete="off">
       <h3>${esc(title)}</h3>
-      <fieldset class="plain" ${ro ? 'disabled' : ''}>${inner}</fieldset>
+      <fieldset class="plain" ${locked ? 'disabled' : ''}>${inner}</fieldset>
       <p class="form-error" role="alert" hidden></p>
-      <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro ? 'Close' : 'Cancel'}</button>${ro ? '' : '<button class="btn primary">Save</button>'}</div>
+      <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro || !save || f.type === 'zakat-record' ? 'Close' : 'Cancel'}</button>${ro || !save ? '' : `<button class="btn primary">${esc(save)}</button>`}</div>
     </form>`;
   let html = '';
+  if (f.type.startsWith('zakat-')) { $('#modal').innerHTML = zakatForm(f, box); $('#modal input:not([type=hidden]):not([disabled]), #modal select')?.focus(); return; }
   if (f.type === 'asset') {
     const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
     const kind = a ? a.kind : f.kind || 'cash';
@@ -4055,6 +4411,136 @@ function renderAssetForm() {
   $('#modal input:not([type=hidden]), #modal select')?.focus();
 }
 
+// The zakat pop-ups. zakat-make: whose and which year, then a draft. zakat-record: a draft to check (each change is
+// worked out and saved as it's made) and marked done, or a done one to look at. zakat-pay: a payment.
+function zakatForm(f, box) {
+  const ro = state.readOnly;
+  const withDay = People.list().filter((p) => p.zakat);
+  if (f.type === 'zakat-make') {
+    if (!withDay.length) return box('Make record', '<p>Set a zakat day first, in Settings › People.</p>', '', '');
+    const viewing = People.viewing();
+    const person = f.person || (withDay.some((p) => p.id === viewing) ? viewing : withDay[0].id);
+    const p = People.get(person);
+    const hy = Hijri.parts(todayISO()).year;
+    const years = [hy - 2, hy - 1, hy].map((y) => ({ y, date: Zakat.dayFor(person, y) })).filter((x) => x.date <= todayISO() && !Zakat.recordFor(person, x.y));
+    const year = Number(f.hyear) || years[years.length - 1]?.y;
+    const date = f.date || (year ? Zakat.dayFor(person, year) : '');
+    return box('Make zakat record', `
+      ${withDay.length > 1 ? `<label class="field">Whose<select class="input" name="person" data-zmake>${withDay.map((x) => `<option value="${esc(x.id)}" ${x.id === person ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : `<input type="hidden" name="person" value="${esc(person)}">`}
+      ${years.length ? `
+        <div class="row">
+          <label class="field grow">Zakat day<select class="input" name="hyear" data-zmake>${years.map((x) => `<option value="${x.y}" ${x.y === year ? 'selected' : ''}>${esc(Hijri.text(x.y, p.zakat.month, p.zakat.day))}</option>`).join('')}</select></label>
+          <label class="field">Date<input class="input" type="date" name="date" value="${esc(date)}" required></label>
+        </div>
+        <p class="meta" style="margin:0">Worked out from the Umm al-Qura calendar. If the moon was sighted a day later where you are, change the date. The record uses that day's balances and rates; you check everything before it's done.</p>`
+        : '<p>Every zakat day that has come already has a record. The next one can be made on its day.</p>'}`, '', years.length ? 'Make record' : '');
+  }
+  if (f.type === 'zakat-record') {
+    const r = DB.zakat.find((x) => x.id === f.id);
+    if (!r) return '';
+    const name = People.name(r.person);
+    const you = r.person === ME && !People.several(); // just you in Butler: "you", not your name
+    const draft = r.status !== 'done';
+    const carried = Zakat.carriedIn(r);
+    const kinds = new Set(r.items.map((i) => i.kind));
+    const karats = [...new Set(r.items.filter((i) => i.kind === 'gold').map((i) => DB.assets.find((a) => a.id === i.asset)?.karat).filter(Boolean))];
+    const curs = [...new Set(r.items.map((i) => DB.assets.find((a) => a.id === i.asset)?.currency).filter((c) => c && c !== 'PKR'))];
+    const rateIn = (label, nm, v) => `<label class="field">${label}<input class="input" type="number" min="0" step="any" name="${nm}" value="${esc(v || '')}" data-zrec></label>`;
+    const rows = r.items.map((i) => `
+      <div class="zk-item ${i.counted ? '' : 'off'}">
+        <input type="checkbox" name="zc-${esc(i.asset)}" ${i.counted ? 'checked' : ''} data-zrec aria-label="Count ${esc(i.name)}">
+        <span class="zk-name">${ic(Assets.kind(i.kind).icon, 'sm')}${esc(i.name)}${i.manual ? ' <span class="meta">(typed)</span>' : ''}</span>
+        ${draft ? `<input class="input" type="number" step="any" name="zv-${esc(i.asset)}" value="${i.value == null ? '' : Math.round(i.value)}" placeholder="Needs a rate" data-zrec aria-label="${esc(i.name)}'s value">`
+          : `<span class="zk-val">${i.value == null ? '' : rupees(i.value)}</span>`}
+      </div>`).join('');
+    const sums = `
+      <div class="zk-sums">
+        <div><span>Total counted</span><b>${rupees(r.total)}</b></div>
+        <div><span>Nisab: ${NISAB_TOLA} tola of silver</span><b>${r.nisab ? rupees(r.nisab) : 'Needs the silver rate'}</b></div>
+        <div><span>Zakat, 2.5%</span><b>${r.nisab && r.total > r.nisab ? rupees(r.raw) : 'Nothing: below the nisab'}</b></div>
+        ${draft ? `<label class="zk-round"><input type="checkbox" name="zround" ${r.roundUp ? 'checked' : ''} data-zrec> Round up to the next 1,000</label>` : ''}
+        <div class="zk-due"><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span><b>${rupees(r.due)}</b></div>
+        ${carried ? `<div><span>Carried in from the year before</span><b>-${rupees(carried)}</b></div>` : ''}
+        ${!draft ? `<div><span>Paid</span><b>${rupees(Zakat.paid(r))}</b></div><div class="zk-due"><span>Left to pay</span><b>${rupees(Zakat.remaining(r))}</b></div>` : ''}
+      </div>`;
+    const pays = !draft ? Zakat.payments(r).map((p) => `<div class="vh-row"><span>${esc(fmtDay(p.date))}${p.to ? `, to ${esc(p.to)}` : ''}</span><span>${rupees(p.amount)}</span><span></span></div>`).join('') : '';
+    const problems = draft ? Zakat.problems(r) : [];
+    const inner = `
+      <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. ${draft ? 'Untick anything that doesn\'t count; type a value to replace the worked-out one (leave it empty to go back). Changes save as you make them.' : `Done ${r.doneAt ? esc(fmtDay(toISO(new Date(r.doneAt)))) : ''}: frozen, so later changes to assets or rates don't touch it.`}</p>
+      ${draft ? `<div class="row"><label class="field">Date<input class="input" type="date" name="zdate" value="${esc(r.date)}" data-zrec></label></div>` : ''}
+      <fieldset class="owner-box"><legend>Rates on the day</legend><div class="rate-grid">
+        ${draft ? `${karats.map((k) => rateIn(`Gold ${k}K`, `zr-gold-${k}`, r.rates.gold?.[k])).join('')}${rateIn('Silver', 'zr-silver', r.rates.silver)}${curs.map((c) => rateIn(esc(c), `zr-fx-${c}`, r.rates.fx?.[c])).join('')}`
+          : `${karats.map((k) => `<span class="meta">Gold ${k}K ${rupees(r.rates.gold?.[k])}</span>`).join('')}<span class="meta">Silver ${rupees(r.rates.silver)}</span>${curs.map((c) => `<span class="meta">${esc(c)} ${Number(r.rates.fx?.[c] || 0).toLocaleString('en-IN')}</span>`).join('')}`}
+      </div></fieldset>
+      <div class="zk-items"><div class="meta">${r.items.length ? (you ? 'What you had that day' : `What ${esc(name)} had that day (their share)`) : `${you ? 'You' : esc(name)} had no assets that day. Add them on the Assets page, then make the record again.`}</div>${rows}</div>
+      ${sums}
+      ${!draft ? `<label class="field">If more than is due is paid<select class="input" name="zexcess" data-zrec ${ro ? 'disabled' : ''}><option value="carry" ${r.excess !== 'charity' ? 'selected' : ''}>Count it towards next year</option><option value="charity" ${r.excess === 'charity' ? 'selected' : ''}>Keep it as extra charity</option></select></label>` : ''}
+      ${pays ? `<div class="value-history"><div class="meta">Payments</div>${pays}</div>` : ''}
+      ${problems.length ? `<p class="meta zk-problem">To mark it done, it needs ${esc(andList(problems))}.</p>` : ''}`;
+    const foot = draft
+      ? `<button type="button" class="btn danger edit-only" data-action="zakat-delete" style="margin-right:auto">Delete draft</button>`
+      : `<button type="button" class="btn edit-only" data-action="zakat-reopen" style="margin-right:auto">Reopen</button>${Zakat.remaining(r) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="zakat-pay" data-id="" data-record="${esc(r.id)}">Add payment</button>` : ''}`;
+    return box(`${you ? '' : `${name}: `}${zakatTitle(r)}`, inner, foot, draft && !problems.length ? 'Mark done' : '', ro);
+  }
+  if (f.type === 'zakat-pay') {
+    const pay = f.id ? DB.zakatPay.find((x) => x.id === f.id) : null;
+    const viewing = People.viewing();
+    const recOf = DB.zakat.find((x) => x.id === (f.record || pay?.record));
+    const person = f.person || pay?.person || recOf?.person || (viewing !== 'all' ? viewing : withDay[0]?.id || ME);
+    const recs = Zakat.records(person).filter((r) => r.status === 'done');
+    const v = f.values || {};
+    const chosen = v.record || f.record || pay?.record || Zakat.defaultRecord(person)?.id;
+    const peopleWith = People.list().filter((p) => Zakat.records(p.id).some((r) => r.status === 'done'));
+    const inner = recs.length ? `
+      ${peopleWith.length > 1 && !pay ? `<label class="field">Whose<select class="input" name="person" data-zpay>${peopleWith.map((x) => `<option value="${esc(x.id)}" ${x.id === person ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : `<input type="hidden" name="person" value="${esc(person)}">`}
+      <div class="row">
+        <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date || pay?.date || todayISO())}" required></label>
+        <label class="field">Amount<input class="input" type="number" min="1" step="any" name="amount" value="${esc(v.amount || pay?.amount || '')}" required></label>
+      </div>
+      <label class="field">Paid to (optional)<input class="input" name="to" value="${esc(v.to || pay?.to || '')}" maxlength="80" placeholder="Who received it, or what for"></label>
+      <label class="field">Counts towards<select class="input" name="record">${recs.slice().reverse().map((r) => `<option value="${esc(r.id)}" ${r.id === chosen ? 'selected' : ''}>${esc(zakatTitle(r))}: ${Zakat.remaining(r) ? `${rupees(Zakat.remaining(r))} left` : 'paid'}</option>`).join('')}</select></label>
+      ${f.needExcess ? `<fieldset class="owner-box zk-excess"><legend>That's ${rupees(f.needExcess)} more than is left</legend>
+        <label><input type="radio" name="excess" value="carry" checked> Count the extra towards next year</label>
+        <label><input type="radio" name="excess" value="charity"> Keep it as extra charity</label>
+        <label><input type="radio" name="excess" value="split"> Split it: what's left here, the rest to other years with money left</label></fieldset>` : ''}`
+      : '<p>Make and finish a zakat record first: payments count towards one.</p>';
+    return box(pay ? 'Payment' : 'Add payment', inner, pay ? '<button type="button" class="btn danger edit-only" data-action="zpay-delete" style="margin-right:auto">Delete</button>' : '', recs.length ? 'Save' : '');
+  }
+  return '';
+}
+// A change in a draft record's pop-up: read the whole form, work it out again, save, redraw.
+function zakatDraftChanged(form) {
+  const r = state.assetForm && DB.zakat.find((x) => x.id === state.assetForm.id);
+  if (!r || state.readOnly) return;
+  const data = Object.fromEntries(new FormData(form));
+  if (r.status === 'done') {
+    if (data.zexcess && data.zexcess !== r.excess) { r.excess = data.zexcess; changed('zakat'); zakatTasks(); renderAssetForm(); render(); }
+    return;
+  }
+  if (data.zdate && data.zdate !== r.date) {
+    r.date = data.zdate; // a different day: that day's rates and owners
+    const rates = Assets.ratesOn(r.date);
+    r.rates = rates ? { gold: { ...rates.gold }, silver: rates.silver, fx: { ...rates.fx } } : { gold: {}, silver: 0, fx: {} };
+    const keep = new Map(r.items.map((i) => [i.asset, i]));
+    r.items = Zakat.build(r.person, r.hyear, r.date).items.map((i) => (keep.has(i.asset) ? { ...i, counted: keep.get(i.asset).counted } : i));
+  } else {
+    for (const k of Object.keys(data)) {
+      const m = k.match(/^zr-(gold|fx)-(.+)$/);
+      if (m) r.rates[m[1]] = { ...(r.rates[m[1]] || {}), [m[2]]: Number(data[k]) || 0 };
+    }
+    if ('zr-silver' in data) r.rates.silver = Number(data['zr-silver']) || 0;
+    for (const i of r.items) {
+      i.counted = data[`zc-${i.asset}`] === 'on';
+      const typed = data[`zv-${i.asset}`];
+      if (typed === '' || typed == null) { i.manual = false; } else if (i.value == null || Math.round(i.value) !== Number(typed)) { i.manual = true; i.value = Number(typed); }
+    }
+    r.roundUp = data.zround === 'on';
+  }
+  Zakat.revalue(r);
+  changed('zakat');
+  renderAssetForm();
+}
+
 function formError(msg) { const p = $('#modal .form-error'); if (p) { p.textContent = msg; p.hidden = false; } }
 
 // Saving a pop-up. Returns quietly (the pop-up stays, with a message) when something doesn't add up.
@@ -4100,6 +4586,52 @@ function submitAssetForm(type, data) {
       n++;
     }
     if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDay(data.date)}`); }
+  } else if (type === 'zakat-make') {
+    const hy = Number(data.hyear);
+    if (!hy || !data.date) return formError('Pick a zakat day.');
+    if (Zakat.recordFor(data.person, hy)) return formError('That year already has a record.');
+    const r = Zakat.build(data.person, hy, data.date);
+    DB.zakat.push(r);
+    changed('zakat');
+    zakatTasks();
+    device.set('zakatTab', 'records');
+    state.assetForm = { type: 'zakat-record', id: r.id };
+    renderAssetForm();
+    render();
+    return;
+  } else if (type === 'zakat-record') {
+    const form = $('#modal form');
+    if (form) zakatDraftChanged(form); // anything typed but not yet taken in
+    const r = DB.zakat.find((x) => x.id === f.id);
+    if (!r || r.status === 'done') return closeAssetForm();
+    const problems = Zakat.problems(r);
+    if (problems.length) return formError(`It still needs ${andList(problems)}.`);
+    Zakat.sum(r);
+    r.status = 'done';
+    r.doneAt = Date.now();
+    changed('zakat');
+    zakatTasks();
+    toast(`Zakat ${r.hyear}${r.person === ME && !People.several() ? '' : ` for ${People.name(r.person)}`}: ${rupees(r.due)} due by ${fmtDay(Zakat.dueBy(r))}`);
+  } else if (type === 'zakat-pay') {
+    const pay = f.id ? DB.zakatPay.find((x) => x.id === f.id) : null;
+    const rec = DB.zakat.find((x) => x.id === data.record);
+    const amount = Number(data.amount) || 0;
+    if (!rec || amount <= 0) return formError('Type an amount and pick a year.');
+    if (pay) {
+      Object.assign(pay, { date: data.date, amount, to: data.to || '', record: rec.id });
+      toast('Payment saved');
+    } else {
+      const left = Zakat.remaining(rec);
+      if (amount > left && !data.excess) { // ask what the extra is for, keeping what was typed
+        state.assetForm = { ...f, needExcess: amount - left, values: data, person: data.person };
+        renderAssetForm();
+        return;
+      }
+      const made = Zakat.pay({ person: data.person, date: data.date, amount, to: data.to, record: rec.id, excess: data.excess });
+      toast(made.length > 1 ? `Payment of ${rupees(amount)} split across ${made.length} years` : `Payment of ${rupees(amount)} counted towards ${rec.hyear}`);
+    }
+    changed('zakatPay', 'zakat');
+    zakatTasks();
   } else if (type === 'rates') {
     const gold = Object.fromEntries(KARATS.map((k) => [k, Number(data[`gold-${k}`]) || 0]).filter(([, v]) => v));
     const fx = Object.fromEntries(Assets.foreign().map((c) => [c, Number(data[`fx-${c}`]) || 0]).filter(([, v]) => v));
@@ -5011,6 +5543,7 @@ if (state.phone) Object.assign(TD, { AUTH_KEY: OD.AUTH_KEY, SCOPE: OD.SCOPE });
 // ===================== Actions =====================
 function setView(view) {
   if (view !== 'tasks') { state.selecting = false; Selection.ids.clear(); }
+  state.moreOpen = false;
   state.daySheet = false;
   state.view = view;
   device.set('view', view);
@@ -5144,7 +5677,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -5174,6 +5707,8 @@ document.addEventListener('click', (e) => {
 
   const assetTab = e.target.closest('[data-asset-tab]');
   if (assetTab) { device.set('assetTab', assetTab.dataset.assetTab); return render(); }
+  const zakatTab = e.target.closest('[data-zakat-tab]');
+  if (zakatTab) { device.set('zakatTab', zakatTab.dataset.zakatTab); return render(); }
 
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -5395,7 +5930,28 @@ document.addEventListener('click', (e) => {
       renderDrawer();
       break;
     }
-    case 'asset-form': openAssetForm(btn.dataset.formType, { kind: btn.dataset.kind, id: btn.dataset.id }); break;
+    case 'asset-form': openAssetForm(btn.dataset.formType, { kind: btn.dataset.kind, id: btn.dataset.id, person: btn.dataset.person, hyear: btn.dataset.hyear, record: btn.dataset.record }); break;
+    case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
+    case 'open-zakat': openAssetForm('zakat-record', { id }); break;
+    case 'open-zpay': openAssetForm('zakat-pay', { id }); break;
+    case 'zakat-delete': case 'zakat-reopen': case 'zpay-delete': {
+      const f = state.assetForm;
+      const r = f && (action === 'zpay-delete' ? DB.zakatPay.find((x) => x.id === f.id) : DB.zakat.find((x) => x.id === f.id));
+      if (!r) break;
+      closeAssetForm();
+      const q = action === 'zakat-delete' ? 'Delete this draft record?'
+        : action === 'zakat-reopen' ? `Reopen the ${r.hyear} record? It becomes a draft again, worked out from the assets and rates as they are now (values you typed are kept).`
+          : `Delete this payment of ${rupees(r.amount)}?`;
+      ask(q, { yes: action === 'zakat-reopen' ? 'Reopen' : 'Delete', danger: action !== 'zakat-reopen' }).then((yes) => {
+        if (!yes) return;
+        if (action === 'zakat-delete') { DB.zakat = DB.zakat.filter((x) => x !== r); changed('zakat'); }
+        else if (action === 'zpay-delete') { DB.zakatPay = DB.zakatPay.filter((x) => x !== r); changed('zakatPay'); }
+        else { r.status = 'draft'; r.doneAt = 0; Zakat.revalue(r); changed('zakat'); openAssetForm('zakat-record', { id: r.id }); }
+        zakatTasks();
+        render();
+      });
+      break;
+    }
     case 'open-asset': openAssetForm('asset', { id }); break;
     case 'asset-cancel': closeAssetForm(); break;
     case 'asset-value-off': {
@@ -5561,6 +6117,7 @@ document.addEventListener('keydown', (e) => {
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.assetForm) { closeAssetForm(); return; }
+  if (state.moreOpen) { state.moreOpen = false; renderMore(); return; }
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (Selection.on() && !state.openTask) { Selection.stop(); return; }
   if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return; }
@@ -5789,6 +6346,14 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-transfer-asset]') && state.assetForm) { openAssetForm('transfer', { id: e.target.value }); return; }
+  if (e.target.matches?.('[data-zmake]') && state.assetForm) {
+    const form = e.target.form;
+    const person = form.elements.person.value;
+    openAssetForm('zakat-make', { person, hyear: e.target.name === 'hyear' ? e.target.value : undefined });
+    return;
+  }
+  if (e.target.matches?.('[data-zpay]') && state.assetForm) { openAssetForm('zakat-pay', { person: e.target.value }); return; }
+  if (e.target.matches?.('[data-zrec]') && state.assetForm) { zakatDraftChanged(e.target.form); return; }
   if (e.target.dataset?.personAdd && !state.readOnly) {
     const kind = e.target.dataset.personAdd;
     const r = DB[kind] && DB[kind].find((x) => x.id === e.target.dataset.id);
@@ -5832,6 +6397,7 @@ if (signInPopup) document.body.textContent = 'Signing in…';
 else {
   if (state.phone) RO.boot(); else DB.load();
   Trash.prune(); // anything in the Trash over 30 days goes
+  zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   render();
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
@@ -5848,6 +6414,7 @@ else {
   AT.init();
   checkReminders();
   setInterval(checkReminders, 20000);
+  setInterval(zakatTasks, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
   setInterval(() => TD.sync(), TD.SYNC_MS);
