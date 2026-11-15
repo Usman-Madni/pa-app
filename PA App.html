@@ -958,10 +958,13 @@ const People = {
     changed('people');
     return true;
   },
-  setZakat(id, day, month) {
+  // A zakat day (Islamic day and month), and optionally `since`: the day their wealth went above the nisab and stayed
+  // there a year (the start of the zakat day). Changing only the day keeps `since`.
+  setZakat(id, day, month, since) {
     const p = this.stored(id);
     if (!p) return;
-    p.zakat = day && month ? { day: Number(day), month: Number(month) } : null;
+    const keep = since === undefined ? p.zakat?.since || '' : since || '';
+    p.zakat = day && month ? { day: Number(day), month: Number(month), ...(keep ? { since: keep } : {}) } : null;
     changed('people');
   },
   // What would be left with nobody if this person went (those records become yours), assets they own outright included.
@@ -1240,7 +1243,114 @@ const Zakat = {
   },
   remaining(rec) { return rec.status === 'done' ? Math.max(0, rec.due - this.carriedIn(rec) - this.paid(rec)) : 0; },
   extra(rec) { return rec.status === 'done' ? Math.max(0, this.paid(rec) + this.carriedIn(rec) - rec.due) : 0; },
-  dueBy(rec) { const n = this.around(rec.person, rec.date)?.next; return n ? n.date : toISO(addDays(parseISO(rec.date), 354)); },
+  // Due by the next zakat day (the person's zakat day a year on; with none, the record's Islamic date a year on), unless
+  // a date was typed for it (`dueBy`).
+  dueBy(rec) {
+    if (rec.dueBy) return rec.dueBy;
+    const z = this.person(rec.person)?.zakat;
+    const p = Hijri.parts(rec.date);
+    const next = z ? Hijri.toISO(rec.hyear + 1, z.month, z.day) : '';
+    return next && next > rec.date ? next : Hijri.toISO(p.year + 1, p.month, p.day);
+  },
+  // ----- Becoming sahib-e-nisab -----
+  // Zakatable wealth on a day: each zakatable asset's share at that day's rates (what can't be valued is left out and
+  // named), and the nisab that day (null with no silver rate).
+  wealthOn(person, date) {
+    const rates = Assets.ratesOn(date);
+    let wealth = 0;
+    const missing = [];
+    for (const a of DB.assets) {
+      if (!Assets.zakatable(a) || !Assets.held(a, date) || !(Assets.shareOf(a, person, date) > 0)) continue;
+      const v = Assets.partOn(a, person, date, rates);
+      if (v == null) missing.push(a); else wealth += v;
+    }
+    const silver = Number(rates?.silver) || 0;
+    return { wealth, nisab: silver ? NISAB_TOLA * silver : null, missing };
+  },
+  // The days wealth can change (a new amount, rates, an owner change, bought or sold), so it only needs checking then.
+  changeDays(from, to) {
+    const days = new Set([from]);
+    const add = (d) => { if (d && d > from && d <= to) days.add(d); };
+    for (const a of DB.assets) {
+      (a.values || []).forEach((v) => add(v.date));
+      (a.owners || []).forEach((o) => add(o.from));
+      add(a.acquired);
+      add(a.closed);
+    }
+    DB.rates.forEach((r) => add(r.date));
+    return [...days].sort();
+  },
+  // When this person became sahib-e-nisab, from what Butler knows: the first day (after `after`) their zakatable wealth
+  // went above the nisab and stayed there a whole Islamic year (a dip before then starts the count again). Returns
+  // {since, date, hyear, month, day} (date: the first zakat day), {since, waiting: date} while the year isn't up, or
+  // null when they're below it. It's only as exact as the balances and rates entered.
+  findStart(person, after = '', today = todayISO()) {
+    const first = [...DB.rates.map((r) => r.date), ...DB.assets.flatMap((a) => (a.values || []).map((v) => v.date))].filter((d) => d > after).sort()[0];
+    if (!first) return null;
+    const yearOn = (d) => { const p = Hijri.parts(d); return Hijri.toISO(p.year + 1, p.month, p.day); };
+    let since = '';
+    for (const d of this.changeDays(first, today)) {
+      if (since && d > yearOn(since)) break; // a whole year above: that's the zakat day
+      const w = this.wealthOn(person, d);
+      const above = w.nisab != null && w.wealth > w.nisab;
+      if (above && !since) since = d;
+      else if (!above && since) since = ''; // a dip within the year (or on its last day): start again
+    }
+    if (!since) return null;
+    const p = Hijri.parts(since);
+    const date = yearOn(since);
+    if (date > today) return { since, waiting: date };
+    return { since, date, hyear: p.year + 1, month: p.month, day: p.day };
+  },
+  // A zakat day that ended: the latest done record (worked out here, not brought in) found them below the nisab, after
+  // their zakat day began. Nothing more is due until they're above it again, which starts a new zakat day.
+  ended(person) {
+    const p = this.person(person);
+    const last = this.records(person).filter((r) => r.status === 'done' && !r.imported).pop();
+    return !!(last && last.nisab && last.total <= last.nisab && (!p?.zakat?.since || last.date > p.zakat.since)) ? last : null;
+  },
+  // What Butler suggests: with no zakat day (or one that ended), where it finds a start. Null when there's nothing to say.
+  suggest(person, today = todayISO()) {
+    const p = this.person(person);
+    const ended = this.ended(person);
+    if (p?.zakat && !ended) return null;
+    const found = this.findStart(person, ended ? ended.date : '', today);
+    return found ? { ...found, ended } : ended ? { ended } : null;
+  },
+  // The zakat days to make a record for: every one since the zakat day began (its `since`; else the oldest record, else
+  // the last one) up to today, with no record yet.
+  openDays(person, today = todayISO()) {
+    const p = this.person(person);
+    if (!p?.zakat) return [];
+    const hy = Hijri.parts(today).year;
+    const since = p.zakat.since;
+    const oldest = this.records(person)[0];
+    let from = since ? Hijri.parts(since).year + 1 : oldest ? oldest.hyear : hy - 1; // not known when it began: the last one
+    from = Math.max(from, hy - 30);
+    const out = [];
+    for (let y = from; y <= hy; y++) {
+      const date = Hijri.toISO(y, p.zakat.month, p.zakat.day);
+      if (since && date <= since) continue;
+      if (date <= today && !this.recordFor(person, y)) out.push({ hyear: y, date });
+    }
+    return out;
+  },
+  // What may be out of date for a record on this day: rates more than 3 days older, or an account's balance more than
+  // a month older (only the person's zakatable ones). Empty = all fresh.
+  checks(person, date) {
+    const out = [];
+    const r = Assets.ratesOn(date);
+    const back = (n) => toISO(addDays(parseISO(date), -n));
+    if (!r) out.push('No rates on or before this day');
+    else if (r.date < back(3)) out.push(`The latest rates are from ${fmtDay(r.date)}${r.date.slice(0, 4) === date.slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`}`);
+    for (const a of DB.assets) {
+      if (Assets.metal(a) || !Assets.zakatable(a) || !Assets.held(a, date) || !(Assets.shareOf(a, person, date) > 0)) continue;
+      const v = (a.values || []).filter((x) => x.date <= date).sort(byDate).pop();
+      if (!v) continue;
+      if (v.date < back(31)) out.push(`${a.name}: last balance on ${fmtDay(v.date)}${v.date.slice(0, 4) === date.slice(0, 4) ? '' : `, ${v.date.slice(0, 4)}`}`);
+    }
+    return out;
+  },
   // ----- A record (draft) -----
   build(person, hy, date) {
     const rates = Assets.ratesOn(date);
@@ -1336,18 +1446,25 @@ const Zakat = {
     const finish = (t) => { if (t && !t.done) { Series.tick(t, now, true); changedAny = true; } };
     for (const p of People.list().filter((x) => x.zakat)) {
       const around = this.around(p.id, today);
+      const ended = this.ended(p.id);
       for (const d of [around.last, around.next].filter(Boolean)) {
         const id = `zk-make-${p.id}-${d.hyear}`;
+        const upd = `zk-update-${p.id}-${d.hyear}`; // on the day: bring balances and rates up to date for it
         const rec = this.recordFor(p.id, d.hyear);
-        if (rec) { finish(DB.tasks.find((x) => x.id === id)); continue; }
+        if (rec) { finish(DB.tasks.find((x) => x.id === id)); finish(DB.tasks.find((x) => x.id === upd)); continue; }
+        if (ended && d.date > ended.date) continue; // below the nisab on the last zakat day: none until a new one
+        if (p.zakat.since && d.date <= p.zakat.since) continue;
         if (d.date > toISO(addDays(now, this.TASK_AHEAD_DAYS))) continue;
         if (d === around.last && d.date < toISO(addDays(now, -330))) continue; // an old year with no record: let it be
+        const when = `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)} (${fmtDay(d.date)})`;
+        ensure(upd, `${prefix(p)}Update balances and rates for ${when}`, d.date, p.id, `The zakat record uses what Butler has for that day: type each account's balance (Assets › Update balances) and that day's gold and silver rates (Add rates).`);
         ensure(id, `${prefix(p)}Make zakat record ${d.hyear}`, d.date, p.id, `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)}. Make it on Butler's Zakat page (Make record); it uses that day's balances and rates.`);
       }
     }
     for (const rec of DB.zakat.filter((r) => r.status === 'done')) {
       const p = People.get(rec.person);
       if (!p) continue;
+      if (rec.due <= 0 && !this.paid(rec)) continue; // nothing due (below the nisab): nothing to pay
       const id = `zk-pay-${rec.person}-${rec.hyear}`;
       if (this.remaining(rec) <= 0) { finish(DB.tasks.find((x) => x.id === id)); continue; }
       ensure(id, `${prefix(p)}Pay zakat ${rec.hyear}`, toISO(addDays(parseISO(this.dueBy(rec)), -7)), rec.person, `Due by ${fmtDay(this.dueBy(rec))}. Add payments on Butler's Zakat page.`);
@@ -1570,6 +1687,9 @@ const AirtableImport = {
       if (!p) continue;
       const day = this.islamic(r['Zakat Date']);
       if (day && !People.get(p).zakat) { People.setZakat(p, day.day, day.month); out.days++; }
+      const since = this.date(r.Since); // the day they became sahib-e-nisab
+      const z = People.get(p).zakat;
+      if (since && z && !z.since && /^yes/i.test(r['Sahib-e-Nisab'] || 'yes')) People.setZakat(p, z.day, z.month, since);
       const savings = this.num(r.Savings);
       if (savings != null && date) {
         let a = DB.assets.find((x) => x.kind === 'cash' && x.name === 'Savings' && Assets.shareOf(x, p) === 1);
@@ -1600,9 +1720,13 @@ const AirtableImport = {
       const date = this.date(r['Equivalent Date']);
       if (!p || !day || !day.year || !date) { if (r.Person) out.notes.push(`A Zakat Summary row couldn't be read: ${r['Islamic Date'] || 'no Islamic date'}`); continue; }
       if (!People.get(p).zakat) { People.setZakat(p, day.day, day.month); out.days++; }
-      if (Zakat.recordFor(p, day.year)) continue;
+      const dueDate = this.date(r['Due Date']); // the base's own due date, kept when it isn't the next zakat day
+      const had = Zakat.recordFor(p, day.year);
+      if (had) { if (had.imported && dueDate && !had.dueBy && dueDate !== Zakat.dueBy(had)) { had.dueBy = dueDate; out.dues = (out.dues || 0) + 1; } continue; }
       const due = this.num(r.Due) || 0;
-      DB.zakat.push({ id: uid(), person: p, hyear: day.year, date, status: 'done', imported: true, rates: { gold: {}, silver: 0, fx: {} }, items: [], roundUp: false, excess: 'carry', total: 0, nisab: 0, raw: due, due, made: Date.now(), doneAt: Date.now() });
+      const rec = { id: uid(), person: p, hyear: day.year, date, status: 'done', imported: true, rates: { gold: {}, silver: 0, fx: {} }, items: [], roundUp: false, excess: 'carry', total: 0, nisab: 0, raw: due, due, made: Date.now(), doneAt: Date.now() };
+      if (dueDate && dueDate !== Zakat.dueBy(rec)) rec.dueBy = dueDate;
+      DB.zakat.push(rec);
       out.records++;
     }
     // Zakat Payments: each to the record its link names (person and Islamic year).
@@ -1769,13 +1893,13 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
 // trash:   {id, kind:'tasks'|'notes', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
-// people:  {id, name, zakat: {day, month} | null} — whose tasks, notes and events they are (see People)
+// people:  {id, name, zakat: {day, month, since?} | null} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
 //           acquired, closed, notes, created, unit:'g'|'tola', zakat: true|false|null} — what people own or owe (see Assets)
 // rates:   {id, date, gold: {'24','22','21','18'}, silver, fx: {USD, …}} — rupees per tola / per unit on a date
 // zakat:   {id, person, hyear, date, status:'draft'|'done', rates, items: [{asset, name, kind, value, counted, manual}],
-//           roundUp, excess:'carry'|'charity', total, nisab, raw, due, made, doneAt} — a zakat record (see Zakat)
+//           roundUp, excess:'carry'|'charity', total, nisab, raw, due, made, doneAt, dueBy?} — a zakat record (see Zakat)
 // zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // docs:    {id, cat, type, name, number, issued, expires, renewMonths, people, assets: [ids], attachments, notes,
 //           created} — the ID vault (see Vault); assets may carry attachments too (photos)
@@ -4644,8 +4768,22 @@ function zakatStatus(r) {
 }
 // Zakat days that have come with no record yet (for one person, or everyone).
 function zakatMissing(who) {
-  return People.list().filter((p) => p.zakat && (who === 'all' || p.id === who)).map((p) => ({ p, d: Zakat.around(p.id)?.last }))
-    .filter(({ p, d }) => d && !Zakat.recordFor(p.id, d.hyear) && d.date >= toISO(addDays(new Date(), -330)));
+  return People.list().filter((p) => p.zakat && (who === 'all' || p.id === who) && !Zakat.ended(p.id))
+    .flatMap((p) => Zakat.openDays(p.id).map((d) => ({ p, d })));
+}
+// What Butler found about becoming sahib-e-nisab, for people with no zakat day (or one that ended).
+function zakatSuggestions(who) {
+  return People.list().filter((p) => who === 'all' || p.id === who).map((p) => {
+    const s = Zakat.suggest(p.id);
+    if (!s) return '';
+    const name = People.several() ? `${esc(p.name)}: ` : '';
+    const ended = s.ended ? `Below the nisab on ${esc(zakatTitle(s.ended))}, so that zakat day ended. ` : '';
+    if (s.date) {
+      return `<div class="banner"><span>${ic('calendar-event')}<span>${name}${ended}Above the nisab since ${esc(bothDates(s.since))} and a whole year on, so the zakat day is <b>${esc(`${ordinal(s.day)} ${HIJRI_MONTHS[s.month - 1]}`)}</b> (first due ${esc(bothDates(s.date))}). Worked out from the balances and rates entered.</span></span><button class="btn small edit-only" data-action="zakat-adopt" data-person="${esc(p.id)}" data-zday="${s.day}" data-zmonth="${s.month}" data-since="${esc(s.since)}">Set as zakat day</button></div>`;
+    }
+    if (s.waiting) return `<div class="banner"><span>${ic('calendar-event')}<span>${name}${ended}Above the nisab since ${esc(bothDates(s.since))}. If it stays above until ${esc(bothDates(s.waiting))}, that becomes the zakat day.</span></span></div>`;
+    return s.ended ? `<div class="banner"><span>${ic('calendar-event')}<span>${name}${ended}Butler watches for the next time the wealth goes above the nisab: a year from then is the new zakat day.</span></span></div>` : '';
+  }).join('');
 }
 // Whose zakat the page is about: the person shown, or you when there's nobody else.
 const zakatWho = () => (People.several() ? People.viewing() : ME);
@@ -4674,8 +4812,9 @@ function renderZakat() {
 function zakatOverview(who) {
   const people = People.list().filter((p) => p.zakat && (who === 'all' || p.id === who));
   const missing = zakatMissing(who);
-  const banner = missing.map(({ p, d }) => `<div class="banner warn"><span>${ic('calendar-event')}<span>${People.several() ? `${esc(p.name)}: ` : ''}${esc(Hijri.text(d.hyear, p.zakat.month, p.zakat.day))} (${esc(fmtDay(d.date))}) has no record yet.</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="zakat-make" data-person="${esc(p.id)}" data-hyear="${d.hyear}">Make record</button></div>`).join('');
+  const banner = zakatSuggestions(who) + missing.map(({ p, d }) => `<div class="banner warn"><span>${ic('calendar-event')}<span>${People.several() ? `${esc(p.name)}: ` : ''}${esc(bothDates(d.date))} has no record yet.</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="zakat-make" data-person="${esc(p.id)}" data-hyear="${d.hyear}">Make record</button></div>`).join('');
   if (!people.length) {
+    if (banner) return banner;
     const p = who === 'all' ? People.get(ME) : People.get(who);
     return `<div class="card empty-state"><p><b>${who === 'all' ? 'Nobody has a zakat day yet.' : `${esc(p.name)} has no zakat day yet.`}</b> Set it in Settings › People (an Islamic day and month, for example 15th Sha'ban). Butler then works out the date each year and reminds you to make the record.</p>
       <button class="btn" data-view="settings">Open Settings</button></div>`;
@@ -4687,14 +4826,12 @@ function zakatOverview(who) {
     const recs = Zakat.records(p.id);
     const left = recs.reduce((s, r) => s + Zakat.remaining(r), 0);
     const last = recs.filter((r) => r.status === 'done').pop();
-    const t = Assets.totals(p.id, today);
-    const nisab = NISAB_TOLA * (Number(t.rates?.silver) || 0);
-    const wealth = Object.entries(t.byKind).filter(([k]) => !ZAKAT_SKIP.includes(k)).reduce((s, [, v]) => s + v, 0); // what usually counts
+    const { wealth, nisab } = Zakat.wealthOn(p.id, today); // what's ticked Zakatable
     const days = near.next ? Math.round((parseISO(near.next.date) - parseISO(today)) / 864e5) : 0;
     return `
       ${people.length > 1 ? `<h2 class="zk-person">${avatar(p.id)}${esc(p.name)}</h2>` : ''}
       <div class="stat-grid">
-        ${card('Next zakat day', near.next ? esc(fmtDay(near.next.date)) : 'Not set', near.next ? `${esc(Hijri.text(near.next.hyear, p.zakat.month, p.zakat.day))}, in ${plural(days, 'day')}` : '')}
+        ${Zakat.ended(p.id) ? card('Next zakat day', 'None for now', 'Below the nisab on the last one') : card('Next zakat day', near.next ? esc(Hijri.text(near.next.hyear, p.zakat.month, p.zakat.day)) : 'Not set', near.next ? `${esc(fmtDay(near.next.date))}, in ${plural(days, 'day')}${p.zakat.since ? `. Sahib-e-nisab since ${esc(fmtDay(p.zakat.since))}, ${p.zakat.since.slice(0, 4)}` : ''}` : '')}
         ${card('Left to pay', rupees(left), left ? 'Across all years' : 'Nothing left')}
         ${last ? card(`${last.hyear} due`, rupees(last.due), `Paid ${rupees(Zakat.paid(last))}${Zakat.carriedIn(last) ? `, ${rupees(Zakat.carriedIn(last))} carried in` : ''}`) : ''}
         ${card('Today', nisab ? (wealth > nisab ? 'Above the nisab' : 'Below the nisab') : 'No silver rate', nisab ? `Zakatable wealth ${rupees(wealth)}, nisab ${rupees(nisab)}` : 'Add rates to see')}
@@ -4983,18 +5120,26 @@ function zakatForm(f, box) {
     const viewing = People.viewing();
     const person = f.person || (withDay.some((p) => p.id === viewing) ? viewing : withDay[0].id);
     const p = People.get(person);
-    const hy = Hijri.parts(todayISO()).year;
-    const years = [hy - 2, hy - 1, hy].map((y) => ({ y, date: Zakat.dayFor(person, y) })).filter((x) => x.date <= todayISO() && !Zakat.recordFor(person, x.y));
-    const year = Number(f.hyear) || years[years.length - 1]?.y;
+    // Every zakat day since the zakat day began with no record yet, oldest first (the one to do first).
+    const years = Zakat.openDays(person).map((d) => ({ y: d.hyear, date: d.date }));
+    const year = Number(f.hyear) || years[0]?.y;
     const date = f.date || (year ? Zakat.dayFor(person, year) : '');
+    const checks = date ? Zakat.checks(person, date) : [];
+    const ended = Zakat.ended(person);
+    const w = date ? Zakat.wealthOn(person, date) : null;
     return box('Make zakat record', `
       ${withDay.length > 1 ? `<label class="field">Whose<select class="input" name="person" data-zmake>${withDay.map((x) => `<option value="${esc(x.id)}" ${x.id === person ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : `<input type="hidden" name="person" value="${esc(person)}">`}
+      ${ended ? `<p class="meta" style="margin:0">Below the nisab on ${esc(zakatTitle(ended))}, so that zakat day ended. A new one starts a year after the wealth is next above the nisab (the Zakat overview says when).</p>` : ''}
       ${years.length ? `
+        <label class="field">Zakat day<select class="input" name="hyear" data-zmake>${years.map((x) => `<option value="${x.y}" ${x.y === year ? 'selected' : ''}>${esc(bothDates(x.date))}</option>`).join('')}</select></label>
         <div class="row">
-          <label class="field grow">Zakat day<select class="input" name="hyear" data-zmake>${years.map((x) => `<option value="${x.y}" ${x.y === year ? 'selected' : ''}>${esc(Hijri.text(x.y, p.zakat.month, p.zakat.day))}</option>`).join('')}</select></label>
-          <label class="field">Date<input class="input" type="date" name="date" value="${esc(date)}" required></label>
+          <label class="field">Date<input class="input" type="date" name="date" value="${esc(date)}" required data-zmake></label>
+          ${hijriPick(date, 'date')}
         </div>
-        <p class="meta" style="margin:0">Worked out from the Umm al-Qura calendar. If the moon was sighted a day later where you are, change the date. The record uses that day's balances and rates; you check everything before it's done.</p>`
+        ${checks.length ? `<div class="banner warn zk-checks"><span>${ic('exclamation-mark')}<span>Out of date for this day? ${esc(checks.join('; '))}. Update them first (Assets › Update balances, Add rates), or go ahead and change them in the record.</span></span></div>`
+          : '<p class="meta" style="margin:0">Balances and rates are up to date for this day.</p>'}
+        ${w && w.nisab != null ? `<p class="meta" style="margin:0">That day: zakatable wealth ${rupees(w.wealth)}, nisab ${rupees(w.nisab)}${w.wealth > w.nisab ? '' : '. Below the nisab, so nothing would be due and the zakat day ends'}.</p>` : ''}
+        <p class="meta" style="margin:0">The record uses that day's balances and rates; you check everything before it's done.</p>`
         : '<p>Every zakat day that has come already has a record. The next one can be made on its day.</p>'}`, '', years.length ? 'Make record' : '');
   }
   if (f.type === 'zakat-record') {
@@ -5021,16 +5166,19 @@ function zakatForm(f, box) {
         <div><span>Nisab: ${NISAB_TOLA} tola of silver</span><b>${r.nisab ? rupees(r.nisab) : 'Needs the silver rate'}</b></div>
         <div><span>Zakat, 2.5%</span><b>${r.nisab && r.total > r.nisab ? rupees(r.raw) : 'Nothing: below the nisab'}</b></div>`}
         ${draft ? `<label class="zk-round"><input type="checkbox" name="zround" ${r.roundUp ? 'checked' : ''} data-zrec> Round up to the next 1,000</label>` : ''}
-        <div class="zk-due"><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span><b>${rupees(r.due)}</b></div>
+        <div class="zk-due"><span>Due</span><b>${rupees(r.due)}</b></div>
+        ${!r.imported && r.nisab && r.total <= r.nisab ? `<p class="meta" style="margin:0">Below the nisab: nothing is due, and ${draft ? 'once done, ' : ''}this zakat day ends. The next time the wealth is above the nisab starts a new one.</p>` : ''}
         ${carried ? `<div><span>Carried in from the year before</span><b>-${rupees(carried)}</b></div>` : ''}
         ${!draft ? `<div><span>Paid</span><b>${rupees(Zakat.paid(r))}</b></div><div class="zk-due"><span>Left to pay</span><b>${rupees(Zakat.remaining(r))}</b></div>` : ''}
       </div>`;
     const pays = !draft ? Zakat.payments(r).map((p) => `<div class="vh-row"><span>${esc(fmtDay(p.date))}${p.to ? `, to ${esc(p.to)}` : ''}</span><span>${rupees(p.amount)}</span><span></span></div>`).join('') : '';
     const problems = draft ? Zakat.problems(r) : [];
+    const zchecks = draft ? Zakat.checks(r.person, r.date) : [];
+    const dueField = `<div class="row"><label class="field">Due by<input class="input" type="date" name="zdue" value="${esc(Zakat.dueBy(r))}" data-zrec ${ro ? 'disabled' : ''}></label><p class="meta" style="margin:0;align-self:end">${r.dueBy ? 'Changed by hand. Clear it to go back to the next zakat day.' : `The next zakat day, ${esc(Hijri.textOf(Zakat.dueBy(r)))}.`}</p></div>`;
     if (r.imported) { // brought in from Airtable: the base kept what was due, not what it was worked out from
       return box(`${you ? '' : `${name}: `}${zakatTitle(r)}`, `
         <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. Brought in from Airtable, which kept only the amount due.</p>
-        ${sums}
+        ${sums}${dueField}
         <label class="field">If more than is due is paid<select class="input" name="zexcess" data-zrec ${ro ? 'disabled' : ''}><option value="carry" ${r.excess !== 'charity' ? 'selected' : ''}>Count it towards next year</option><option value="charity" ${r.excess === 'charity' ? 'selected' : ''}>Keep it as extra charity</option></select></label>
         ${pays ? `<div class="value-history"><div class="meta">Payments</div>${pays}</div>` : ''}`,
       Zakat.remaining(r) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="zakat-pay" data-record="${esc(r.id)}" style="margin-right:auto">Add payment</button>` : '', '', ro);
@@ -5043,7 +5191,7 @@ function zakatForm(f, box) {
           : `${karats.map((k) => `<span class="meta">Gold ${k}K ${rupees(r.rates.gold?.[k])}</span>`).join('')}<span class="meta">Silver ${rupees(r.rates.silver)}</span>${curs.map((c) => `<span class="meta">${esc(c)} ${Number(r.rates.fx?.[c] || 0).toLocaleString('en-IN')}</span>`).join('')}`}
       </div></fieldset>
       <div class="zk-items"><div class="meta">${r.items.length ? (you ? 'What you had that day' : `What ${esc(name)} had that day (their share)`) : `${you ? 'You' : esc(name)} had no assets that day. Add them on the Assets page, then make the record again.`}</div>${rows}</div>
-      ${sums}
+      ${sums}${dueField}${draft && zchecks.length ? `<div class="banner warn zk-checks"><span>${ic("exclamation-mark")}<span>Out of date for this day? ${esc(zchecks.join("; "))}.</span></span></div>` : ""}
       ${!draft ? `<label class="field">If more than is due is paid<select class="input" name="zexcess" data-zrec ${ro ? 'disabled' : ''}><option value="carry" ${r.excess !== 'charity' ? 'selected' : ''}>Count it towards next year</option><option value="charity" ${r.excess === 'charity' ? 'selected' : ''}>Keep it as extra charity</option></select></label>` : ''}
       ${pays ? `<div class="value-history"><div class="meta">Payments</div>${pays}</div>` : ''}
       ${problems.length ? `<p class="meta zk-problem">To mark it done, it needs ${esc(andList(problems))}.</p>` : ''}`;
@@ -5104,6 +5252,19 @@ function zakatDraftChanged(form) {
   const r = state.assetForm && DB.zakat.find((x) => x.id === state.assetForm.id);
   if (!r || state.readOnly) return;
   const data = formValues(form);
+  // Due by: a date typed replaces the next zakat day (the same date again goes back to it).
+  if (data.zdue !== undefined && data.zdue !== Zakat.dueBy(r)) {
+    const keep = r.dueBy;
+    r.dueBy = '';
+    r.dueBy = data.zdue && data.zdue !== Zakat.dueBy(r) ? data.zdue : '';
+    if (r.dueBy !== (keep || '')) {
+      if (r.status === 'done') { const t = DB.tasks.find((x) => x.id === `zk-pay-${r.person}-${r.hyear}` && !x.done); if (t) TaskEdit.setDue(t, toISO(addDays(parseISO(Zakat.dueBy(r)), -7))); }
+      changed('zakat', 'tasks');
+      renderAssetForm();
+      render();
+      return;
+    }
+  }
   if (r.status === 'done') {
     if (data.zexcess && data.zexcess !== r.excess) { r.excess = data.zexcess; changed('zakat'); zakatTasks(); renderAssetForm(); render(); }
     return;
@@ -6303,7 +6464,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -6591,6 +6752,15 @@ document.addEventListener('click', (e) => {
     }
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
+    case 'zakat-adopt': { // the zakat day Butler found: from when the wealth went above the nisab
+      const p = People.get(btn.dataset.person);
+      if (!p) break;
+      People.setZakat(p.id, btn.dataset.zday, btn.dataset.zmonth, btn.dataset.since);
+      zakatTasks();
+      toast(`${p.id === ME && !People.several() ? 'Your' : `${p.name}'s`} zakat day is ${ordinal(Number(btn.dataset.zday))} ${HIJRI_MONTHS[Number(btn.dataset.zmonth) - 1]}`);
+      render();
+      break;
+    }
     case 'open-zpay': openAssetForm('zakat-pay', { id }); break;
     case 'zakat-delete': case 'zakat-reopen': case 'zpay-delete': {
       const f = state.assetForm;
@@ -6846,7 +7016,7 @@ document.addEventListener('change', (e) => {
   changed('hijriFix');
   toast(o.shift ? `${HIJRI_MONTHS[o.month - 1]} ${o.hyear} began ${o.label}: dates in it follow` : 'Back to the calculated Islamic date');
   const f = state.assetForm;
-  if (f?.type === 'zakat-make' && form.elements.hyear) form.elements.date.value = Zakat.dayFor(form.elements.person.value, Number(form.elements.hyear.value)) || form.elements.date.value;
+  if (f?.type === 'zakat-make' && form.elements.hyear) { openAssetForm('zakat-make', { person: form.elements.person.value, hyear: form.elements.hyear.value }); render(); return; } // the zakat day moves with its month
   redrawHijriPick(form, name);
   render();
 });
@@ -7058,7 +7228,8 @@ document.addEventListener('change', (e) => {
   if (e.target.matches?.('[data-zmake]') && state.assetForm) {
     const form = e.target.form;
     const person = form.elements.person.value;
-    openAssetForm('zakat-make', { person, hyear: e.target.name === 'hyear' ? e.target.value : undefined });
+    const n = e.target.name;
+    openAssetForm('zakat-make', { person, hyear: n === 'person' ? undefined : form.elements.hyear?.value, date: n === 'date' ? e.target.value : undefined });
     return;
   }
   if (e.target.matches?.('[data-link-doc]') && state.assetForm && !state.readOnly) {

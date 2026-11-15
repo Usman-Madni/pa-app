@@ -68,6 +68,7 @@ const FILES = [
   // --- What came in ---
   check(People.name('me') === 'Alex' && People.list().some((p) => p.name === 'Robin'), 'you are named as in the base; Robin is added');
   check(People.get('me').zakat.day === 15 && People.get('me').zakat.month === 8, 'your zakat day from the Overview');
+  check(People.get('me').zakat.since === '2023-02-25', 'and since when you\'ve been sahib-e-nisab (its "Since")');
   const robin = People.list().find((p) => p.name === 'Robin');
   check(robin.zakat && robin.zakat.month === 9 && robin.zakat.day === 1, 'Robin\'s zakat day from their Zakat Summary row');
   const r = A.ratesOn('2026-02-04');
@@ -81,6 +82,7 @@ const FILES = [
   check(recs.map((x) => x.hyear).join() === '1445,1446,1447' && recs.every((x) => x.status === 'done' && x.imported), 'each year a done record, marked as brought in');
   const y1446 = Z.recordFor('me', 1446);
   check(y1446.due === 14000 && Z.paid(y1446) === 17000 && Z.extra(y1446) === 3000 && y1446.date === '2025-02-14', 'what was due and paid each year, with the 1446 overpayment');
+  check(y1446.dueBy === '2026-01-30' && Z.dueBy(y1446) === '2026-01-30', 'its due date as the base had it (not the next zakat day)');
   const y1447 = Z.recordFor('me', 1447);
   check(Z.carriedIn(y1447) === 3000 && Z.remaining(y1447) === 0 && Z.payments(y1447).some((p) => p.to === 'A neighbour'), 'carried into 1447 (as there), and who each payment went to');
   check(Z.recordFor(robin.id, 1447).due === 5000 && Z.remaining(Z.recordFor(robin.id, 1447)) === 5000, 'Robin\'s year, still to pay');

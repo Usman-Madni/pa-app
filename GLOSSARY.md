@@ -77,7 +77,17 @@ Giving an asset (or a share of it) to someone else from a date on. Who owned it 
 _Avoid_: move, reassign
 
 **Zakat day**:
-A person's yearly zakat date, kept as an Islamic day and month (for example 15th Sha'ban).
+A person's yearly zakat date, kept as an Islamic day and month (for example 15th Sha'ban). It's a whole Islamic year after they became sahib-e-nisab, and ends when they're below the nisab on it.
+
+**Sahib-e-nisab**:
+Someone whose zakatable wealth went above the nisab and stayed above it for a whole Islamic year; a dip within that first year starts the count again. "Since" is the day it went above.
+
+**Zakatable**:
+An asset that counts towards zakat. By kind unless ticked otherwise: savings, gold, silver, investments and money owed do; property, vehicles and other things don't.
+
+**Local month correction**:
+An Islamic month that began a day later or earlier here than Umm al-Qura says. Set once for the month; every date in it follows.
+_Avoid_: offset, adjustment
 
 **Zakat record**:
 One person's zakat for one year: what they had on their zakat day (their share of each asset, at that day's rates), the nisab, and what's due. A draft until marked done; done, it's frozen.
