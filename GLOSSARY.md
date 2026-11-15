@@ -90,6 +90,15 @@ The least wealth on which zakat is due: 52.5 tola of silver at the day's silver 
 Paid more than a year's zakat and counted towards the next year, instead of kept as extra charity.
 _Avoid_: credit, advance
 
+## The vault
+
+**Document**:
+A paper kept in the vault (an ID card, a passport, a deed, an insurance policy), with its number, dates and scans. It can belong to assets.
+_Avoid_: file (a file is a scan attached to it), record
+
+**Renew task**:
+The task a document that expires gets, a chosen time before its expiry. Typing the new expiry date ticks it and makes the next.
+
 ## Storage and devices
 
 **Data file**:
