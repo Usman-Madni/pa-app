@@ -2,7 +2,7 @@
 // European dates, quoted links with line breaks). Files are recognised by their columns; the user says who each name
 // is; gold and silver linked to nobody are left out unless chosen; old years keep what was due; payments find their
 // year from their link; bringing the same files in twice adds nothing. Read on the device; read-only can't.
-const { loadApp, check, done, submitForm, tick } = require('./helpers');
+const { loadApp, fakeFolder, check, done, submitForm, tick } = require('./helpers');
 
 const file = (name, text) => ({ name, text: async () => text });
 const FILES = [
@@ -125,6 +125,30 @@ const FILES = [
   check(coin && coin.karat === '22' && out.notes.some((n) => /no karat: set as 22K/.test(n)), 'unlinked gold can be yours; a missing karat is set to 22K and said');
   check(b.PA.DB.assets.find((a) => a.name === '1gm guinea').karat === '18' && !b.win.eval('Zakat').records().some((x) => x.hyear === 1447 && x.person !== 'me'), 'its own karat is kept; someone left out brings nothing in');
   b.close();
+
+  // --- Photos: fetched into the attachments folder; again only what's missing; refused ones named ---
+  const ph = loadApp();
+  const I3 = ph.win.eval('AirtableImport');
+  const folder = fakeFolder('Attachments');
+  ph.PA.AT.dir = folder;
+  ph.PA.AT.status = 'ok';
+  const asked = [];
+  ph.win.fetch = async (url) => { asked.push(url); return url.includes('bad') ? { ok: false, status: 403 } : { ok: true, blob: async () => new ph.win.Blob(['jpg'], { type: 'image/jpeg' }) }; };
+  check(I3.pictures('coin.jpg (https://a.example/1),box 2.png (https://a.example/2)').map((p) => p.name).join('|') === 'coin.jpg|box 2.png', 'a Picture cell gives each file\'s name and link');
+  const out1 = I3.apply(await I3.read(FILES), { Alex: 'me', Robin: 'skip' }, 'me');
+  check(out1.photos.length === 1 && out1.photos[0].name === 'coin.jpg', 'the import knows which photos to fetch');
+  const got = await I3.fetchPhotos(out1.photos);
+  const guinea = ph.PA.DB.assets.find((a) => a.name === '1gm guinea');
+  check(got.added === 1 && guinea.attachments.length === 1 && guinea.attachments[0].original === 'coin.jpg' && folder.files[guinea.attachments[0].file], 'each is saved in the attachments folder, on its item, named after it');
+  const fresh = [file('Gold-Grid view.csv', 'Name,Karat,Weight (g),Weight (tola),Equivalent Tola Weight,Date Acquired,Comments,Picture,Totals\n'
+    + '1gm guinea,18,1,,0.09,31/12/2025,,"coin.jpg (https://example.invalid/y),back.jpg (https://example.invalid/bad)",\n'
+    + 'Bangles,22,,1.5,1.5,1/5/2025,"From the wedding, two",bangles.jpg (https://example.invalid/z),Alex\n')];
+  const out2 = I3.apply(await I3.read(fresh), { Alex: 'me' }, 'me');
+  check(out2.assets === 0 && out2.photos.map((p) => p.name).sort().join() === 'back.jpg,bangles.jpg', 'bringing the Gold file in again adds no assets, only the photos still missing');
+  const got2 = await I3.fetchPhotos(out2.photos);
+  check(got2.added === 1 && got2.failed.length === 1 && /back\.jpg/.test(got2.failed[0]) && guinea.attachments.length === 1, 'one Airtable refuses is named, to attach by hand');
+  check(ph.PA.DB.assets.find((a) => a.name === 'Bangles').unit === 'tola', 'and gold weighed in tola there shows in tola');
+  ph.close();
 
   // --- Read-only ---
   const ro = loadApp({ fsa: false });

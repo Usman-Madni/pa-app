@@ -1553,7 +1553,9 @@ function vaultTasks() { if (Vault.ensureTasks()) changed('tasks'); }
 // this device only. Each file is recognised by its columns, not its name. People are named in the base (the Overview
 // rows, the Person fields, the gold and silver "Totals" links); the user says who each one is here. Gold and silver
 // not linked to anyone weren't counted there, so by default they're left out. Bringing the same files in twice adds
-// nothing twice. Photos stay in Airtable (their links expire), and old years keep only what was due.
+// nothing twice. Photos are fetched from Airtable afterwards (their links expire
+// after a couple of hours, so the files must be fresh); bringing the files in again adds only photos still missing.
+// Old years keep only what was due.
 const CSV = {
   // Rows of cells; quotes, commas and line breaks inside quotes, and a leading BOM are handled.
   parse(text) {
@@ -1620,6 +1622,29 @@ const AirtableImport = {
     return month ? { day: Number(m[1]), month, year: m[3] ? Number(m[3]) : 0 } : null;
   },
   names(s) { return String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean); },
+  // An attachment cell: "ring.jpg (https://…),box.png (https://…)" → [{name, url}].
+  pictures(s) {
+    return [...String(s ?? '').matchAll(/\s*([^,(]+?)\s*\((https:\/\/[^)\s]+)\)/g)].map((m) => ({ name: m[1].trim(), url: m[2] }));
+  },
+  // Fetch each photo from Airtable and attach it to its asset (in the attachments folder, or OneDrive on the phone).
+  // Airtable's links last a couple of hours, and it may refuse a browser: what can't be fetched is listed to attach by
+  // hand. Returns {added, failed: [names]}.
+  async fetchPhotos(list) {
+    const out = { added: 0, failed: [] };
+    for (const p of list) {
+      const a = DB.assets.find((x) => x.id === p.asset);
+      if (!a) continue;
+      try {
+        const res = await fetch(p.url);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        const before = (a.attachments || []).length;
+        await AT.add(a, [new File([blob], p.name, { type: blob.type || '' })], 'assets', true);
+        if ((a.attachments || []).length > before) out.added++; else out.failed.push(`${a.name} (${p.name})`);
+      } catch { out.failed.push(`${a.name} (${p.name})`); }
+    }
+    return out;
+  },
   // Which table a file is, by its columns.
   kind(cols) {
     const has = (c) => cols.includes(c);
@@ -1662,7 +1687,7 @@ const AirtableImport = {
   // Bring it in. who: {name: person id | 'new' | 'skip'}; unlinkedTo: a person id or 'skip'. Returns what was added.
   apply(plan, who, unlinkedTo = 'skip') {
     const t = plan.tables;
-    const out = { people: 0, assets: 0, rates: 0, records: 0, payments: 0, days: 0, skipped: 0, notes: [] };
+    const out = { people: 0, assets: 0, rates: 0, records: 0, payments: 0, days: 0, skipped: 0, notes: [], photos: [] };
     const ids = {};
     for (const n of plan.names) {
       let id = who[n] || 'skip';
@@ -1706,10 +1731,17 @@ const AirtableImport = {
         const tola = this.num(r['Weight (tola)']);
         const grams = tola ? tola * TOLA_G : this.num(r['Weight (g)']) || 0;
         const name = r.Name || (kind === 'gold' ? 'Gold' : 'Silver');
-        if (DB.assets.some((a) => a.kind === kind && a.name === name && Math.abs(a.grams - grams) < 0.01)) continue; // brought in before
+        const pics = this.pictures(r.Picture);
+        const had = DB.assets.find((a) => a.kind === kind && a.name === name && Math.abs(a.grams - grams) < 0.01);
+        if (had) { // brought in before: only what it's missing (its photos, the unit it was weighed in)
+          if (!had.unit && tola) had.unit = 'tola';
+          out.photos.push(...pics.filter((p) => !(had.attachments || []).some((x) => x.original === p.name)).map((p) => ({ asset: had.id, ...p })));
+          continue;
+        }
         let karat = kind === 'gold' ? String(this.num(r.Karat) || '') : '';
         if (kind === 'gold' && !KARATS.includes(karat)) { karat = '22'; out.notes.push(`"${name}" had no karat: set as 22K`); }
-        Assets.add({ kind, name, karat, grams, unit: tola ? 'tola' : 'g', acquired: this.date(r['Date Acquired']), notes: r.Comments || '', owners: [{ id: owner, share: 100 }] });
+        const a = Assets.add({ kind, name, karat, grams, unit: tola ? 'tola' : 'g', acquired: this.date(r['Date Acquired']), notes: r.Comments || '', owners: [{ id: owner, share: 100 }] });
+        out.photos.push(...pics.map((p) => ({ asset: a.id, ...p })));
         out.assets++;
       }
     }
@@ -2503,11 +2535,11 @@ const AT = {
   },
 
   // Files for a task, or (key) a vault document or an asset: any record with a title or name and `attachments`.
-  async add(task, files, key = 'tasks') {
+  async add(task, files, key = 'tasks', quiet = false) {
     if (state.readOnly || !task) return;
     if (!Array.isArray(task.attachments)) task.attachments = [];
-    if (state.phone) return OD.addFiles(task, files, key); // straight into OneDrive (stage D)
-    if (this.status !== 'ok') return toast('Choose or reconnect the attachments folder first');
+    if (state.phone) return OD.addFiles(task, files, key, quiet); // straight into OneDrive (stage D)
+    if (this.status !== 'ok') return quiet ? undefined : toast('Choose or reconnect the attachments folder first');
     let added = 0;
     for (const f of files) {
       try {
@@ -2522,7 +2554,7 @@ const AT = {
         toast(`Could not attach ${f.name}: ${e.message}`);
       }
     }
-    if (added) { changed(key); toast(`Attached ${added} file${added > 1 ? 's' : ''}${key === 'tasks' ? '. The pencil beside a file renames it' : ''}`); }
+    if (added) { changed(key); if (!quiet) toast(`Attached ${added} file${added > 1 ? 's' : ''}${key === 'tasks' ? '. The pencil beside a file renames it' : ''}`); }
     render();
     renderDrawer();
     if (state.assetForm) renderAssetForm();
@@ -5088,7 +5120,7 @@ function renderAssetForm() {
       ${plan.unreadable.length ? `<p class="form-error" style="margin:0">Couldn't be read: ${esc(plan.unreadable.join('; '))}. If they're in a OneDrive folder, make them available on this device (or save them to Downloads) and pick them again.</p>` : ''}
       ${plan.names.length ? `<div class="balance-list"><div class="meta">Who is who</div>${plan.names.map(whoSel).join('')}</div>` : ''}
       ${plan.unlinked ? `<label class="field">Gold and silver not linked to anyone there (${plan.unlinked}), so not counted<select class="input" name="unlinked"><option value="skip">Leave them out</option><option value="${ME}">They're yours</option>${others.map((p) => `<option value="${esc(p.id)}">They're ${esc(p.name)}'s</option>`).join('')}</select></label>` : ''}
-      <p class="meta" style="margin:0">Brought in: rates, savings and gold and silver as assets, each person's zakat day, every year's record (what was due) and every payment. Photos stay in Airtable. Bringing the same files in again adds nothing twice. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
+      <p class="meta" style="margin:0">Brought in: rates, savings and gold and silver as assets, each person's zakat day, every year's record (what was due) and every payment. Gold and silver photos are fetched from Airtable into the attachments folder (download the CSVs just before: Airtable's photo links last a couple of hours). Bringing the same files in again adds nothing twice, only photos still missing. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
     $('#modal select, #modal button.primary')?.focus();
     return;
   }
@@ -5415,8 +5447,20 @@ function submitAssetForm(type, data) {
     changed(...DATA_KEYS.filter((k) => k !== 'deleted'));
     zakatTasks();
     const parts = [out.assets && plural(out.assets, 'asset'), out.rates && plural(out.rates, 'day') + ' of rates', out.records && plural(out.records, 'zakat year'), out.payments && plural(out.payments, 'payment'), out.people && (out.people === 1 ? '1 person' : `${out.people} people`)].filter(Boolean);
+    if (out.photos.length) parts.push(plural(out.photos.length, 'photo') + ' to fetch');
     toast(parts.length ? `Brought in ${andList(parts)}` : 'Nothing new to bring in: it was all here already');
     out.notes.forEach((n) => toast(n));
+    if (out.photos.length) {
+      if (!state.phone && AT.status !== 'ok') toast('To bring the photos in, choose the attachments folder in Settings, then pick the Gold and Silver files again');
+      else {
+        toast(`Fetching ${plural(out.photos.length, 'photo')} from Airtable…`);
+        AirtableImport.fetchPhotos(out.photos).then((r) => {
+          if (r.added) toast(`Attached ${plural(r.added, 'photo')} to gold and silver`);
+          if (r.failed.length) toast(`Airtable didn't hand over ${plural(r.failed.length, 'photo')} (its links last a couple of hours; download the CSVs again and pick them, or attach by hand): ${r.failed.slice(0, 5).join(', ')}${r.failed.length > 5 ? ` and ${r.failed.length - 5} more` : ''}`);
+          render();
+        });
+      }
+    }
   } else if (type === 'zakat-make') {
     const hy = Number(data.hyear);
     if (!hy || !data.date) return formError('Pick a zakat day.');
@@ -6331,12 +6375,12 @@ const OD = Object.assign(Object.create(TD), {
     }
   },
   // Upload into Attachments; OneDrive picks a free name if this one is taken, and that's the name kept.
-  async addFiles(task, files, key = 'tasks') {
+  async addFiles(task, files, key = 'tasks', quiet = false) {
     let added = 0;
     for (const f of files) {
       try {
         const wanted = safeFileName(AT.suggestName(task, f.name));
-        toast(`Uploading ${f.name}…`);
+        if (!quiet) toast(`Uploading ${f.name}…`);
         const saved = await this.graph('PUT', `${this.filePath(wanted)}/content?@microsoft.graph.conflictBehavior=rename`, f);
         const stored = (saved && saved.name) || wanted;
         task.attachments.push({ id: uid(), name: stored, file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
@@ -6345,7 +6389,7 @@ const OD = Object.assign(Object.create(TD), {
         toast(e && e.name === 'TypeError' ? `Could not attach ${f.name}: no connection` : `Could not attach ${f.name}: ${e.message}`);
       }
     }
-    if (added) { changed(key); toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
+    if (added) { changed(key); if (!quiet) toast(`Attached ${added} file${added > 1 ? 's' : ''}`); }
     render();
     renderDrawer();
     if (state.assetForm) renderAssetForm();
