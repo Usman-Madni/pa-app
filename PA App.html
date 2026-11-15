@@ -93,6 +93,7 @@ button:disabled { cursor: not-allowed; }
   display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 20px; font-family: var(--font-display); font-weight: 500; font-size: var(--t-lg); letter-spacing: -.01em; }
+.today-date { display: flex; flex-direction: column; gap: 1px; margin: -14px 10px 16px 50px; font-size: var(--t-xs); color: var(--muted); line-height: 1.35; }
 .logo { width: 30px; height: 30px; border-radius: var(--r-md); background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: var(--t-md); line-height: 1; }
 .nav-btn {
   display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 0; border-radius: var(--r-md);
@@ -168,6 +169,12 @@ button:disabled { cursor: not-allowed; }
 .owner-grid .input { padding: 5px 8px; text-align: right; }
 .value-history { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
 .vh-row { display: grid; grid-template-columns: 1fr auto 28px; gap: 10px; align-items: center; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.vh-edit { grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 28px; margin: 2px 0; }
+.vh-edit .input, .amt-in .input { padding: 5px 8px; min-width: 0; }
+.amt-in { display: flex; align-items: center; gap: 6px; min-width: 0; }
+[data-amount] { font-variant-numeric: tabular-nums; }
+.hijri-pick { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; min-width: 0; }
+.hijri-pick:empty { display: none; }
 .balance-list { display: flex; flex-direction: column; gap: 6px; }
 .bal-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; align-items: center; font-size: var(--t-sm); }
 .bal-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -641,7 +648,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--border);
   }
-  .brand, .side-foot, .person-pick, .nav-btn.more-item { display: none; }
+  .brand, .today-date, .side-foot, .person-pick, .nav-btn.more-item { display: none; }
   .nav-btn.more-btn { display: flex; }
   .zk-item { grid-template-columns: auto minmax(0, 1fr) 110px; }
   .who-bar:not(:empty) { display: block; margin-bottom: 12px; }
@@ -702,6 +709,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <div class="app">
   <nav class="sidebar">
     <div class="brand"><span class="logo" aria-hidden="true">B</span><span>Butler</span></div>
+    <div id="today-date" class="today-date"></div>
     <div id="person-pick"></div>
     <button class="nav-btn" data-view="today" title="My Day (1)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span>My Day</span></button>
     <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
@@ -778,6 +786,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
 <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M17 8v-3a1 1 0 0 0 -1 -1h-10a2 2 0 0 0 0 4h12a1 1 0 0 1 1 1v3m0 4v3a1 1 0 0 1 -1 1h-12a2 2 0 0 1 -2 -2v-12"/><path d="M20 12v4h-4a2 2 0 0 1 0 -4h4"/></symbol>
 <symbol id="i-diamond" viewBox="0 0 24 24"><path d="M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5"/><path d="M10 12l-2 -2.2l.6 -1"/></symbol>
+<symbol id="i-coin" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0"/></symbol>
 <symbol id="i-building-bank" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7 -3l7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></symbol>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M5 12h-2l9 -9l9 9h-2"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol>
 <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
@@ -989,7 +998,7 @@ const TOLA_G = 11.7;
 const KARATS = ['24', '22', '21', '18'];
 const ASSET_KINDS = [
   { id: 'gold', name: 'Gold', icon: 'diamond', metal: true },
-  { id: 'silver', name: 'Silver', icon: 'circle', metal: true },
+  { id: 'silver', name: 'Silver', icon: 'coin', metal: true },
   { id: 'cash', name: 'Cash and accounts', icon: 'building-bank' },
   { id: 'property', name: 'Property', icon: 'home' },
   { id: 'vehicle', name: 'Vehicles', icon: 'car' },
@@ -1112,11 +1121,15 @@ const Assets = {
   foreign() { return [...new Set(DB.assets.filter((a) => !this.metal(a) && a.currency && a.currency !== 'PKR').map((a) => a.currency))].sort(); },
 };
 // ===================== Islamic dates =====================
-// The browser's own Umm al-Qura calendar, both ways. A local moon sighting is sometimes a day later, so a date
-// worked out here is a suggestion the user can change (a zakat record keeps the date chosen).
+// The browser's own Umm al-Qura calendar, both ways, with the local moon sighting on top: a month that began a day
+// later (or earlier) here is kept as a correction (`hijriFix`: {id 'hf-<year>-<month>', hyear, month, shift +1|-1}),
+// shared by both devices, and every Islamic date in the app follows it (rates, zakat days, records, today's date).
 const Hijri = {
   fmt: null,
-  parts(iso) {
+  cache: new Map(),
+  cacheKey: '',
+  // Umm al-Qura as calculated, with no correction.
+  uq(iso) {
     if (!this.fmt) {
       this.fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' });
     }
@@ -1124,12 +1137,56 @@ const Hijri = {
     const p = Object.fromEntries(this.fmt.formatToParts(new Date(Date.UTC(y, m - 1, d, 12))).map((x) => [x.type, x.value]));
     return { year: parseInt(p.year, 10), month: Number(p.month), day: Number(p.day) };
   },
-  // The normal date of an Islamic day (year, month 1-12, day): start near it, then step until the calendar agrees.
+  shift(hy, hm) { return Number((DB.hijriFix || []).find((f) => f.hyear === hy && f.month === hm)?.shift) || 0; },
+  step(hy, hm, n) { const i = hy * 12 + (hm - 1) + n; return { year: Math.floor(i / 12), month: (i % 12) + 1 }; },
+  // The day a month begins here: as calculated, moved by its correction.
+  start(hy, hm) { return toISO(addDays(parseISO(this.uqToISO(hy, hm, 1)), this.shift(hy, hm))); },
+  // The Islamic date of a day here: the latest month (of the three around it) that has begun by then.
+  parts(iso) {
+    const key = JSON.stringify(DB.hijriFix || []);
+    if (key !== this.cacheKey) { this.cache.clear(); this.cacheKey = key; }
+    if (this.cache.has(iso)) return { ...this.cache.get(iso) };
+    const u = this.uq(iso);
+    let out = u;
+    if ((DB.hijriFix || []).length) {
+      for (const n of [1, 0, -1]) {
+        const m = this.step(u.year, u.month, n);
+        const s = this.start(m.year, m.month);
+        if (s <= iso) { out = { year: m.year, month: m.month, day: Math.round((parseISO(iso) - parseISO(s)) / 864e5) + 1 }; break; }
+      }
+    }
+    this.cache.set(iso, out);
+    return { ...out };
+  },
+  // The date of an Islamic day here (its month's start, corrected, plus the days).
   toISO(hy, hm, hd) {
+    if (!(DB.hijriFix || []).length) return this.uqToISO(hy, hm, hd);
+    return toISO(addDays(parseISO(this.start(hy, hm)), hd - 1));
+  },
+  textOf(iso) { const p = this.parts(iso); return this.text(p.year, p.month, p.day); },
+  // The three readings of a day, for the "moon sighted here" choice: a day later (-1 day), as calculated, a day earlier.
+  // Each says which month's correction it sets.
+  choices(iso) {
+    const u = this.uq(iso);
+    const next = this.uq(toISO(addDays(parseISO(iso), 1)));
+    return [
+      { shift: 1, hyear: u.year, month: u.month, label: 'a day later here', parts: this.uq(toISO(addDays(parseISO(iso), -1))) },
+      { shift: 0, hyear: u.year, month: u.month, label: 'as calculated', parts: u, also: next },
+      { shift: -1, hyear: next.year, month: next.month, label: 'a day earlier here', parts: next },
+    ];
+  },
+  // Set (or clear, with 0) a month's correction. The caller saves with changed('hijriFix').
+  setShift(hy, hm, shift) {
+    const id = `hf-${hy}-${hm}`;
+    DB.hijriFix = (DB.hijriFix || []).filter((f) => f.id !== id);
+    if (shift) DB.hijriFix.push({ id, hyear: hy, month: hm, shift });
+  },
+  // The normal date of an Islamic day by Umm al-Qura: start near it, then step until the calendar agrees.
+  uqToISO(hy, hm, hd) {
     let t = Date.UTC(622, 6, 16, 12) + ((hy - 1) * 354.36667 + (hm - 1) * 29.5306 + (hd - 1)) * 864e5;
     for (let i = 0; i < 40; i++) {
       const d = new Date(t);
-      const p = this.parts(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`);
+      const p = this.uq(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`);
       const diff = (hy - p.year) * 354.36667 + (hm - p.month) * 29.5306 + (hd - p.day);
       if (Math.abs(diff) < 0.5) break;
       t += (Math.round(diff) || Math.sign(diff)) * 864e5;
@@ -1558,7 +1615,50 @@ const AirtableImport = {
 };
 // Rupees grouped the local way (9,00,000); a minus goes in front: -Rs 5,000.
 const rupees = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '-' : ''}Rs ${Math.abs(v).toLocaleString('en-IN')}`; };
-const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
+// Amount boxes: text boxes (with the number keyboard on the phone) that group the digits the local way as you type
+// (9,00,000). formValues() hands the numbers back without the commas.
+function groupAmount(v) {
+  const s = String(v ?? '').replace(/[^0-9.\-]/g, '');
+  if (!s) return '';
+  const neg = s.startsWith('-');
+  const [int = '', ...rest] = s.replace(/-/g, '').split('.');
+  const head = int ? Number(int).toLocaleString('en-IN') : rest.length ? '0' : '';
+  return `${neg ? '-' : ''}${head}${rest.length ? `.${rest.join('')}` : ''}`;
+}
+const amountAttrs = (v) => `type="text" inputmode="decimal" autocomplete="off" data-amount value="${esc(groupAmount(v))}"`;
+function formValues(form) {
+  const data = Object.fromEntries(new FormData(form));
+  for (const el of form.querySelectorAll('[data-amount][name]')) if (el.name in data) data[el.name] = String(data[el.name]).replace(/,/g, '');
+  return data;
+}
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.matches?.('[data-amount]')) return;
+  const caret = el.selectionStart ?? el.value.length;
+  const kept = el.value.slice(0, caret).replace(/[^0-9.\-]/g, '').length; // characters before the caret, commas aside
+  const v = groupAmount(el.value);
+  if (v === el.value) return;
+  el.value = v;
+  let pos = 0;
+  for (let n = 0; pos < v.length && n < kept; pos++) if (v[pos] !== ',') n++;
+  try { el.setSelectionRange(pos, pos); } catch { /* not focused */ }
+});
+// An Islamic date with the normal one after it: "15th Sha'ban 1447 (Tue, Feb 3, 2026)".
+const bothDates = (iso) => `${Hijri.textOf(iso)} (${fmtDay(iso)}${iso.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${iso.slice(0, 4)}`})`;
+// Beside a date box: the Islamic date it is, and a choice for when the moon was sighted a day later or earlier here
+// (it corrects that month everywhere in Butler). `input` is the date box's name; the pick follows it as it changes.
+function hijriPick(iso, input) {
+  if (!iso) return `<div class="hijri-pick" data-hijri-for="${esc(input)}"></div>`;
+  const now = Hijri.parts(iso);
+  const opts = Hijri.choices(iso);
+  const same = (p) => p.year === now.year && p.month === now.month && p.day === now.day;
+  const cur = opts.find((o) => o.shift && same(o.parts) && Hijri.shift(o.hyear, o.month) === o.shift) || opts[1];
+  return `<div class="hijri-pick" data-hijri-for="${esc(input)}">
+    <label class="field">Islamic date<select class="input" data-hijri-fix data-date="${esc(iso)}">${opts.map((o, i) => `<option value="${i}" ${o === cur ? 'selected' : ''}>${esc(Hijri.text(o.parts.year, o.parts.month, o.parts.day))}${o.shift ? ` (moon sighted ${o.label})` : ' (as calculated)'}</option>`).join('')}</select></label>
+    ${cur.shift ? `<p class="meta" style="margin:0">${esc(HIJRI_MONTHS[cur.month - 1])} ${cur.hyear} began ${esc(cur.label)}: every date in that month follows it.</p>` : ''}
+  </div>`;
+}
+const fmtTola = (n) =>`${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
 
 // The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
 // To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
@@ -1669,8 +1769,10 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // docs:    {id, cat, type, name, number, issued, expires, renewMonths, people, assets: [ids], attachments, notes,
 //           created} — the ID vault (see Vault); assets may carry attachments too (photos)
+// hijriFix: {id 'hf-<hyear>-<month>', hyear, month, shift} — an Islamic month that began a day later (+1) or
+//           earlier (-1) here than Umm al-Qura says (see Hijri)
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -1714,7 +1816,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -2448,6 +2550,7 @@ function render() {
   renderUnread();
   renderPersonPick();
   renderMore();
+  renderTodayDate();
   const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
@@ -2465,6 +2568,14 @@ function render() {
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
   drawCharts();
   renderStatus();
+}
+
+// Today in both calendars, under Butler in the sidebar (the phone shows it in My Day's line instead).
+function renderTodayDate() {
+  const el = $('#today-date');
+  if (!el) return;
+  const now = new Date();
+  el.innerHTML = `<span>${esc(now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}</span><span>${esc(Hijri.textOf(toISO(now)))}</span>`;
 }
 
 // Status bits only — safe to call while the user is typing (doesn't rebuild the page).
@@ -3014,7 +3125,7 @@ function renderToday() {
   const nothing = !p.late.length && !p.timed.length && !p.anyTime.length && !p.doneToday.length;
   return `
     <div class="page-head">
-      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}. ${summary}${lateNote}.</p></div>
+      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, ${esc(Hijri.textOf(toISO(now)))}. ${summary}${lateNote}.</p></div>
       <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
     </div>
     <div class="grid grid-main today">
@@ -4344,8 +4455,8 @@ function renderAssets() {
     <div class="page-head">
       <div><h1>Assets</h1><p class="sub">${list.length ? `Net worth ${rupees(t.net)}${who === 'all' ? '' : ` for ${esc(People.name(who))}`}, at the latest rates` : 'What you own and owe, in one place'}</p></div>
       <div class="row edit-only page-actions">
-        ${tab === 'rates' ? `<button class="btn primary" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>`
-          : `<button class="btn primary" data-action="asset-form" data-form-type="asset" data-kind="${tab === 'overview' ? 'cash' : esc(tab)}">${ic('plus', 'sm')}Add asset</button>`}
+        <button class="btn ${tab === 'rates' ? '' : 'primary'}" data-action="asset-form" data-form-type="asset" data-kind="${['overview', 'rates'].includes(tab) ? 'cash' : esc(tab)}">${ic('plus', 'sm')}Add asset</button>
+        <button class="btn ${tab === 'rates' ? 'primary' : ''}" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>
         ${list.length ? `<button class="btn" data-action="asset-form" data-form-type="transfer">${ic('arrows-exchange', 'sm')}Transfer</button>` : ''}
         ${list.some((a) => !Assets.metal(a) && !a.closed) ? `<button class="btn" data-action="asset-form" data-form-type="balances">Update balances</button>` : ''}
       </div>
@@ -4406,8 +4517,8 @@ function ratesTab() {
   const fx = (r) => Object.entries(r.fx || {}).filter(([, v]) => Number(v)).map(([c, v]) => `${esc(c)} ${Number(v).toLocaleString('en-IN')}`);
   const rows = list.map((r) => `
     <li class="item">
-      <span class="tl-date">${esc(fmtDay(r.date))}</span>
-      <div class="body"><div class="meta rate-line">
+      <span class="tl-mark">${ic('coins')}</span>
+      <div class="body"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDay(r.date))}${r.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`})</span></div><div class="meta rate-line">
         ${KARATS.filter((k) => Number(r.gold?.[k])).map((k) => `<span>${k}K ${rupees(r.gold[k])}</span>`).join('')}
         ${Number(r.silver) ? `<span>Silver ${rupees(r.silver)}</span>` : ''}
         ${fx(r).map((s) => `<span>${s}</span>`).join('')}
@@ -4481,7 +4592,8 @@ function kindBars(t) {
 // ===================== Zakat page =====================
 // Tabs: Overview, Records, Payments, Rates. Zakat is per person: with one person shown it's theirs; with Everyone,
 // the Overview has a card per person and the lists say whose each line is.
-const zakatTitle = (r) => { const p = People.get(r.person); return p?.zakat ? Hijri.text(r.hyear, p.zakat.month, p.zakat.day) : `Zakat ${r.hyear}`; };
+// A record by its day, in both calendars: "15th Sha'ban 1447 (Tue, Feb 3, 2026)".
+const zakatTitle = (r) => (r.date ? bothDates(r.date) : `Zakat ${r.hyear}`);
 function zakatStatus(r) {
   if (r.status !== 'done') return '<span class="pill zk-draft">Draft</span>';
   const left = Zakat.remaining(r);
@@ -4509,9 +4621,9 @@ function renderZakat() {
     <div class="page-head">
       <div><h1>Zakat</h1><p class="sub">${p ? (p.zakat ? `${p.id === ME && !People.several() ? 'Your' : `${esc(p.name)}'s`} zakat day: ${esc(`${ordinal(p.zakat.day)} ${HIJRI_MONTHS[p.zakat.month - 1]}`)}` : `${p.id === ME && !People.several() ? 'You have' : `${esc(p.name)} has`} no zakat day yet`) : 'Records, payments and rates for everyone'}</p></div>
       <div class="row edit-only page-actions">
-        ${tab === 'rates' ? `<button class="btn primary" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>`
-          : `<button class="btn primary" data-action="asset-form" data-form-type="zakat-make">${ic('plus', 'sm')}Make record</button>
-             ${anyDone ? `<button class="btn" data-action="asset-form" data-form-type="zakat-pay">Add payment</button>` : ''}`}
+        <button class="btn ${tab === 'rates' ? '' : 'primary'}" data-action="asset-form" data-form-type="zakat-make">${ic('plus', 'sm')}Make record</button>
+        ${anyDone ? `<button class="btn" data-action="asset-form" data-form-type="zakat-pay">Add payment</button>` : ''}
+        <button class="btn ${tab === 'rates' ? 'primary' : ''}" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>
       </div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-zakat-tab="${k}" role="tab" aria-selected="${k === tab}">${label[k]}</button>`).join('')}</div>
@@ -4576,7 +4688,7 @@ function zakatRecordsTab(who) {
       <span class="tl-mark">${ic('calendar-event')}</span>
       <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
         <div class="title">${esc(zakatTitle(r))}${who === 'all' && People.several() ? ` <span class="meta">${esc(People.name(r.person))}</span>` : ''}</div>
-        <div class="meta"><span>${esc(fmtDay(r.date))}</span>${r.status === 'done' ? `<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
+        <div class="meta">${r.status === 'done' ? `<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
       </div>
       ${zakatStatus(r)}
     </li>`).join('');
@@ -4772,10 +4884,10 @@ function renderAssetForm() {
         </div>` : `
         <div class="row">
           <label class="field">Currency<select class="input" name="currency">${currencyOptions(a ? a.currency : 'PKR')}</select></label>
-          <label class="field">${kind === 'cash' ? 'Balance' : kind === 'debt' ? 'Still owed' : kind === 'owed' ? 'Owed to you' : 'Value'}<input class="input" type="number" step="any" name="amount" value="" ${a ? '' : 'required'} placeholder="${a ? 'New amount' : ''}"></label>
+          <label class="field">${kind === 'cash' ? 'Balance' : kind === 'debt' ? 'Still owed' : kind === 'owed' ? 'Owed to you' : 'Value'}<input class="input" ${amountAttrs('')} name="amount" ${a ? '' : 'required'} placeholder="${a ? 'New amount' : ''}"></label>
           <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}"></label>
         </div>
-        ${history.length ? `<div class="value-history"><div class="meta">Amounts kept</div>${history.map((v) => `<div class="vh-row"><span>${esc(fmtDay(v.date))}</span><span>${esc(a.currency || 'PKR')} ${Number(v.amount).toLocaleString('en-IN')}</span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDay(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
+        ${history.length ? `<div class="value-history"><div class="meta">${kind === 'cash' ? 'Balance history' : kind === 'debt' || kind === 'owed' ? 'Still owed, by date' : 'Value history'} <span class="meta">(change a date or amount here)</span></div>${history.map((v) => `<div class="vh-row vh-edit" data-vh="${esc(v.date)}"><input class="input" type="date" value="${esc(v.date)}" data-vh-date aria-label="Date"><span class="amt-in"><span class="meta">${esc(a.currency || 'PKR')}</span><input class="input" ${amountAttrs(v.amount)} data-vh-amount aria-label="Amount on ${esc(fmtDay(v.date))}"></span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDay(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
       <div class="row">
         <label class="field">Since (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
         ${a ? `<label class="field">Sold or closed on<input class="input" type="date" name="closed" value="${esc(a.closed || '')}"></label>` : ''}
@@ -4800,17 +4912,17 @@ function renderAssetForm() {
     html = box('Update balances', `
       <p class="meta" style="margin:0">Type the amounts as they are on the day. Leave one as it is to keep it.</p>
       <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
-      <div class="balance-list">${list.map((a) => `<label class="bal-row"><span>${ic(Assets.kind(a.kind).icon, 'sm')}${esc(a.name)} <span class="meta">${esc(a.currency || 'PKR')}</span></span><input class="input" type="number" step="any" name="bal-${esc(a.id)}" value="${Assets.latest(a) ? esc(Assets.latest(a).amount) : ''}"></label>`).join('')}</div>`);
+      <div class="balance-list">${list.map((a) => `<label class="bal-row"><span>${ic(Assets.kind(a.kind).icon, 'sm')}${esc(a.name)} <span class="meta">${esc(a.currency || 'PKR')}</span></span><input class="input" ${amountAttrs(Assets.latest(a) ? Assets.latest(a).amount : '')} name="bal-${esc(a.id)}"></label>`).join('')}</div>`);
   } else if (f.type === 'rates') {
     const last = Assets.ratesOn(todayISO()) || {};
     const cur = Assets.foreign();
     html = box('Add rates', `
       <p class="meta" style="margin:0">Rupees per tola for gold and silver, and rupees for one of each other currency, on the day. Filled in from the last rates.</p>
-      <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
+      <div class="row"><label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>${hijriPick(todayISO(), 'date')}</div>
       <div class="rate-grid">
-        ${KARATS.map((k) => `<label class="field">Gold ${k}K<input class="input" type="number" min="0" step="any" name="gold-${k}" value="${esc(last.gold?.[k] || '')}"></label>`).join('')}
-        <label class="field">Silver<input class="input" type="number" min="0" step="any" name="silver" value="${esc(last.silver || '')}"></label>
-        ${cur.map((c) => `<label class="field">${esc(c)}<input class="input" type="number" min="0" step="any" name="fx-${esc(c)}" value="${esc(last.fx?.[c] || '')}"></label>`).join('')}
+        ${KARATS.map((k) => `<label class="field">Gold ${k}K<input class="input" ${amountAttrs(last.gold?.[k] || '')} name="gold-${k}"></label>`).join('')}
+        <label class="field">Silver<input class="input" ${amountAttrs(last.silver || '')} name="silver"></label>
+        ${cur.map((c) => `<label class="field">${esc(c)}<input class="input" ${amountAttrs(last.fx?.[c] || '')} name="fx-${esc(c)}"></label>`).join('')}
       </div>`);
   }
   $('#modal').innerHTML = html;
@@ -4851,12 +4963,12 @@ function zakatForm(f, box) {
     const kinds = new Set(r.items.map((i) => i.kind));
     const karats = [...new Set(r.items.filter((i) => i.kind === 'gold').map((i) => DB.assets.find((a) => a.id === i.asset)?.karat).filter(Boolean))];
     const curs = [...new Set(r.items.map((i) => DB.assets.find((a) => a.id === i.asset)?.currency).filter((c) => c && c !== 'PKR'))];
-    const rateIn = (label, nm, v) => `<label class="field">${label}<input class="input" type="number" min="0" step="any" name="${nm}" value="${esc(v || '')}" data-zrec></label>`;
+    const rateIn = (label, nm, v) => `<label class="field">${label}<input class="input" ${amountAttrs(v || '')} name="${nm}" data-zrec></label>`;
     const rows = r.items.map((i) => `
       <div class="zk-item ${i.counted ? '' : 'off'}">
         <input type="checkbox" name="zc-${esc(i.asset)}" ${i.counted ? 'checked' : ''} data-zrec aria-label="Count ${esc(i.name)}">
         <span class="zk-name">${ic(Assets.kind(i.kind).icon, 'sm')}${esc(i.name)}${i.manual ? ' <span class="meta">(typed)</span>' : ''}</span>
-        ${draft ? `<input class="input" type="number" step="any" name="zv-${esc(i.asset)}" value="${i.value == null ? '' : Math.round(i.value)}" placeholder="Needs a rate" data-zrec aria-label="${esc(i.name)}'s value">`
+        ${draft ? `<input class="input" ${amountAttrs(i.value == null ? '' : Math.round(i.value))} name="zv-${esc(i.asset)}" placeholder="Needs a rate" data-zrec aria-label="${esc(i.name)}'s value">`
           : `<span class="zk-val">${i.value == null ? '' : rupees(i.value)}</span>`}
       </div>`).join('');
     const sums = `
@@ -4881,7 +4993,7 @@ function zakatForm(f, box) {
     }
     const inner = `
       <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. ${draft ? 'Untick anything that doesn\'t count; type a value to replace the worked-out one (leave it empty to go back). Changes save as you make them.' : `Done ${r.doneAt ? esc(fmtDay(toISO(new Date(r.doneAt)))) : ''}: frozen, so later changes to assets or rates don't touch it.`}</p>
-      ${draft ? `<div class="row"><label class="field">Date<input class="input" type="date" name="zdate" value="${esc(r.date)}" data-zrec></label></div>` : ''}
+      ${draft ? `<div class="row"><label class="field">Date<input class="input" type="date" name="zdate" value="${esc(r.date)}" data-zrec></label>${hijriPick(r.date, 'zdate')}</div>` : ''}
       <fieldset class="owner-box"><legend>Rates on the day</legend><div class="rate-grid">
         ${draft ? `${karats.map((k) => rateIn(`Gold ${k}K`, `zr-gold-${k}`, r.rates.gold?.[k])).join('')}${rateIn('Silver', 'zr-silver', r.rates.silver)}${curs.map((c) => rateIn(esc(c), `zr-fx-${c}`, r.rates.fx?.[c])).join('')}`
           : `${karats.map((k) => `<span class="meta">Gold ${k}K ${rupees(r.rates.gold?.[k])}</span>`).join('')}<span class="meta">Silver ${rupees(r.rates.silver)}</span>${curs.map((c) => `<span class="meta">${esc(c)} ${Number(r.rates.fx?.[c] || 0).toLocaleString('en-IN')}</span>`).join('')}`}
@@ -4909,7 +5021,7 @@ function zakatForm(f, box) {
       ${peopleWith.length > 1 && !pay ? `<label class="field">Whose<select class="input" name="person" data-zpay>${peopleWith.map((x) => `<option value="${esc(x.id)}" ${x.id === person ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : `<input type="hidden" name="person" value="${esc(person)}">`}
       <div class="row">
         <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date || pay?.date || todayISO())}" required></label>
-        <label class="field">Amount<input class="input" type="number" min="1" step="any" name="amount" value="${esc(v.amount || pay?.amount || '')}" required></label>
+        <label class="field">Amount<input class="input" ${amountAttrs(v.amount || pay?.amount || '')} name="amount" required data-zpay-amount></label>
       </div>
       <label class="field">Paid to (optional)<input class="input" name="to" value="${esc(v.to || pay?.to || '')}" maxlength="80" placeholder="Who received it, or what for"></label>
       <label class="field">Counts towards<select class="input" name="record">${recs.slice().reverse().map((r) => `<option value="${esc(r.id)}" ${r.id === chosen ? 'selected' : ''}>${esc(zakatTitle(r))}: ${Zakat.remaining(r) ? `${rupees(Zakat.remaining(r))} left` : 'paid'}</option>`).join('')}</select></label>
@@ -4926,7 +5038,7 @@ function zakatForm(f, box) {
 function zakatDraftChanged(form) {
   const r = state.assetForm && DB.zakat.find((x) => x.id === state.assetForm.id);
   if (!r || state.readOnly) return;
-  const data = Object.fromEntries(new FormData(form));
+  const data = formValues(form);
   if (r.status === 'done') {
     if (data.zexcess && data.zexcess !== r.excess) { r.excess = data.zexcess; changed('zakat'); zakatTasks(); renderAssetForm(); render(); }
     return;
@@ -6535,7 +6647,7 @@ document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (form.dataset.form === 'ask') return answerAsk(true);
   if (state.readOnly) return toast('Read-only on this device');
-  const data = Object.fromEntries(new FormData(form));
+  const data = formValues(form);
   if (form.dataset.form === 'done-date') { finishDonePrompt(data); return; }
   if (form.dataset.form.startsWith('asset-')) { submitAssetForm(form.dataset.form.slice(6), data); return; }
   if (form.dataset.form === 'add-reminder') {
@@ -6643,6 +6755,31 @@ document.addEventListener('change', (e) => {
 // Quick add: preview what was understood as you type or pick.
 document.addEventListener('input', (e) => {
   if (e.target.matches?.('[data-qa]')) updateQuickPreview(e.target.form);
+});
+// A date box with an Islamic date beside it: the pick follows the date; choosing a reading corrects that month.
+function redrawHijriPick(form, name) {
+  const box = form?.querySelector(`[data-hijri-for="${name}"]`);
+  const input = form?.elements[name];
+  if (box && input) box.outerHTML = hijriPick(input.value, name);
+}
+document.addEventListener('change', (e) => {
+  const form = e.target.form;
+  if (form && e.target.name && form.querySelector(`[data-hijri-for="${e.target.name}"]`)) { redrawHijriPick(form, e.target.name); return; }
+  if (!e.target.matches?.('[data-hijri-fix]') || state.readOnly) return;
+  const iso = e.target.dataset.date;
+  const o = Hijri.choices(iso)[Number(e.target.value)];
+  const name = e.target.closest('[data-hijri-for]').dataset.hijriFor;
+  if (!o) return;
+  const all = Hijri.choices(iso);
+  Hijri.setShift(all[1].hyear, all[1].month, 0); // one reading at a time for this day's two months
+  Hijri.setShift(all[2].hyear, all[2].month, 0);
+  if (o.shift) Hijri.setShift(o.hyear, o.month, o.shift);
+  changed('hijriFix');
+  toast(o.shift ? `${HIJRI_MONTHS[o.month - 1]} ${o.hyear} began ${o.label}: dates in it follow` : 'Back to the calculated Islamic date');
+  const f = state.assetForm;
+  if (f?.type === 'zakat-make' && form.elements.hyear) form.elements.date.value = Zakat.dayFor(form.elements.person.value, Number(form.elements.hyear.value)) || form.elements.date.value;
+  redrawHijriPick(form, name);
+  render();
 });
 document.addEventListener('change', (e) => {
   if (e.target.matches?.('[data-qa-tool]')) updateQuickPreview(e.target.form);
@@ -6833,6 +6970,22 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-transfer-asset]') && state.assetForm) { openAssetForm('transfer', { id: e.target.value }); return; }
+  // The value history: a date or amount changed in place (the rest of the pop-up keeps what's typed).
+  if (e.target.closest?.('[data-vh]') && state.assetForm && !state.readOnly) {
+    const row = e.target.closest('[data-vh]');
+    const a = DB.assets.find((x) => x.id === state.assetForm.id);
+    const date = row.querySelector('[data-vh-date]').value;
+    const amount = row.querySelector('[data-vh-amount]').value.replace(/,/g, '');
+    if (!a || !date || amount === '' || !Number.isFinite(Number(amount))) return;
+    Assets.removeValue(a, row.dataset.vh);
+    Assets.setValue(a, date, amount);
+    row.dataset.vh = date;
+    row.querySelector('[data-action="asset-value-off"]').dataset.date = date;
+    changed('assets');
+    toast('Saved');
+    render();
+    return;
+  }
   if (e.target.matches?.('[data-zmake]') && state.assetForm) {
     const form = e.target.form;
     const person = form.elements.person.value;

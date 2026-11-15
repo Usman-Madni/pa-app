@@ -125,7 +125,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   doc.querySelector('[data-asset-tab="rates"]').click();
   check(doc.querySelectorAll('#main .list .item').length === 2, 'the Rates tab lists each day\'s rates');
   doc.querySelector('#main [data-action="asset-form"][data-form-type="rates"]').click();
-  check(doc.querySelector('#modal [name="fx-EUR"]') && doc.querySelector('#modal [name="gold-22"]').value === '490000', 'Add rates asks for each currency in use, filled in from the last rates');
+  check(doc.querySelector('#modal [name="fx-EUR"]') && doc.querySelector('#modal [name="gold-22"]').value === '4,90,000', 'Add rates asks for each currency in use, filled in from the last rates');
   submitForm(win, 'asset-rates', { date: '2026-10-01', 'gold-18': '380000', 'fx-EUR': '300' });
   check(A.ratesOn('2026-10-01').gold['18'] === 380000 && A.valueOn(eur, '2026-10-01') === 30000, 'new rates value what couldn\'t be valued before');
   doc.querySelector('#main [data-action="delete-rates"]').click();
