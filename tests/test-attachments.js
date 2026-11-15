@@ -43,12 +43,22 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   // Open / missing file
   click(`#drawer [data-action="open-attach"][data-att="${a2.id}"]`);
   await tick(10);
-  check(opened.includes('blob:fake'), 'opening an attachment shows the file');
+  check(doc.querySelector('#viewer .viewer-img')?.getAttribute('src') === 'blob:fake' && !opened.includes('blob:fake'), 'a photo opens large in Butler\'s viewer');
+  click('#viewer [data-action="viewer-open"]');
+  await tick(10);
+  check(opened.includes('blob:fake'), 'its Open shows the file itself');
+  click('#viewer [data-action="viewer-close"]');
+  check(!doc.querySelector('#viewer'), 'and it closes');
+  click(`#drawer [data-action="open-attach"][data-att="${a1.id}"]`);
+  await tick(10);
+  check(!doc.querySelector('#viewer') && opened.filter((x) => x === 'blob:fake').length === 2, 'other files open as before');
   const keepCopy = folder.files[a2.file];
   delete folder.files[a2.file];
-  click(`#drawer [data-action="open-attach"][data-att="${a2.id}"]`);
+  win.eval('Viewer').open([a2]);
+  click('#viewer [data-action="viewer-open"]');
   await tick(10);
   check(doc.querySelector('#toasts').textContent.includes('not in the attachments folder'), 'a missing file gives a clear message');
+  win.eval('Viewer').close();
   folder.files[a2.file] = keepCopy;
 
   // Make it repeat; 📌 shows; keep the photo (say, the meter location) on every repeat

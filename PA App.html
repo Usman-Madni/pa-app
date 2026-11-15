@@ -114,6 +114,13 @@ button:disabled { cursor: not-allowed; }
 .person-pick { display: flex; align-items: center; gap: 8px; margin: -8px 0 12px; padding: 0 10px; color: var(--muted); }
 .person-pick select { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); color: var(--text); padding: 5px 6px; font-size: var(--t-sm); }
 .who-bar { display: none; }
+.side-search { position: relative; margin: 0 4px 12px; }
+.side-search .i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.side-search .input { width: 100%; padding: 6px 10px 6px 32px; font-size: var(--t-sm); }
+.search-page-box { width: 100%; margin-bottom: 16px; }
+.page-filter { width: min(220px, 100%); padding: 6px 10px; font-size: var(--t-sm); }
+.page-head .page-filter { margin-left: auto; }
+.who-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .avatar { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 600; flex: none; line-height: 1; }
 .person-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 2px; border-radius: 999px; background: var(--panel); font-size: var(--t-sm); }
 .person-chip .chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; display: inline-grid; place-items: center; }
@@ -208,6 +215,17 @@ button:disabled { cursor: not-allowed; }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
 .asset-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-md); object-fit: cover; background: var(--panel-2); }
+.thumb-btn { flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--panel-2); cursor: zoom-in; }
+.thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.viewer { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; }
+.viewer-back { position: absolute; inset: 0; background: rgba(12, 10, 8, .82); }
+.viewer-fig { position: relative; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 100%; max-height: 100%; }
+.viewer-img { max-width: min(1100px, 100%); max-height: calc(100vh - 110px); border-radius: var(--r-md); object-fit: contain; background: #111; }
+.viewer-img:not([src]) { display: none; }
+.viewer-wait { color: #f3efe7; margin: 40px 0; }
+.viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; padding: 8px 10px; border-radius: var(--r-md); background: var(--panel); color: var(--text); }
+.viewer-name { font-size: var(--t-sm); min-width: 0; overflow-wrap: anywhere; }
+.viewer-count { color: var(--muted); margin-left: 6px; }
 .owners-line, .asset-note { margin-top: 2px; }
 .asset-note { white-space: normal; }
 .check-row label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); }
@@ -658,7 +676,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--border);
   }
-  .brand, .today-date, .side-foot, .person-pick, .nav-btn.more-item { display: none; }
+  .brand, .today-date, .side-foot, .person-pick, .side-search, .nav-btn.more-item { display: none; }
   .nav-btn.more-btn { display: flex; }
   .zk-item { grid-template-columns: auto minmax(0, 1fr) 110px; }
   .who-bar:not(:empty) { display: block; margin-bottom: 12px; }
@@ -721,6 +739,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <div class="brand"><span class="logo" aria-hidden="true">B</span><span>Butler</span></div>
     <div id="today-date" class="today-date"></div>
     <div id="person-pick"></div>
+    <div class="side-search"><svg class="i sm" aria-hidden="true"><use href="#i-search"/></svg><input class="input" type="search" id="side-search" placeholder="Search  ( / )" aria-label="Search Butler" data-input="global-search" autocomplete="off"></div>
     <button class="nav-btn" data-view="today" title="My Day (1)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span>My Day</span></button>
     <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
@@ -808,6 +827,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2l-3 2"/><path d="M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5m2 0v1.5m0 -9v1.5"/></symbol>
 <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12v9"/><path d="M12 12l-8 -4.5"/></symbol>
 <symbol id="i-arrows-exchange" viewBox="0 0 24 24"><path d="M7 10h14l-4 -4"/><path d="M17 14h-14l4 4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
 
@@ -2206,6 +2226,8 @@ const state = {
   view: device.get('view', 'today'),
   taskFilter: 'active',
   noteQuery: '',
+  search: '',         // the words in the search across Butler
+  pageFilter: {},     // view → words in that page's filter box (this screen only)
   activeNote: null,
   calMonth: monthStart(new Date()),
   selectedDay: todayISO(),
@@ -2682,10 +2704,22 @@ const AT = {
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     let file;
     try { file = await (await this.dir.getFileHandle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
-    const url = URL.createObjectURL(file);
-    if (/^(image\/|application\/pdf|text\/)/.test(att.type)) window.open(url, '_blank'); // the browser can show these
-    else { const a = document.createElement('a'); a.href = url; a.download = att.name; a.click(); } // e.g. Word files: save a copy
+    const type = mimeOf(att);
+    const url = URL.createObjectURL(file.type || !type ? file : new Blob([file], { type })); // a file saved without its type gets it from its name
+    if (/^(image\/|application\/pdf|text\/)/.test(type)) window.open(url, '_blank'); // the browser can show these
+    else this.download(url, att.name); // e.g. Word files: save a copy
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  download(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); },
+  // Save a copy where the browser saves downloads.
+  async save(att) {
+    if (state.phone) return this.open(att); // OneDrive's own page has its download button
+    if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
+    try {
+      const url = URL.createObjectURL(await (await this.dir.getFileHandle(att.file)).getFile());
+      this.download(url, att.name);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch { toast(`"${att.name}" is not in the attachments folder any more`); }
   },
 
   // A picture's address for a small preview (kept while the app is open): from the folder here, from OneDrive's
@@ -2832,7 +2866,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -2849,10 +2883,156 @@ function render() {
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
   drawCharts();
   loadThumbs();
+  addPageFilter();
+  if (state.view === 'search' && document.activeElement?.id !== 'side-search') $('#main [data-input="global-search"]')?.focus();
   renderStatus();
 }
 // Fill in the small pictures on screen (an asset's first photo), once each can be read.
-const firstPhoto = (r) => (r.attachments || []).find((x) => /^image\//.test(x.type || '') || /\.(jpe?g|png|webp|gif|heic)$/i.test(x.file || ''));
+// What kind of file an attachment is, by its stored type or else its name (photos fetched from Airtable came with none).
+const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain' };
+const mimeOf = (att) => att.type || MIME_BY_EXT[String(att.file || att.name || '').split('.').pop().toLowerCase()] || '';
+const isImage = (att) => /^image\//.test(mimeOf(att)) && !/heic/.test(mimeOf(att)); // the browser can't show HEIC
+const photosOf = (r) => (r?.attachments || []).filter(isImage);
+const firstPhoto = (r) => photosOf(r)[0];
+
+// The picture viewer: a record's photos large, over the page. Arrows (or a swipe on the phone) go through them, Esc,
+// × or a click outside closes it, and Open / Save take the file out of Butler. Nothing is stored.
+const Viewer = {
+  list: [],
+  at: 0,
+  open(list, at = 0) {
+    this.list = list.filter(Boolean);
+    if (!this.list.length) return;
+    this.at = Math.max(0, Math.min(at, this.list.length - 1));
+    this.draw();
+  },
+  close() { this.list = []; const el = $('#viewer'); if (el) el.remove(); },
+  on() { return !!$('#viewer'); },
+  step(n) { if (this.list.length > 1) { this.at = (this.at + n + this.list.length) % this.list.length; this.draw(); } },
+  draw() {
+    const att = this.list[this.at];
+    let el = $('#viewer');
+    if (!el) { el = document.createElement('div'); el.id = 'viewer'; el.className = 'viewer'; el.setAttribute('role', 'dialog'); document.body.append(el); }
+    el.setAttribute('aria-label', att.name);
+    const many = this.list.length > 1;
+    el.innerHTML = `
+      <div class="viewer-back" data-action="viewer-close"></div>
+      <figure class="viewer-fig">
+        <img class="viewer-img" alt="${esc(att.name)}">
+        <p class="viewer-wait">Opening ${esc(att.name)}…</p>
+        <figcaption class="viewer-bar">
+          <span class="viewer-name">${esc(att.name)}${many ? ` <span class="viewer-count">${this.at + 1} of ${this.list.length}</span>` : ''}</span>
+          <span class="row">
+            ${many ? `<button type="button" class="icon-btn" data-action="viewer-prev" aria-label="Previous photo">${ic('chevron-left')}</button><button type="button" class="icon-btn" data-action="viewer-next" aria-label="Next photo">${ic('chevron-right')}</button>` : ''}
+            <button type="button" class="btn small" data-action="viewer-open">Open</button>
+            ${state.phone ? '' : '<button type="button" class="btn small" data-action="viewer-save">Save</button>'}
+            <button type="button" class="icon-btn" data-action="viewer-close" aria-label="Close">${ic('x')}</button>
+          </span>
+        </figcaption>
+      </figure>`;
+    const img = el.querySelector('.viewer-img');
+    AT.thumbUrl(att).then((url) => {
+      if (this.list[this.at] !== att) return; // moved on meanwhile
+      if (url) { img.src = url; el.querySelector('.viewer-wait').remove(); }
+      else el.querySelector('.viewer-wait').textContent = state.phone ? 'Sign in to OneDrive (and be online) to see photos' : 'Reconnect the attachments folder to see photos';
+    });
+  },
+};
+// ===================== Search =====================
+// One search across Butler: tasks, notes, events, assets, documents (number too), zakat records and payments, for the
+// person shown (the picker) and leaving out what the screens hide. Every word typed must be there, in any order and
+// case. Nothing is stored but the words, on this device only while the app is open.
+const SEARCH_KINDS = [
+  ['tasks', 'Tasks', 'list-check'], ['notes', 'Notes', 'notes'], ['events', 'Events', 'calendar'], ['assets', 'Assets', 'wallet'],
+  ['docs', 'Documents', 'id'], ['zakat', 'Zakat records', 'calendar-event'], ['zakatPay', 'Zakat payments', 'coins'],
+];
+const Search = {
+  words(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); },
+  hit(words, ...texts) { const s = texts.filter(Boolean).join(' ').toLowerCase(); return words.every((w) => s.includes(w)); },
+  // {kind: [{id, title, sub, action}]} for the words; empty words find nothing.
+  run(q) {
+    const w = this.words(q);
+    const out = Object.fromEntries(SEARCH_KINDS.map(([k]) => [k, []]));
+    if (!w.length) return out;
+    const who = People.viewing();
+    for (const t of DB.tasks) {
+      if (hiddenTask(t) || !this.hit(w, t.title, t.period, t.notes, ...(t.checklist || []).map((c) => c.text))) continue;
+      out.tasks.push({ id: t.id, title: fullTitle(t), sub: `${t.done ? 'Done' : t.due ? `Due ${fmtDay(t.due.slice(0, 10))}` : 'No date'}`, action: 'open-task', done: t.done });
+    }
+    for (const n of DB.notes) {
+      if (PendingDelete.has(n.id) || !People.shows(n) || !this.hit(w, n.title, n.body)) continue;
+      out.notes.push({ id: n.id, title: n.title || 'Untitled note', sub: String(n.body || '').replace(/\s+/g, ' ').slice(0, 80), action: 'search-note' });
+    }
+    for (const ev of DB.events) {
+      if (!People.shows(ev) || !this.hit(w, ev.title)) continue;
+      out.events.push({ id: ev.id, title: ev.title, sub: `${fmtDay(ev.date)}${ev.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${ev.date.slice(0, 4)}`}${ev.time ? `, ${fmtTime(ev.time)}` : ''}`, action: 'search-event' });
+    }
+    for (const a of Assets.list(who)) {
+      if (!this.hit(w, a.name, a.notes, Assets.kind(a.kind).name, a.karat && `${a.karat}k`)) continue;
+      out.assets.push({ id: a.id, title: a.name, sub: Assets.kind(a.kind).name, action: 'open-asset' });
+    }
+    for (const d of Vault.list()) {
+      if (!this.hit(w, d.name, d.type, d.number, String(d.number || '').replace(/\s/g, ''), d.notes, Vault.cat(d.cat).name)) continue;
+      out.docs.push({ id: d.id, title: d.name, sub: [d.type, d.expires && `Expires ${fmtDay(d.expires)}`].filter(Boolean).join(', '), action: 'open-doc' });
+    }
+    const zwho = People.several() ? who : 'all';
+    for (const r of Zakat.records(zwho)) {
+      if (!this.hit(w, zakatTitle(r), String(r.hyear), People.name(r.person), 'zakat')) continue;
+      out.zakat.push({ id: r.id, title: zakatTitle(r), sub: `${People.several() ? `${People.name(r.person)}, ` : ''}${r.status === 'done' ? `due ${rupees(r.due)}` : 'draft'}`, action: 'open-zakat' });
+    }
+    for (const p of DB.zakatPay.filter((x) => zwho === 'all' || x.person === zwho)) {
+      if (!this.hit(w, p.to, String(p.amount), groupAmount(p.amount), People.name(p.person), 'zakat payment')) continue;
+      out.zakatPay.push({ id: p.id, title: `${rupees(p.amount)}${p.to ? ` to ${p.to}` : ''}`, sub: fmtDay(p.date), action: 'open-zpay' });
+    }
+    return out;
+  },
+  count(res) { return Object.values(res).reduce((s, l) => s + l.length, 0); },
+};
+function searchResults(q) {
+  const res = Search.run(q);
+  if (!Search.words(q).length) return '<p class="meta">Type to search tasks, notes, events, assets, documents and zakat.</p>';
+  if (!Search.count(res)) return `<p class="meta">Nothing found for "${esc(q)}"${People.several() && People.viewing() !== 'all' ? ` for ${esc(People.name(People.viewing()))} (the picker shows only theirs)` : ''}.</p>`;
+  return SEARCH_KINDS.filter(([k]) => res[k].length).map(([k, label, icon]) => `
+    <h2 class="vault-h">${esc(label)} <span class="meta">${res[k].length}</span></h2>
+    <div class="card"><ul class="list">${res[k].slice(0, 50).map((r) => `
+      <li class="item ${r.done ? 'done' : ''}"><span class="tl-mark">${ic(icon)}</span>
+        <div class="body clickable" data-action="${r.action}" data-id="${esc(r.id)}"><div class="title">${esc(r.title)}</div>${r.sub ? `<div class="meta"><span>${esc(r.sub)}</span></div>` : ''}</div>
+      </li>`).join('')}${res[k].length > 50 ? `<li class="empty">and ${res[k].length - 50} more: add a word to narrow it</li>` : ''}</ul></div>`).join('');
+}
+function renderSearch() {
+  return `
+    <div class="page-head"><div><h1>Search</h1><p class="sub">Everything in Butler${People.several() && People.viewing() !== 'all' ? ` for ${esc(People.name(People.viewing()))}` : ''}</p></div></div>
+    <input class="input search-page-box" type="search" placeholder="Search tasks, notes, assets, documents…" aria-label="Search Butler" data-input="global-search" value="${esc(state.search || '')}" autocomplete="off">
+    <div id="search-results">${searchResults(state.search)}</div>`;
+}
+
+// A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
+const FILTER_VIEWS = ['tasks', 'assets', 'zakat', 'vault', 'notices', 'trash'];
+function applyPageFilter() {
+  const words = Search.words(state.pageFilter?.[state.view]);
+  for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) el.hidden = !!words.length && !Search.hit(words, el.textContent);
+}
+function addPageFilter() {
+  if (!FILTER_VIEWS.includes(state.view)) return;
+  const head = $('#main .page-head');
+  if (!head || head.querySelector('[data-input="page-filter"]')) return;
+  const box = document.createElement('input');
+  Object.assign(box, { className: 'input page-filter', type: 'search', placeholder: 'Filter this page', value: state.pageFilter?.[state.view] || '' });
+  box.setAttribute('aria-label', 'Filter this page');
+  box.dataset.input = 'page-filter';
+  head.append(box);
+  applyPageFilter();
+}
+
+// A swipe on the phone moves between photos.
+let viewerTouch = null;
+document.addEventListener('touchstart', (e) => { if (e.target.closest?.('#viewer')) viewerTouch = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (viewerTouch == null || !Viewer.on()) return;
+  const dx = e.changedTouches[0].clientX - viewerTouch;
+  viewerTouch = null;
+  if (Math.abs(dx) > 50) Viewer.step(dx < 0 ? 1 : -1);
+});
 function loadThumbs() {
   for (const img of $$('img[data-thumb]:not([src])')) {
     const [key, id] = img.dataset.thumb.split(':');
@@ -3670,7 +3850,7 @@ function personPicker() {
 function renderPersonPick() {
   const html = personPicker();
   $('#person-pick').innerHTML = html;
-  $('#who-bar').innerHTML = html;
+  $('#who-bar').innerHTML = `<div class="who-row">${html}<button type="button" class="icon-btn who-search" data-view="search" aria-label="Search">${ic('search')}</button></div>`; // the phone's way to search
 }
 // Small initials beside a task or note that isn't only the person being shown.
 function whoBadges(r) {
@@ -4795,7 +4975,7 @@ function assetKindTab(kind, who, list) {
     const note = String(a.notes || '').trim();
     return `
       <li class="item asset-row ${a.closed ? 'done' : ''}">
-        ${photo ? `<img class="asset-thumb" data-thumb="assets:${esc(a.id)}" alt="">` : `<span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>`}
+        ${photo ? `<button type="button" class="thumb-btn" data-action="view-photo" data-key="assets" data-id="${esc(a.id)}" title="See its photos" aria-label="See the photos of ${esc(a.name)}"><img class="asset-thumb" data-thumb="assets:${esc(a.id)}" alt=""></button>` : `<span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>`}
         <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
           <div class="title">${esc(a.name)}${Assets.zakatable(a) === !ZAKAT_SKIP.includes(a.kind) ? '' : ` <span class="pill">${Assets.zakatable(a) ? 'Zakatable' : 'Not zakatable'}</span>`}</div>
           <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDay(a.acquired))}${a.acquired.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${a.acquired.slice(0, 4)}`}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDay(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
@@ -6816,9 +6996,22 @@ document.addEventListener('click', (e) => {
       e.preventDefault(); // it's a link
       const t = btn.dataset.task ? DB.tasks.find((x) => x.id === btn.dataset.task) : currentTask(); // history rows name their task
       const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
-      if (a) AT.open(a);
+      if (a && isImage(a)) Viewer.open(photosOf(t), photosOf(t).indexOf(a));
+      else if (a) AT.open(a);
       break;
     }
+    case 'view-photo': { // a small photo on a row: the record's photos, large
+      const r = (DB[btn.dataset.key] || []).find((x) => x.id === id);
+      if (r) Viewer.open(photosOf(r));
+      break;
+    }
+    case 'search-note': state.activeNote = id; setView('notes'); break;
+    case 'search-event': { const ev = DB.events.find((x) => x.id === id); if (ev) { state.selectedDay = ev.date; state.calMonth = monthStart(parseISO(ev.date)); state.daySheet = true; setView('calendar'); state.daySheet = true; render(); } break; }
+    case 'viewer-close': Viewer.close(); break;
+    case 'viewer-prev': Viewer.step(-1); break;
+    case 'viewer-next': Viewer.step(1); break;
+    case 'viewer-open': AT.open(Viewer.list[Viewer.at]); break;
+    case 'viewer-save': AT.save(Viewer.list[Viewer.at]); break;
     case 'rename-attach': {
       const t = currentTask();
       const a = t && t.attachments.find((x) => x.id === btn.dataset.att);
@@ -6907,7 +7100,7 @@ document.addEventListener('click', (e) => {
       const r = state.assetForm && DB[key].find((x) => x.id === state.assetForm.id);
       const att = r && (r.attachments || []).find((x) => x.id === btn.dataset.att);
       if (!att) break;
-      if (action === 'rec-file-open') AT.open(att); else AT.remove(r, att.id, key).then(() => renderAssetForm());
+      if (action === 'rec-file-open') { if (isImage(att)) Viewer.open(photosOf(r), photosOf(r).indexOf(att)); else AT.open(att); } else AT.remove(r, att.id, key).then(() => renderAssetForm());
       break;
     }
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
@@ -7110,7 +7303,9 @@ document.addEventListener('input', (e) => {
   taskTimer = setTimeout(() => { changed('tasks'); render(); }, 400);
 });
 document.addEventListener('keydown', (e) => {
+  if (Viewer.on() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); Viewer.step(e.key === 'ArrowLeft' ? -1 : 1); return; }
   if (e.key !== 'Escape') return;
+  if (Viewer.on()) { Viewer.close(); return; } // the photo first, then the pop-up under it
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.assetForm) { closeAssetForm(); return; }
@@ -7135,7 +7330,14 @@ function shortcut(e) {
     if (box) box.focus();
     return !!box;
   }
-  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Notifications, 6 Settings. N: add a task. Esc: close.'); return true; }
+  if (e.key === '/') { // search: the sidebar box on the laptop, the Search page's on the phone
+    const side = $('#side-search');
+    if (side && !state.phone && getComputedStyle(side.parentElement).display !== 'none') { side.focus(); side.select(); return true; }
+    setView('search');
+    $('#main [data-input="global-search"]')?.focus();
+    return true;
+  }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Notifications, 6 Settings. N: add a task. /: search. Esc: close.'); return true; }
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });
@@ -7323,6 +7525,14 @@ document.addEventListener('input', (e) => {
     input.setSelectionRange(pos, pos);
     return;
   }
+  if (kind === 'global-search') { // typing in either search box: the Search page, its results redrawn (the box keeps its place)
+    state.search = e.target.value;
+    for (const box of $$('[data-input="global-search"]')) if (box !== e.target) box.value = state.search;
+    if (state.view !== 'search') { setView('search'); if (e.target.id === 'side-search') e.target.focus(); }
+    else $('#search-results').innerHTML = searchResults(state.search);
+    return;
+  }
+  if (kind === 'page-filter') { state.pageFilter[state.view] = e.target.value; applyPageFilter(); return; }
   if (kind === 'device-name') { device.set('name', e.target.value.trim() || 'Computer'); return; }
   if (kind === 'task-bucket') { state.taskBucket = e.target.value; render(); return; }
   if (kind === 'task-label') { state.taskLabel = e.target.value; render(); return; }
