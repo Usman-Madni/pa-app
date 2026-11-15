@@ -51,12 +51,12 @@ const { loadApp, check, done, submitForm } = require('./helpers');
   form.elements.date.dispatchEvent(new win.Event('change', { bubbles: true }));
   const pick = doc.querySelector('#modal [data-hijri-fix]');
   check(pick && pick.selectedOptions[0].textContent.startsWith(H.textOf(day)), 'a date typed in Add rates shows its Islamic date');
-  pick.value = '0'; // the moon was sighted a day later here
+  pick.value = '1'; // the moon was sighted a day later here
   pick.dispatchEvent(new win.Event('change', { bubbles: true }));
   check(H.parts(day).day === u.day - 1 && PA.DB.hijriFix.length === 1, 'choosing "a day later" corrects that month');
   check(/began a day later here/.test(doc.querySelector('#modal .hijri-pick').textContent), 'and says so beside it');
   const again = doc.querySelector('#modal [data-hijri-fix]');
-  again.value = '1';
+  again.value = '0';
   again.dispatchEvent(new win.Event('change', { bubbles: true }));
   check(!PA.DB.hijriFix.length, '"as calculated" takes it off again');
 
@@ -99,7 +99,7 @@ const { loadApp, check, done, submitForm } = require('./helpers');
     check(doc.querySelector('#main [data-form-type="zakat-make"]') && doc.querySelector('#main [data-form-type="rates"]'), `Make record and Add rates on Zakat's ${tab} tab`);
   }
   check(win.eval('zakatTitle')({ date: day, hyear: u.year }) === `${H.textOf(day)} (${fmtDay(day)}${today.slice(0, 4) === '2026' ? '' : ', 2026'})`, 'a zakat record is named by both dates');
-  check(win.eval('ASSET_KINDS').find((k) => k.id === 'silver').icon === 'coin' && doc.querySelector('#i-coin'), 'silver has a coin for its icon');
+  check(win.eval('ASSET_KINDS').find((k) => k.id === 'silver').icon === 'silver-coin' && doc.querySelector('#i-silver-coin') && doc.querySelector('#i-gold-bar'), 'silver has a coin and gold a bar for icons');
 
   // --- A payment as you type ---
   win.eval('People').setZakat('me', 15, 8);

@@ -43,6 +43,8 @@
   --radius: var(--r-lg);
   /* Label shades, warm to sit with the palette (a label's stored colour picks one: see LABEL_COLORS) */
   --lab-red: #a5482f; --lab-orange: #9a5d12; --lab-green: #4b7445; --lab-blue: #44627e; --lab-purple: #7a4f74; --lab-pink: #a1465f; --lab-grey: #6b6457;
+  /* Gold and silver on their icons only (a bar and a coin); text never takes them */
+  --metal-gold: #9a6d12; --metal-gold-fill: #f1d68c; --metal-silver: #6f757c; --metal-silver-fill: #e1e4e7;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -52,6 +54,7 @@
     --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
     --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
+    --metal-gold: #e6bd5c; --metal-gold-fill: #5e4a1d; --metal-silver: #c9ced4; --metal-silver-fill: #464a50;
     color-scheme: dark;
   }
 }
@@ -61,6 +64,7 @@
   --danger: #e8866f; --ok: #8fc38a; --warn: #e0b45e; --scrim: rgba(0, 0, 0, .5);
   --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
     --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
+    --metal-gold: #e6bd5c; --metal-gold-fill: #5e4a1d; --metal-silver: #c9ced4; --metal-silver-fill: #464a50;
   color-scheme: dark;
 }
 
@@ -309,6 +313,7 @@ body.readonly .edit-only { display: none !important; }
 }
 .meta { color: var(--muted); font-size: var(--t-sm); display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: center; }
 .meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.title .meta { display: inline; } /* a note after a name stays on its line ("15th Sha'ban 1447 (Tue, 3 Feb)") */
 .meta .overdue { color: var(--danger); font-weight: 600; }
 .check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
 /* inline-block + nowrap: a pill that doesn't fit moves to the next line whole, never split in two. */
@@ -534,6 +539,7 @@ button.label-pill.on { opacity: 1; border-color: var(--lc); }
 .link-btn { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-align: left; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn:disabled { color: var(--text); cursor: default; text-decoration: none; }
+.link-btn.hijri-today { flex: none; color: inherit; font: inherit; white-space: normal; text-decoration: underline dotted; text-underline-offset: 3px; }
 .keep-btn { opacity: .45; }
 .keep-btn.on { opacity: 1; color: var(--accent); }
 .history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -791,6 +797,9 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M17 8v-3a1 1 0 0 0 -1 -1h-10a2 2 0 0 0 0 4h12a1 1 0 0 1 1 1v3m0 4v3a1 1 0 0 1 -1 1h-12a2 2 0 0 1 -2 -2v-12"/><path d="M20 12v4h-4a2 2 0 0 1 0 -4h4"/></symbol>
 <symbol id="i-diamond" viewBox="0 0 24 24"><path d="M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5"/><path d="M10 12l-2 -2.2l.6 -1"/></symbol>
 <symbol id="i-coin" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0"/></symbol>
+<!-- Gold and silver: a bar and a coin in their own colours (--metal-*), drawn for Butler in the Tabler style -->
+<symbol id="i-gold-bar" viewBox="0 0 24 24"><path d="M2.5 18.5h19l-3.2 -8h-12.6z" style="fill:var(--metal-gold-fill);stroke:var(--metal-gold)"/><path d="M5.7 10.5l2 -5h8.6l2 5" style="fill:var(--metal-gold-fill);stroke:var(--metal-gold)"/><path d="M9 14.5h6" style="stroke:var(--metal-gold)"/></symbol>
+<symbol id="i-silver-coin" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" style="fill:var(--metal-silver-fill);stroke:var(--metal-silver)"/><path d="M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0" style="stroke:var(--metal-silver)"/><path d="M12 9.5v5" style="stroke:var(--metal-silver)"/></symbol>
 <symbol id="i-building-bank" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7 -3l7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></symbol>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M5 12h-2l9 -9l9 9h-2"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol>
 <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
@@ -1004,8 +1013,8 @@ const People = {
 const TOLA_G = 11.7;
 const KARATS = ['24', '22', '21', '18'];
 const ASSET_KINDS = [
-  { id: 'gold', name: 'Gold', icon: 'diamond', metal: true },
-  { id: 'silver', name: 'Silver', icon: 'coin', metal: true },
+  { id: 'gold', name: 'Gold', icon: 'gold-bar', metal: true },
+  { id: 'silver', name: 'Silver', icon: 'silver-coin', metal: true },
   { id: 'cash', name: 'Cash and accounts', icon: 'building-bank' },
   { id: 'property', name: 'Property', icon: 'home' },
   { id: 'vehicle', name: 'Vehicles', icon: 'car' },
@@ -1174,16 +1183,41 @@ const Hijri = {
     return toISO(addDays(parseISO(this.start(hy, hm)), hd - 1));
   },
   textOf(iso) { const p = this.parts(iso); return this.text(p.year, p.month, p.day); },
-  // The three readings of a day, for the "moon sighted here" choice: a day later (-1 day), as calculated, a day earlier.
-  // Each says which month's correction it sets.
+  // The readings of a day for the "moon sighted here" choice: the month began 2 or 1 days later here, as calculated, or
+  // 1 or 2 days earlier. Each names the months it corrects (`months`): the month the day is in by the calculation and,
+  // when the reading falls in the month before or after, that one too (both began that much later or earlier).
   choices(iso) {
-    const u = this.uq(iso);
-    const next = this.uq(toISO(addDays(parseISO(iso), 1)));
-    return [
-      { shift: 1, hyear: u.year, month: u.month, label: 'a day later here', parts: this.uq(toISO(addDays(parseISO(iso), -1))) },
-      { shift: 0, hyear: u.year, month: u.month, label: 'as calculated', parts: u, also: next },
-      { shift: -1, hyear: next.year, month: next.month, label: 'a day earlier here', parts: next },
-    ];
+    const at = (n) => this.uq(toISO(addDays(parseISO(iso), n)));
+    const u = at(0);
+    const span = (from, to) => { // the months from one reading to another, in order
+      const out = [];
+      for (let m = { year: from.year, month: from.month }; ; m = this.step(m.year, m.month, 1)) {
+        out.push(m);
+        if ((m.year === to.year && m.month === to.month) || out.length > 3) break;
+      }
+      return out;
+    };
+    const label = { 2: '2 days later here', 1: 'a day later here', 0: 'as calculated', '-1': 'a day earlier here', '-2': '2 days earlier here' };
+    return [2, 1, 0, -1, -2].map((s) => {
+      const parts = at(-s);
+      const months = s > 0 ? span(parts, u) : s < 0 ? span(u, parts) : [u];
+      return { shift: s, parts, months, label: label[s] };
+    });
+  },
+  // Choose a reading for a day: clear the corrections of every month its readings touch, then set the chosen one's.
+  choose(iso, shift) {
+    const all = this.choices(iso);
+    const o = all.find((x) => x.shift === shift);
+    if (!o) return null;
+    for (const x of all) for (const m of x.months) this.setShift(m.year, m.month, 0);
+    if (shift) for (const m of o.months) this.setShift(m.year, m.month, shift);
+    return o;
+  },
+  // Which reading a day has now (0 when it's as calculated).
+  current(iso) {
+    const now = this.parts(iso);
+    const o = this.choices(iso).find((x) => x.shift && x.parts.year === now.year && x.parts.month === now.month && x.parts.day === now.day && x.months.every((m) => this.shift(m.year, m.month) === x.shift));
+    return o ? o.shift : 0;
   },
   // Set (or clear, with 0) a month's correction. The caller saves with changed('hijriFix').
   setShift(hy, hm, shift) {
@@ -1812,13 +1846,11 @@ const bothDates = (iso) => `${Hijri.textOf(iso)} (${fmtDay(iso)}${iso.slice(0, 4
 // (it corrects that month everywhere in Butler). `input` is the date box's name; the pick follows it as it changes.
 function hijriPick(iso, input) {
   if (!iso) return `<div class="hijri-pick" data-hijri-for="${esc(input)}"></div>`;
-  const now = Hijri.parts(iso);
   const opts = Hijri.choices(iso);
-  const same = (p) => p.year === now.year && p.month === now.month && p.day === now.day;
-  const cur = opts.find((o) => o.shift && same(o.parts) && Hijri.shift(o.hyear, o.month) === o.shift) || opts[1];
+  const cur = opts.find((o) => o.shift === Hijri.current(iso));
   return `<div class="hijri-pick" data-hijri-for="${esc(input)}">
-    <label class="field">Islamic date<select class="input" data-hijri-fix data-date="${esc(iso)}">${opts.map((o, i) => `<option value="${i}" ${o === cur ? 'selected' : ''}>${esc(Hijri.text(o.parts.year, o.parts.month, o.parts.day))}${o.shift ? ` (moon sighted ${o.label})` : ' (as calculated)'}</option>`).join('')}</select></label>
-    ${cur.shift ? `<p class="meta" style="margin:0">${esc(HIJRI_MONTHS[cur.month - 1])} ${cur.hyear} began ${esc(cur.label)}: every date in that month follows it.</p>` : ''}
+    <label class="field">Islamic date<select class="input" data-hijri-fix data-date="${esc(iso)}">${opts.map((o) => `<option value="${o.shift}" ${o === cur ? 'selected' : ''}>${esc(Hijri.text(o.parts.year, o.parts.month, o.parts.day))}${o.shift ? ` (moon sighted ${o.label})` : ' (as calculated)'}</option>`).join('')}</select></label>
+    ${cur.shift ? `<p class="meta" style="margin:0">${esc(cur.months.map((m) => `${HIJRI_MONTHS[m.month - 1]} ${m.year}`).join(' and '))} began ${esc(cur.label)}: every date in ${cur.months.length > 1 ? 'them' : 'that month'} follows it.</p>` : ''}
   </div>`;
 }
 const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
@@ -2489,7 +2521,24 @@ const RO = {
 // ===================== Attachments folder =====================
 // Attached files are copied into a folder the user picks once (handle kept in IndexedDB, like the data file).
 // The data file stores only {name, file, size, type} — never the file contents — so it stays small and fast.
-const safeFileName = (n) => (String(n).replace(/[\\/:*?"<>|]/g, '_').slice(-120) || 'file');
+// A name a file may have, on Windows, in OneDrive and in the browser: line breaks, tabs and \ / : * ? " < > | are
+// dropped, spaces run together, a long name is cut at the last whole word before the limit (the extension is always
+// kept), and it never ends in a dot or a space.
+const FILE_NAME_MAX = 100;
+function shortName(text, max) {
+  const s = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max + 1);
+  const at = cut.lastIndexOf(' ');
+  return (at > max * 0.5 ? cut.slice(0, at) : s.slice(0, max)).replace(/[\s,;.(\-]+$/, '');
+}
+function safeFileName(n) {
+  const s = String(n ?? '');
+  const m = s.match(/(\.[A-Za-z0-9]{1,8})$/);
+  const ext = m ? m[1].toLowerCase() : '';
+  const base = shortName(m ? s.slice(0, -ext.length) : s, FILE_NAME_MAX - ext.length).replace(/[. ]+$/, '');
+  return `${base || 'file'}${ext}`;
+}
 const AT = {
   dir: null,
   status: 'none', // none | reconnect | ok
@@ -2566,7 +2615,7 @@ const AT = {
     const dot = original.lastIndexOf('.');
     const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
     const year = (task.due ? task.due.slice(0, 4) : String(new Date().getFullYear()));
-    const base = `${(task.title || task.name || 'Attachment').trim()}${task.period ? ` ${task.period}` : ''}`;
+    const base = `${shortName(task.title || task.name || 'Attachment', 85) || 'Attachment'}${task.period ? ` ${task.period}` : ''}`;
     return `${task.period || /\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
   },
 
@@ -2819,7 +2868,7 @@ function renderTodayDate() {
   const el = $('#today-date');
   if (!el) return;
   const now = new Date();
-  el.innerHTML = `<span>${esc(now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}</span><span>${esc(Hijri.textOf(toISO(now)))}</span>`;
+  el.innerHTML = `<span>${esc(now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}</span><button type="button" class="link-btn hijri-today" data-action="hijri-today" title="Moon sighted on a different day here? Correct this month">${esc(Hijri.textOf(toISO(now)))}</button>`;
 }
 
 // Status bits only — safe to call while the user is typing (doesn't rebuild the page).
@@ -3369,7 +3418,7 @@ function renderToday() {
   const nothing = !p.late.length && !p.timed.length && !p.anyTime.length && !p.doneToday.length;
   return `
     <div class="page-head">
-      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, ${esc(Hijri.textOf(toISO(now)))}. ${summary}${lateNote}.</p></div>
+      <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, <button type="button" class="link-btn hijri-today" data-action="hijri-today" title="Moon sighted on a different day here? Correct this month">${esc(Hijri.textOf(toISO(now)))}</button>. ${summary}${lateNote}.</p></div>
       <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
     </div>
     <div class="grid grid-main today">
@@ -4765,7 +4814,7 @@ function ratesTab() {
   const rows = list.map((r) => `
     <li class="item">
       <span class="tl-mark">${ic('coins')}</span>
-      <div class="body"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDay(r.date))}${r.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`})</span></div><div class="meta rate-line">
+      <div class="body clickable" data-action="asset-form" data-form-type="rates" data-id="${esc(r.id)}" title="Change these rates"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDay(r.date))}${r.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`})</span></div><div class="meta rate-line">
         ${KARATS.filter((k) => Number(r.gold?.[k])).map((k) => `<span>${k}K ${rupees(r.gold[k])}</span>`).join('')}
         ${Number(r.silver) ? `<span>Silver ${rupees(r.silver)}</span>` : ''}
         ${fx(r).map((s) => `<span>${s}</span>`).join('')}
@@ -5102,6 +5151,15 @@ function renderAssetForm() {
     $('#modal input[name="name"]')?.focus();
     return;
   }
+  if (f.type === 'hijri') { // today's Islamic date, from the sidebar or My Day: correct this month if the moon was sighted on another day
+    const today = todayISO();
+    $('#modal').innerHTML = box('Today\'s Islamic date', `
+      <input type="hidden" name="date" value="${esc(today)}">
+      <p class="meta" style="margin:0">${esc(fmtDay(today))}. Butler works Islamic dates out from the Umm al-Qura calendar. If the month began on a different day here, pick today's date as it is here: the whole month follows, everywhere in Butler and on both devices.</p>
+      ${hijriPick(today, 'date')}`, '', '');
+    $('#modal select')?.focus();
+    return;
+  }
   if (f.type === 'import') {
     const plan = f.plan;
     const t = plan.tables;
@@ -5177,16 +5235,18 @@ function renderAssetForm() {
       <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
       <div class="balance-list">${list.map((a) => `<label class="bal-row"><span>${ic(Assets.kind(a.kind).icon, 'sm')}${esc(a.name)} <span class="meta">${esc(a.currency || 'PKR')}</span></span><input class="input" ${amountAttrs(Assets.latest(a) ? Assets.latest(a).amount : '')} name="bal-${esc(a.id)}"></label>`).join('')}</div>`);
   } else if (f.type === 'rates') {
-    const last = Assets.ratesOn(todayISO()) || {};
-    const cur = Assets.foreign();
-    html = box('Add rates', `
-      <p class="meta" style="margin:0">Rupees per tola for gold and silver, and rupees for one of each other currency, on the day. Filled in from the last rates.</p>
-      <div class="row"><label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>${hijriPick(todayISO(), 'date')}</div>
+    const editing = f.id ? DB.rates.find((x) => x.id === f.id) : null; // a day's rates opened from the list: change them
+    const last = editing || Assets.ratesOn(todayISO()) || {};
+    const day = editing ? editing.date : todayISO();
+    const cur = [...new Set([...Assets.foreign(), ...Object.keys(editing?.fx || {})])].sort();
+    html = box(editing ? `Rates of ${bothDates(editing.date)}` : 'Add rates', `
+      <p class="meta" style="margin:0">Rupees per tola for gold and silver, and rupees for one of each other currency, on the day.${editing ? '' : ' Filled in from the last rates.'}</p>
+      <div class="row"><label class="field">On<input class="input" type="date" name="date" value="${esc(day)}" required></label>${hijriPick(day, 'date')}</div>
       <div class="rate-grid">
         ${KARATS.map((k) => `<label class="field">Gold ${k}K<input class="input" ${amountAttrs(last.gold?.[k] || '')} name="gold-${k}"></label>`).join('')}
         <label class="field">Silver<input class="input" ${amountAttrs(last.silver || '')} name="silver"></label>
         ${cur.map((c) => `<label class="field">${esc(c)}<input class="input" ${amountAttrs(last.fx?.[c] || '')} name="fx-${esc(c)}"></label>`).join('')}
-      </div>`);
+      </div>`, editing ? `<button type="button" class="btn danger edit-only" data-action="delete-rates" data-id="${esc(editing.id)}" style="margin-right:auto">Delete</button>` : '');
   }
   $('#modal').innerHTML = html;
   $('#modal input:not([type=hidden]), #modal select')?.focus();
@@ -5509,11 +5569,24 @@ function submitAssetForm(type, data) {
     zakatTasks();
   } else if (type === 'rates') {
     const gold = Object.fromEntries(KARATS.map((k) => [k, Number(data[`gold-${k}`]) || 0]).filter(([, v]) => v));
-    const fx = Object.fromEntries(Assets.foreign().map((c) => [c, Number(data[`fx-${c}`]) || 0]).filter(([, v]) => v));
+    const fx = Object.fromEntries(Object.keys(data).filter((k) => k.startsWith('fx-')).map((k) => [k.slice(3), Number(data[k]) || 0]).filter(([, v]) => v));
     if (!Object.keys(gold).length && !Number(data.silver) && !Object.keys(fx).length) return formError('Type at least one rate.');
-    Assets.setRates({ date: data.date, gold, silver: data.silver, fx });
-    changed('rates');
-    toast(`Rates saved for ${fmtDay(data.date)}`);
+    const editing = f.id ? DB.rates.find((x) => x.id === f.id) : null;
+    const clash = editing && data.date !== editing.date && DB.rates.find((x) => x.date === data.date);
+    const save = () => {
+      if (editing && data.date !== editing.date) DB.rates = DB.rates.filter((x) => x !== editing); // moved to another day
+      Assets.setRates({ date: data.date, gold, silver: data.silver, fx });
+      changed('rates');
+      zakatTasks();
+      toast(`Rates saved for ${fmtDay(data.date)}`);
+      closeAssetForm();
+      render();
+    };
+    if (clash) {
+      ask(`${fmtDay(data.date)} already has rates. Replace them with these?`, { yes: 'Replace', danger: true }).then((yes) => { if (yes) save(); else renderAssetForm(); });
+      return;
+    }
+    return save();
   }
   closeAssetForm();
   render();
@@ -6839,6 +6912,7 @@ document.addEventListener('click', (e) => {
     }
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
+    case 'hijri-today': openAssetForm('hijri'); break;
     case 'zakat-adopt': { // the zakat day Butler found: from when the wealth went above the nisab
       const p = People.get(btn.dataset.person);
       if (!p) break;
@@ -6883,7 +6957,7 @@ document.addEventListener('click', (e) => {
     }
     case 'delete-rates': {
       const r = DB.rates.find((x) => x.id === id);
-      if (r) { Trash.discard([['rates', r]], `the rates of ${fmtDay(r.date)}`); zakatTasks(); }
+      if (r) { closeAssetForm(); Trash.discard([['rates', r]], `the rates of ${fmtDay(r.date)}`); zakatTasks(); }
       break;
     }
     case 'person-off': {
@@ -7093,15 +7167,11 @@ document.addEventListener('change', (e) => {
   if (form && e.target.name && form.querySelector(`[data-hijri-for="${e.target.name}"]`)) { redrawHijriPick(form, e.target.name); return; }
   if (!e.target.matches?.('[data-hijri-fix]') || state.readOnly) return;
   const iso = e.target.dataset.date;
-  const o = Hijri.choices(iso)[Number(e.target.value)];
   const name = e.target.closest('[data-hijri-for]').dataset.hijriFor;
+  const o = Hijri.choose(iso, Number(e.target.value));
   if (!o) return;
-  const all = Hijri.choices(iso);
-  Hijri.setShift(all[1].hyear, all[1].month, 0); // one reading at a time for this day's two months
-  Hijri.setShift(all[2].hyear, all[2].month, 0);
-  if (o.shift) Hijri.setShift(o.hyear, o.month, o.shift);
   changed('hijriFix');
-  toast(o.shift ? `${HIJRI_MONTHS[o.month - 1]} ${o.hyear} began ${o.label}: dates in it follow` : 'Back to the calculated Islamic date');
+  toast(o.shift ? `${o.months.map((m) => `${HIJRI_MONTHS[m.month - 1]} ${m.year}`).join(' and ')} began ${o.label}: dates in it follow` : 'Back to the calculated Islamic date');
   const f = state.assetForm;
   if (f?.type === 'zakat-make' && form.elements.hyear) { openAssetForm('zakat-make', { person: form.elements.person.value, hyear: form.elements.hyear.value }); render(); return; } // the zakat day moves with its month
   redrawHijriPick(form, name);

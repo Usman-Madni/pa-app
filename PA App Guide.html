@@ -212,7 +212,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li><b>Zakatable:</b> each asset has this tick. Savings, gold, silver, investments and money owed start ticked; property, vehicles and other things start unticked. Change it for anything that's different, and zakat records start from it.</li>
             <li><b>Amounts by date:</b> open an asset and type a new amount to keep it beside the old ones, or use <b>Update balances</b> to type every account's balance for one day. A value on a day is the latest amount on or before it. The asset's <b>Value history</b> (<b>Balance history</b> for an account, <b>Still owed, by date</b> for a debt) lists them; change a date or amount right there, or remove one.</li>
             <li><b>Amounts</b> are grouped the local way as you type (9,00,000), everywhere in Butler.</li>
-            <li><b>Rates:</b> gold (each karat) and silver in rupees per tola, and other currencies in rupees, by day. Gold, silver and foreign accounts are valued with the latest rates on or before the day. Something with no rate yet says so instead of counting as nothing. Each day of rates is named by its Islamic date, with the normal date in brackets.</li>
+            <li><b>Rates:</b> gold (each karat) and silver in rupees per tola, and other currencies in rupees, by day. Gold, silver and foreign accounts are valued with the latest rates on or before the day. Something with no rate yet says so instead of counting as nothing. Each day of rates is named by its Islamic date, with the normal date in brackets; click a day to change its rates or its date, or to delete it.</li>
             <li><b>The buttons</b> (Add asset, Add rates, Transfer, Update balances) are on every tab.</li>
             <li><b>Owners:</b> with people added, an asset can be shared, for example 50% each. <b>Transfer</b> gives it to someone else from a date on; who had it before is kept, so earlier days still count them.</li>
             <li><b>Debts</b> are taken off your net worth. A sold car or a closed account gets a "sold or closed on" date, so it stops counting from then but its history stays.</li>
@@ -224,7 +224,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
           <h3>Zakat</h3>
           <p><b>Zakat</b> is in the sidebar (on a phone, under <b>More</b>, with the Vault, Notifications, Settings and Trash). It works from each person's zakat day, set in Settings › People, for example 15th Sha'ban.</p>
           <ul>
-            <li><b>Islamic dates</b> are worked out from the Umm al-Qura calendar. Today's is under Butler in the sidebar, and in My Day's line on a phone. Beside a date (Add rates, Make record), Butler shows its Islamic date; if the moon was sighted a day later or earlier where you are, pick that reading there. It corrects that whole month everywhere in Butler, on both devices, so you only do it once a month.</li>
+            <li><b>Islamic dates</b> are worked out from the Umm al-Qura calendar. Today's is under Butler in the sidebar, and in My Day's line on a phone. If the month began on a different day where you are, click that date (or the Islamic date beside a date in Add rates or Make record) and pick how it is here: up to two days later or earlier. It corrects that whole month everywhere in Butler, on both devices, so you do it once a month, whenever you notice it drifting.</li>
             <li><b>Records</b> are named by both dates, for example 15th Sha'ban 1447 (Tue, 3 Feb 2026).</li>
             <li><b>The zakat day</b> starts when someone becomes sahib-e-nisab: their zakatable wealth goes above the nisab and stays above it for a whole Islamic year (a dip within that year starts the count again). Butler works this out from the balances and rates you've entered and suggests it on the Zakat page; press <b>Set as zakat day</b>. It's only as exact as your entries, so keep balances and rates up to date, above all on the zakat day.</li>
             <li><b>After that</b> only the zakat day counts. Below the nisab on it, nothing is due and that zakat day ends; the next time the wealth goes above the nisab, a new count starts.</li>
@@ -445,7 +445,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
         </section>
         <section id="files2" data-title="Attachments">
           <h3>Attachments</h3>
-          <p>Files you attach are copied into your attachments folder and named after the task. The data file only stores their names. Removing a file from a task deletes it from the folder only when no other task uses it.</p>
+          <p>Files you attach are copied into your attachments folder and named after the task (or document, or asset). A very long name is shortened at a whole word, and characters a file name can't have are left out. The data file only stores their names. Removing a file from a task deletes it from the folder only when no other task uses it.</p>
           <div class="card">
             <b>So the phone can use them (once)</b>
             <ol class="steps" style="margin-top:6px">
