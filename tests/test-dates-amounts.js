@@ -101,6 +101,51 @@ const { loadApp, check, done, submitForm } = require('./helpers');
   check(win.eval('zakatTitle')({ date: day, hyear: u.year }) === `${H.textOf(day)} (${fmtDay(day)}${today.slice(0, 4) === '2026' ? '' : ', 2026'})`, 'a zakat record is named by both dates');
   check(win.eval('ASSET_KINDS').find((k) => k.id === 'silver').icon === 'coin' && doc.querySelector('#i-coin'), 'silver has a coin for its icon');
 
+  // --- A payment as you type ---
+  win.eval('People').setZakat('me', 15, 8);
+  PA.DB.zakat.push({ id: 'zr1', person: 'me', hyear: 1446, date: '2025-02-14', status: 'done', rates: { gold: {}, silver: 0, fx: {} }, items: [], roundUp: false, excess: 'carry', total: 0, nisab: 0, raw: 23000, due: 23000, made: 1, doneAt: 1 });
+  changed('zakat');
+  doc.querySelector('[data-view="zakat"]').click();
+  doc.querySelector('#main [data-form-type="zakat-pay"]').click();
+  const pf = doc.querySelector('#modal form');
+  const live = () => pf.querySelector('[data-zpay-live]').textContent;
+  const over = pf.querySelector('[data-zpay-excess]');
+  check(/Rs 23,000 left/.test(live()) && over.hidden, 'Add payment says what\'s left on the year');
+  const amt = pf.elements.amount;
+  amt.value = '20000';
+  amt.dispatchEvent(new win.Event('input', { bubbles: true }));
+  check(amt.value === '20,000' && /Left after this: Rs 3,000/.test(live()) && over.hidden, 'what\'s left after it updates as you type');
+  amt.value = '25000';
+  amt.dispatchEvent(new win.Event('input', { bubbles: true }));
+  check(!over.hidden && !over.disabled && /Rs 2,000/.test(over.textContent), 'going over shows the choices for the extra straight away');
+  pf.querySelector('[name="excess"][value="charity"]').checked = true;
+  submitForm(win, 'asset-zakat-pay', {});
+  const zr = PA.DB.zakat.find((r) => r.id === 'zr1');
+  check(win.eval('Zakat').paid(zr) === 25000 && zr.excess === 'charity' && !doc.querySelector('#modal form'), 'saved at once with the choice made');
+  doc.querySelector('[data-zakat-tab="payments"]').click();
+  check(main().includes(`For ${win.eval('zakatTitle')(zr)}`), 'a payment names its record by both dates');
+
+  // --- Gold: the unit typed, details on the row, zakatable ---
+  doc.querySelector('[data-view="assets"]').click();
+  doc.querySelector('#main [data-form-type="asset"]').click();
+  doc.querySelector('#modal [name="kind"]').value = 'gold';
+  doc.querySelector('#modal [name="kind"]').dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(doc.querySelector('#modal [name="zakat"]').checked, 'gold starts zakatable');
+  submitForm(win, 'asset-asset', { name: 'Bangles', weight: '2', unit: 'tola', acquired: '2020-05-01', notes: 'From the wedding' });
+  const bangles = PA.DB.assets.find((a) => a.name === 'Bangles');
+  check(bangles.unit === 'tola' && Math.abs(bangles.grams - 23.4) < 0.001 && bangles.zakat === null, 'a weight typed in tola is kept in grams and remembers tola');
+  doc.querySelector('[data-view="assets"]').click();
+  doc.querySelector('[data-asset-tab="gold"]').click();
+  check(/2 tola \(23\.4 g\)/.test(main()) && /Since/.test(main()) && /From the wedding/.test(main()), 'the row shows the weight as typed, the date had and the notes');
+  doc.querySelector('#main [data-action="open-asset"]').click();
+  check(doc.querySelector('#modal [name="unit"]').value === 'tola' && doc.querySelector('#modal [name="weight"]').value === '2', 'it opens in tola');
+  doc.querySelector('#modal [name="zakat"]').checked = false;
+  submitForm(win, 'asset-asset', {});
+  check(bangles.zakat === false, 'unticking Zakatable is kept');
+  check(win.eval('Assets').zakatable(bangles) === false && /Not zakatable/.test(main()), 'and shows on its row');
+  const rec = win.eval('Zakat').build('me', 1447, today);
+  check(rec.items.find((i) => i.asset === bangles.id)?.counted === false, 'a zakat record starts with it unticked');
+
   check(!app.errors.length, 'no script errors');
   done();
 })();

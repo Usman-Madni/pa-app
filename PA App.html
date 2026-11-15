@@ -202,6 +202,10 @@ button:disabled { cursor: not-allowed; }
 .vault-h { font-size: var(--t-md); margin: 4px 0 10px; }
 .vault-h + .card { margin-bottom: 20px; }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
+.asset-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-md); object-fit: cover; background: var(--panel-2); }
+.owners-line, .asset-note { margin-top: 2px; }
+.asset-note { white-space: normal; }
 .check-row label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); }
 .modal .value-history .row { margin-top: 6px; gap: 8px; }
 .modal .value-history select.input { flex: 1 1 160px; min-width: 0; }
@@ -1029,6 +1033,8 @@ const Assets = {
   // The assets someone has a share in today (everyone's for 'all'), in the order they were added.
   list(who = People.viewing(), date = todayISO()) { return DB.assets.filter((a) => who === 'all' || this.shareOf(a, who, date) > 0); },
   held(a, date) { return (!a.acquired || a.acquired <= date) && (!a.closed || a.closed > date); },
+  // Whether it counts for zakat: its own tick (`zakat`: true/false), else by kind (property, vehicles, other don't).
+  zakatable(a) { return a.zakat == null ? !ZAKAT_SKIP.includes(a.kind) : !!a.zakat; },
   amountOn(a, date) {
     const v = (a.values || []).filter((x) => x.date <= date).sort(byDate).pop();
     return v ? Number(v.amount) : null;
@@ -1077,6 +1083,7 @@ const Assets = {
     const a = {
       id: uid(), kind: data.kind, name: (data.name || '').trim() || this.kind(data.kind).name, notes: data.notes || '',
       karat: data.kind === 'gold' ? String(data.karat || '22') : '', grams: this.metal(data) ? Number(data.grams) || 0 : 0,
+      unit: this.metal(data) ? (data.unit === 'tola' ? 'tola' : 'g') : '', zakat: data.zakat == null || data.zakat === (!ZAKAT_SKIP.includes(data.kind)) ? null : !!data.zakat,
       currency: this.metal(data) ? '' : data.currency || 'PKR', values: [],
       owners: [{ from: '', people: this.cleanOwners(data.owners || People.forNew().map((id) => ({ id, share: 100 }))) }],
       acquired: data.acquired || '', closed: '', created: Date.now(),
@@ -1242,7 +1249,7 @@ const Zakat = {
       items: [], roundUp: true, excess: 'carry', total: 0, nisab: 0, raw: 0, due: 0, made: Date.now(), doneAt: 0,
     };
     rec.items = DB.assets.filter((a) => Assets.held(a, date) && Assets.shareOf(a, person, date) > 0 && (Assets.metal(a) || Assets.amountOn(a, date) != null)) // an account with no amount yet that day wasn't there
-      .map((a) => ({ asset: a.id, name: a.name, kind: a.kind, value: null, counted: !ZAKAT_SKIP.includes(a.kind), manual: false }));
+      .map((a) => ({ asset: a.id, name: a.name, kind: a.kind, value: null, counted: Assets.zakatable(a), manual: false }));
     this.revalue(rec);
     return rec;
   },
@@ -1582,7 +1589,7 @@ const AirtableImport = {
         if (DB.assets.some((a) => a.kind === kind && a.name === name && Math.abs(a.grams - grams) < 0.01)) continue; // brought in before
         let karat = kind === 'gold' ? String(this.num(r.Karat) || '') : '';
         if (kind === 'gold' && !KARATS.includes(karat)) { karat = '22'; out.notes.push(`"${name}" had no karat: set as 22K`); }
-        Assets.add({ kind, name, karat, grams, acquired: this.date(r['Date Acquired']), notes: r.Comments || '', owners: [{ id: owner, share: 100 }] });
+        Assets.add({ kind, name, karat, grams, unit: tola ? 'tola' : 'g', acquired: this.date(r['Date Acquired']), notes: r.Comments || '', owners: [{ id: owner, share: 100 }] });
         out.assets++;
       }
     }
@@ -1658,7 +1665,10 @@ function hijriPick(iso, input) {
     ${cur.shift ? `<p class="meta" style="margin:0">${esc(HIJRI_MONTHS[cur.month - 1])} ${cur.hyear} began ${esc(cur.label)}: every date in that month follows it.</p>` : ''}
   </div>`;
 }
-const fmtTola = (n) =>`${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
+const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} tola`;
+// Gold or silver's weight in the unit it was typed in, the other after it: "2 tola (23.4 g)".
+const fmtGrams = (g) => `${(Math.round(g * 100) / 100).toLocaleString('en-IN')} g`;
+const fmtWeight = (a) => (a.unit === 'tola' ? `${fmtTola(Assets.tola(a))} (${fmtGrams(a.grams)})` : `${fmtGrams(a.grams)} (${fmtTola(Assets.tola(a))})`);
 
 // The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
 // To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
@@ -1762,7 +1772,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // people:  {id, name, zakat: {day, month} | null} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
-//           acquired, closed, notes, created} — what people own or owe (see Assets)
+//           acquired, closed, notes, created, unit:'g'|'tola', zakat: true|false|null} — what people own or owe (see Assets)
 // rates:   {id, date, gold: {'24','22','21','18'}, silver, fx: {USD, …}} — rupees per tola / per unit on a date
 // zakat:   {id, person, hyear, date, status:'draft'|'done', rates, items: [{asset, name, kind, value, counted, manual}],
 //           roundUp, excess:'carry'|'charity', total, nisab, raw, due, made, doneAt} — a zakat record (see Zakat)
@@ -2423,6 +2433,22 @@ const AT = {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   },
 
+  // A picture's address for a small preview (kept while the app is open): from the folder here, from OneDrive's
+  // short-lived download link on the phone. Null when it can't be shown now.
+  thumbs: new Map(),
+  async thumbUrl(att) {
+    if (this.thumbs.has(att.file)) return this.thumbs.get(att.file);
+    let url = null;
+    try {
+      if (state.phone) {
+        if (!OD.canRead()) return null;
+        url = (await OD.graph('GET', OD.filePath(att.file)))?.['@microsoft.graph.downloadUrl'] || null;
+      } else if (this.status === 'ok') url = URL.createObjectURL(await (await this.dir.getFileHandle(att.file)).getFile());
+    } catch { url = null; }
+    if (url) this.thumbs.set(att.file, url);
+    return url;
+  },
+
   async remove(task, attId, key = 'tasks') {
     const att = task && (task.attachments || []).find((a) => a.id === attId);
     if (!att || state.readOnly) return;
@@ -2567,7 +2593,19 @@ function render() {
   // Board: the page fits the window and only the board scrolls, so the top stays put and column names stick.
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
   drawCharts();
+  loadThumbs();
   renderStatus();
+}
+// Fill in the small pictures on screen (an asset's first photo), once each can be read.
+const firstPhoto = (r) => (r.attachments || []).find((x) => /^image\//.test(x.type || '') || /\.(jpe?g|png|webp|gif|heic)$/i.test(x.file || ''));
+function loadThumbs() {
+  for (const img of $$('img[data-thumb]:not([src])')) {
+    const [key, id] = img.dataset.thumb.split(':');
+    const r = (DB[key] || []).find((x) => x.id === id);
+    const att = r && firstPhoto(r);
+    if (!att) continue;
+    AT.thumbUrl(att).then((url) => { if (url) img.src = url; else img.remove(); });
+  }
 }
 
 // Today in both calendars, under Butler in the sidebar (the phone shows it in My Day's line instead).
@@ -4494,17 +4532,20 @@ function assetKindTab(kind, who, list) {
   const rows = list.filter((a) => a.kind === kind).map((a) => {
     const v = Assets.partOn(a, who);
     const owners = Assets.ownersOn(a);
-    const shared = People.several() && !(owners.length === 1 && owners[0].id === (who === 'all' ? ME : who));
     const latest = Assets.latest(a);
     const detail = Assets.metal(a)
-      ? `${a.kind === 'gold' ? `${esc(a.karat)}K, ` : ''}${fmtTola(Assets.tola(a))} (${Math.round(a.grams * 100) / 100} g)`
-      : `${latest ? `${esc(a.currency || 'PKR')} ${Math.round(latest.amount).toLocaleString('en-IN')} on ${esc(fmtDay(latest.date))}` : 'No amount yet'}`;
+      ? `${a.kind === 'gold' ? `${esc(a.karat)}K, ` : ''}${esc(fmtWeight(a))}`
+      : `${latest ? `${esc(a.currency || 'PKR')} ${esc(groupAmount(Math.round(latest.amount)))} on ${esc(fmtDay(latest.date))}` : 'No amount yet'}`;
+    const photo = firstPhoto(a);
+    const note = String(a.notes || '').trim();
     return `
       <li class="item asset-row ${a.closed ? 'done' : ''}">
-        <span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>
+        ${photo ? `<img class="asset-thumb" data-thumb="assets:${esc(a.id)}" alt="">` : `<span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>`}
         <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
-          <div class="title">${esc(a.name)} ${shared ? `<span class="who-badges" title="${esc(owners.map((o) => `${People.name(o.id)} ${o.share}%`).join(', '))}">${owners.map((o) => avatar(o.id)).join('')}</span>` : ''}</div>
-          <div class="meta"><span>${detail}</span>${a.closed ? `<span>Closed ${esc(fmtDay(a.closed))}</span>` : ''}${shared && who !== 'all' ? `<span>${Math.round(Assets.shareOf(a, who) * 100)}% share</span>` : ''}</div>
+          <div class="title">${esc(a.name)}${Assets.zakatable(a) === !ZAKAT_SKIP.includes(a.kind) ? '' : ` <span class="pill">${Assets.zakatable(a) ? 'Zakatable' : 'Not zakatable'}</span>`}</div>
+          <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDay(a.acquired))}${a.acquired.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${a.acquired.slice(0, 4)}`}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDay(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
+          ${People.several() ? `<div class="meta owners-line">${esc(owners.map((o) => `${People.name(o.id)} ${Math.round(Number(o.share) * 100) / 100}%`).join(', '))}</div>` : ''}
+          ${note ? `<div class="meta asset-note">${esc(note.length > 90 ? `${note.slice(0, 90)}…` : note)}</div>` : ''}
         </div>
         <span class="asset-value">${v == null ? '<span class="meta">Needs a rate</span>' : rupees(v)}</span>
       </li>`;
@@ -4687,8 +4728,8 @@ function zakatRecordsTab(who) {
     <li class="item">
       <span class="tl-mark">${ic('calendar-event')}</span>
       <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
-        <div class="title">${esc(zakatTitle(r))}${who === 'all' && People.several() ? ` <span class="meta">${esc(People.name(r.person))}</span>` : ''}</div>
-        <div class="meta">${r.status === 'done' ? `<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span><span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
+        <div class="title">${esc(zakatTitle(r))}</div>
+        <div class="meta">${People.several() ? `<span>${esc(People.name(r.person))}</span>` : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
       </div>
       ${zakatStatus(r)}
     </li>`).join('');
@@ -4704,7 +4745,7 @@ function zakatPaymentsTab(who) {
         <span class="tl-date">${esc(fmtDay(p.date))}</span>
         <div class="body clickable" data-action="open-zpay" data-id="${esc(p.id)}">
           <div class="title">${rupees(p.amount)}${p.to ? ` <span class="meta">to ${esc(p.to)}</span>` : ''}</div>
-          <div class="meta">${who === 'all' && People.several() ? `<span>${esc(People.name(p.person))}</span>` : ''}<span>For ${r ? r.hyear : 'a removed record'}</span></div>
+          <div class="meta">${People.several() ? `<span>${esc(People.name(p.person))}</span>` : ''}<span>For ${r ? esc(zakatTitle(r)) : 'a removed record'}</span></div>
         </div>
       </li>`;
   }).join('');
@@ -4864,13 +4905,15 @@ function renderAssetForm() {
     $('#modal select, #modal button.primary')?.focus();
     return;
   }
-  if (f.type.startsWith('zakat-')) { $('#modal').innerHTML = zakatForm(f, box); $('#modal input:not([type=hidden]):not([disabled]), #modal select')?.focus(); return; }
+  if (f.type.startsWith('zakat-')) { $('#modal').innerHTML = zakatForm(f, box); zpayLive($('#modal form'));$('#modal input:not([type=hidden]):not([disabled]), #modal select')?.focus(); return; }
   if (f.type === 'asset') {
     const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
     const kind = a ? a.kind : f.kind || 'cash';
     const metal = !!Assets.kind(kind).metal;
     const owners = a ? Assets.ownersOn(a) : People.forNew().map((id) => ({ id, share: 100 }));
     const history = a && !metal ? (a.values || []).slice().sort(byDate).reverse() : [];
+    const unit = a ? a.unit || 'g' : device.get('metalUnit', 'g'); // as it was typed; a new one as the last was
+    const zakatable = a ? Assets.zakatable(a) : !ZAKAT_SKIP.includes(kind);
     html = box(a ? a.name : 'Add asset', `
       <div class="row">
         ${a ? '' : `<label class="field">Kind<select class="input" name="kind" data-asset-kind>${ASSET_KINDS.map((k) => `<option value="${k.id}" ${k.id === kind ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}</select></label>`}
@@ -4879,8 +4922,8 @@ function renderAssetForm() {
       ${metal ? `
         <div class="row">
           ${kind === 'gold' ? `<label class="field">Karat<select class="input" name="karat">${KARATS.map((k) => `<option value="${k}" ${String(a ? a.karat : '22') === k ? 'selected' : ''}>${k}K</option>`).join('')}</select></label>` : ''}
-          <label class="field">Weight<input class="input" type="number" min="0" step="any" name="weight" value="${a ? Math.round(a.grams * 1000) / 1000 : ''}" required></label>
-          <label class="field">In<select class="input" name="unit"><option value="g">grams</option><option value="tola">tola (11.7 g)</option></select></label>
+          <label class="field">Weight<input class="input" type="number" min="0" step="any" name="weight" value="${a ? Math.round((unit === 'tola' ? Assets.tola(a) : a.grams) * 1000) / 1000 : ''}" required></label>
+          <label class="field">In<select class="input" name="unit"><option value="g" ${unit === 'tola' ? '' : 'selected'}>grams</option><option value="tola" ${unit === 'tola' ? 'selected' : ''}>tola (11.7 g)</option></select></label>
         </div>` : `
         <div class="row">
           <label class="field">Currency<select class="input" name="currency">${currencyOptions(a ? a.currency : 'PKR')}</select></label>
@@ -4892,7 +4935,8 @@ function renderAssetForm() {
         <label class="field">Since (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
         ${a ? `<label class="field">Sold or closed on<input class="input" type="date" name="closed" value="${esc(a.closed || '')}"></label>` : ''}
       </div>
-      ${ownerInputs(owners, a && (a.owners || []).length > 1 ? 'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
+      <label class="check-line"><input type="checkbox" name="zakat" ${zakatable ? 'checked' : ''}> Zakatable <span class="meta">(counts towards zakat; ${ZAKAT_SKIP.includes(kind) ? 'things for personal use usually don\'t' : 'savings, gold, silver and money owed usually do'})</span></label>
+      ${ownerInputs(owners, a && (a.owners || []).length > 1 ?'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
       a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', 'Save', ro,
       a ? assetDocsBlock(a) + filesBlock(a, 'assets') : '');
@@ -4967,7 +5011,7 @@ function zakatForm(f, box) {
     const rows = r.items.map((i) => `
       <div class="zk-item ${i.counted ? '' : 'off'}">
         <input type="checkbox" name="zc-${esc(i.asset)}" ${i.counted ? 'checked' : ''} data-zrec aria-label="Count ${esc(i.name)}">
-        <span class="zk-name">${ic(Assets.kind(i.kind).icon, 'sm')}${esc(i.name)}${i.manual ? ' <span class="meta">(typed)</span>' : ''}</span>
+        <span class="zk-name">${ic(Assets.kind(i.kind).icon, 'sm')}${esc(i.name)}${i.manual ? ' <span class="meta">(typed)</span>' : ''}${(() => { const a = DB.assets.find((x) => x.id === i.asset); if (!a) return ''; const share = Assets.shareOf(a, r.person, r.date); return ` <span class="meta">${Assets.metal(a) ? `${a.kind === 'gold' ? `${esc(a.karat)}K, ` : ''}${esc(fmtWeight(a))}` : esc(a.currency || 'PKR')}${share < 1 ? `, ${Math.round(share * 100)}% share` : ''}</span>`; })()}</span>
         ${draft ? `<input class="input" ${amountAttrs(i.value == null ? '' : Math.round(i.value))} name="zv-${esc(i.asset)}" placeholder="Needs a rate" data-zrec aria-label="${esc(i.name)}'s value">`
           : `<span class="zk-val">${i.value == null ? '' : rupees(i.value)}</span>`}
       </div>`).join('');
@@ -5024,15 +5068,36 @@ function zakatForm(f, box) {
         <label class="field">Amount<input class="input" ${amountAttrs(v.amount || pay?.amount || '')} name="amount" required data-zpay-amount></label>
       </div>
       <label class="field">Paid to (optional)<input class="input" name="to" value="${esc(v.to || pay?.to || '')}" maxlength="80" placeholder="Who received it, or what for"></label>
-      <label class="field">Counts towards<select class="input" name="record">${recs.slice().reverse().map((r) => `<option value="${esc(r.id)}" ${r.id === chosen ? 'selected' : ''}>${esc(zakatTitle(r))}: ${Zakat.remaining(r) ? `${rupees(Zakat.remaining(r))} left` : 'paid'}</option>`).join('')}</select></label>
-      ${f.needExcess ? `<fieldset class="owner-box zk-excess"><legend>That's ${rupees(f.needExcess)} more than is left</legend>
-        <label><input type="radio" name="excess" value="carry" checked> Count the extra towards next year</label>
-        <label><input type="radio" name="excess" value="charity"> Keep it as extra charity</label>
-        <label><input type="radio" name="excess" value="split"> Split it: what's left here, the rest to other years with money left</label></fieldset>` : ''}`
+      <label class="field">Counts towards<select class="input" name="record" data-zpay-record>${recs.slice().reverse().map((r) => `<option value="${esc(r.id)}" ${r.id === chosen ? 'selected' : ''}>${esc(zakatTitle(r))}: ${Zakat.remaining(r) ? `${rupees(Zakat.remaining(r))} left` : 'paid'}</option>`).join('')}</select></label>
+      <p class="meta zk-live" data-zpay-live></p>
+      ${pay ? '' : `<fieldset class="owner-box zk-excess" data-zpay-excess ${f.needExcess ? '' : 'hidden disabled'}><legend>That's <span data-zpay-over>${rupees(f.needExcess || 0)}</span> more than is left</legend>
+        <label><input type="radio" name="excess" value="carry" ${v.excess !== 'charity' && v.excess !== 'split' ? 'checked' : ''}> Count the extra towards next year</label>
+        <label><input type="radio" name="excess" value="charity" ${v.excess === 'charity' ? 'checked' : ''}> Keep it as extra charity</label>
+        <label><input type="radio" name="excess" value="split" ${v.excess === 'split' ? 'checked' : ''}> Split it: what's left here, the rest to other years with money left</label></fieldset>`}`
       : '<p>Make and finish a zakat record first: payments count towards one.</p>';
     return box(pay ? 'Payment' : 'Add payment', inner, pay ? '<button type="button" class="btn danger edit-only" data-action="zpay-delete" style="margin-right:auto">Delete</button>' : '', recs.length ? 'Save' : '');
   }
   return '';
+}
+// The payment pop-up as you type: what's left on that year after this payment, and, once it's more than is left, the
+// choice of what the extra is for (shown there and then, not after Save).
+function zpayLive(form) {
+  const live = form?.querySelector('[data-zpay-live]');
+  if (!live) return;
+  const rec = DB.zakat.find((x) => x.id === form.elements.record?.value);
+  if (!rec) { live.textContent = ''; return; }
+  const pay = state.assetForm?.id ? DB.zakatPay.find((x) => x.id === state.assetForm.id) : null;
+  const left = Zakat.remaining(rec) + (pay && pay.record === rec.id ? Number(pay.amount) : 0); // editing: this payment aside
+  const amount = Number(String(form.elements.amount.value).replace(/,/g, '')) || 0;
+  const after = left - amount;
+  live.textContent = !amount ? `${rupees(left)} left on this year` : after >= 0 ? `Left after this: ${rupees(after)}` : `Left after this: nothing (${rupees(-after)} over)`;
+  const box = form.querySelector('[data-zpay-excess]');
+  if (box) {
+    const over = after < 0;
+    box.hidden = !over;
+    box.disabled = !over;
+    if (over) box.querySelector('[data-zpay-over]').textContent = rupees(-after);
+  }
 }
 // A change in a draft record's pop-up: read the whole form, work it out again, save, redraw.
 function zakatDraftChanged(form) {
@@ -5082,14 +5147,16 @@ function submitAssetForm(type, data) {
     if (data.closed && data.acquired && data.closed < data.acquired) return formError('It can\'t be closed before it was had.');
     if (a) {
       Object.assign(a, { name: data.name.trim() || a.name, notes: data.notes || '', acquired: data.acquired || '', closed: data.closed || '' });
-      if (Assets.metal(a)) { a.grams = grams; if (a.kind === 'gold') a.karat = data.karat; } else {
+      a.zakat = (data.zakat === 'on') === !ZAKAT_SKIP.includes(a.kind) ? null : data.zakat === 'on'; // as its kind usually is: no tick kept
+      if (Assets.metal(a)) { a.grams = grams; a.unit = data.unit === 'tola' ? 'tola' : 'g'; device.set('metalUnit', a.unit); if (a.kind === 'gold') a.karat = data.karat; } else {
         a.currency = data.currency || 'PKR';
         if (data.amount !== '') Assets.setValue(a, data.date || todayISO(), data.amount);
       }
       Assets.setOwnersNow(a, owners);
       toast(`Saved "${a.name}"`);
     } else {
-      const n = Assets.add({ ...data, kind, grams, owners });
+      const n = Assets.add({ ...data, kind, grams, owners, zakat: data.zakat === 'on' });
+      if (Assets.metal(n)) device.set('metalUnit', n.unit);
       device.set('assetTab', n.kind);
       toast(`Added "${n.name}"`);
     }
@@ -6755,7 +6822,9 @@ document.addEventListener('change', (e) => {
 // Quick add: preview what was understood as you type or pick.
 document.addEventListener('input', (e) => {
   if (e.target.matches?.('[data-qa]')) updateQuickPreview(e.target.form);
+  if (e.target.matches?.('[data-zpay-amount]')) zpayLive(e.target.form);
 });
+document.addEventListener('change', (e) => { if (e.target.matches?.('[data-zpay-record]')) zpayLive(e.target.form); });
 // A date box with an Islamic date beside it: the pick follows the date; choosing a reading corrects that month.
 function redrawHijriPick(form, name) {
   const box = form?.querySelector(`[data-hijri-for="${name}"]`);
