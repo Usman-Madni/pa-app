@@ -88,8 +88,10 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   doc.querySelector('[data-asset-tab="vehicle"]')?.click();
   doc.querySelector(`#main [data-action="open-asset"][data-id="${car.id}"]`).click();
   doc.querySelector('#modal [data-action="delete-asset"]').click();
-  await answer(win, true);
-  check(PA.DB.docs.includes(ins) && !ins.assets.length, 'deleting the car keeps its insurance, unlinked');
+  check(PA.DB.docs.includes(ins) && !V.forAsset(car.id).length === false && !PA.DB.assets.some((a) => a.id === car.id), 'deleting the car keeps its insurance');
+  check(PA.DB.tasks.some((x) => x.title === 'Renew Car insurance' && !x.done), 'whose renew task no longer names it');
+  doc.querySelector('#toasts [data-action="trash-undo"]').click();
+  check(PA.DB.assets.some((a) => a.id === car.id) && V.forAsset(car.id).includes(ins), 'Undo brings the car back, still linked');
 
   // --- Whose ---
   const pick = (v) => { const s = doc.querySelector('#person-pick select'); s.value = v; s.dispatchEvent(new win.Event('input', { bubbles: true })); };
@@ -127,9 +129,13 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   // --- Deleting a document ---
   doc.querySelector(`#main [data-action="open-doc"][data-id="${pass.id}"]`)?.click() || win.eval('openAssetForm')('doc', { id: pass.id });
   doc.querySelector('#modal [data-action="delete-doc"]').click();
-  await answer(win, true);
-  await tick(100);
-  check(!PA.DB.docs.includes(pass) && !PA.DB.tasks.some((x) => x.id.startsWith(`doc-renew-${pass.id}`) && !x.done), 'deleting it (asks) takes its open reminder too');
+  check(!PA.DB.docs.includes(pass) && !PA.DB.tasks.some((x) => x.id.startsWith(`doc-renew-${pass.id}`) && !x.done), 'deleting it (no question) takes its open reminder too');
+  doc.querySelector('#toasts [data-action="trash-undo"]').click();
+  check(PA.DB.docs.some((x) => x.id === pass.id) && PA.DB.tasks.some((x) => x.id.startsWith(`doc-renew-${pass.id}`) && !x.done), 'Undo brings back both');
+  doc.querySelector('[data-view="vault"]').click();
+  doc.querySelector(`#main [data-action="open-doc"][data-id="${pass.id}"]`)?.click() || win.eval('openAssetForm')('doc', { id: pass.id });
+  doc.querySelector('#modal [data-action="delete-doc"]').click();
+  check(PA.DB.trash.filter((e) => e.kind === 'docs').length === 1, 'deleted again, it waits in the Trash');
   check(!/[—·]/.test(main()), 'no em dashes or middle dots');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();

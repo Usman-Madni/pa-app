@@ -129,15 +129,23 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   submitForm(win, 'asset-rates', { date: '2026-10-01', 'gold-18': '380000', 'fx-EUR': '300' });
   check(A.ratesOn('2026-10-01').gold['18'] === 380000 && A.valueOn(eur, '2026-10-01') === 30000, 'new rates value what couldn\'t be valued before');
   doc.querySelector('#main [data-action="delete-rates"]').click();
-  await answer(win, true);
-  check(PA.DB.rates.length === 2, 'rates can be deleted (it asks)');
+  check(PA.DB.rates.length === 2 && PA.DB.trash.some((e) => e.kind === 'rates') && !doc.querySelector('#modal form'), 'rates are deleted at once, into the Trash (no question)');
+  doc.querySelector('#toasts [data-action="trash-undo"]').click();
+  check(PA.DB.rates.length === 3 && !PA.DB.trash.some((e) => e.kind === 'rates'), 'Undo puts them back');
+  doc.querySelector('#main [data-action="delete-rates"]').click();
 
   // Delete an asset
   doc.querySelector('[data-asset-tab="cash"]').click();
   doc.querySelector(`#main [data-action="open-asset"][data-id="${home.id}"]`).click();
   doc.querySelector('#modal [data-action="delete-asset"]').click();
-  const q = await answer(win, true);
-  check(/Sold or closed on/.test(q) && !PA.DB.assets.includes(home), 'deleting asks (and points to closing it instead), then it\'s gone');
+  check(!PA.DB.assets.some((x) => x.id === home.id) && PA.DB.trash.some((e) => e.kind === 'assets' && e.item.id === home.id) && /Sold or closed on/.test(doc.querySelector('#toasts').textContent), 'deleting goes to the Trash at once (and points to closing it instead)');
+  doc.querySelector('[data-view="trash"]').click();
+  check(/Asset, deleted/.test(doc.querySelector('#main').textContent), 'the Trash lists it as an asset');
+  doc.querySelector('#main [data-action="trash-restore"]').click();
+  check(PA.DB.assets.some((x) => x.id === home.id && A.amountOn(x, '2026-10-01') === 40000), 'Restore brings it back with its amounts');
+  PA.DB.assets.splice(PA.DB.assets.findIndex((x) => x.id === home.id), 1);
+  changed('assets');
+  doc.querySelector('[data-view="assets"]').click();
 
   // --- Whose assets show ---
   const pick = (v) => { const s = doc.querySelector('#person-pick select'); s.value = v; s.dispatchEvent(new win.Event('input', { bubbles: true })); };
@@ -152,6 +160,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   const now = Date.now();
   const m = mergeData({ assets: [{ id: 'a1', name: 'Mine', updated: now }], rates: [], tasks: [], notes: [], events: [] }, { assets: [{ id: 'a2', name: 'Theirs', updated: now }], rates: [{ id: 'r1', date: '2026-01-01', updated: now }], tasks: [], notes: [], events: [] }, now);
   check(m.assets.length === 2 && m.rates.length === 1, 'assets and rates merge like the rest');
+  await tick(50);
   app.close();
 
   // --- An older data file loads; read-only only looks ---
@@ -164,6 +173,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   ro.doc.querySelector('#main [data-action="open-asset"]').click();
   check(ro.doc.querySelector('#modal fieldset.plain').disabled && !/Save/.test(ro.doc.querySelector('#modal').textContent), 'read-only opens an asset to look at, with no Save');
   check(['asset-form', 'delete-asset', 'asset-value-off', 'delete-rates'].every((a) => ro.win.eval('EDIT_ACTIONS').has(a)), 'changing assets is edit-only');
+  await tick(50); // let its start-up finish before closing
   ro.close();
   await tick(0);
   done();

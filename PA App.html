@@ -726,7 +726,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn more-item" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
     <div class="side-foot">
-      <button class="nav-btn trash-nav" data-view="trash" title="Deleted tasks and notes, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
+      <button class="nav-btn trash-nav" data-view="trash" title="Deleted things, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
       <div class="df-badge" id="df-badge"></div>
       <button class="theme-btn" data-action="cycle-theme" id="theme-btn"></button>
       <a class="theme-btn" href="PA App Guide.html" target="_blank" rel="noopener"><svg class="i sm" aria-hidden="true"><use href="#i-help-circle"/></svg>Guide</a>
@@ -1794,22 +1794,65 @@ const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} t
 const fmtGrams = (g) => `${(Math.round(g * 100) / 100).toLocaleString('en-IN')} g`;
 const fmtWeight = (a) => (a.unit === 'tola' ? `${fmtTola(Assets.tola(a))} (${fmtGrams(a.grams)})` : `${fmtGrams(a.grams)} (${fmtTola(Assets.tola(a))})`);
 
-// The Trash: deleted tasks and notes, kept 30 days, newest first. Restore puts one back as it was (a task's link to
-// To Do is cleared: To Do links it again if its copy is still there, or gets a new one); Delete forever and Empty Trash
-// remove them for good; anything older than 30 days goes by itself. The Trash is shared data (both devices see it).
+// The Trash: deleted things, kept 30 days, newest first: tasks and notes (after their Undo runs out, PendingDelete),
+// and assets, documents, rates, zakat records and payments (straight away, with an Undo that takes them back out,
+// `discard`). Restore puts one back as it was (a task's link to To Do is cleared: To Do links it again if its copy is
+// still there, or gets a new one); Delete forever and Empty Trash remove them for good; anything older than 30 days
+// goes by itself. The Trash is shared data (both devices see it).
+const TRASH_KINDS = {
+  tasks: { name: 'Task', icon: 'list-check' }, notes: { name: 'Note', icon: 'notes' }, assets: { name: 'Asset', icon: 'wallet' },
+  docs: { name: 'Document', icon: 'id' }, rates: { name: 'Rates', icon: 'coins' }, zakat: { name: 'Zakat record', icon: 'calendar-event' },
+  zakatPay: { name: 'Zakat payment', icon: 'coins' },
+};
 const Trash = {
   KEEP_MS: 30 * 864e5,
   add(kind, records, at = Date.now()) {
-    for (const r of records) DB.trash.push({ id: uid(), kind, item: JSON.parse(JSON.stringify(r)), at });
+    const made = [];
+    for (const r of records) { const e = { id: uid(), kind, item: JSON.parse(JSON.stringify(r)), at }; DB.trash.push(e); made.push(e); }
+    return made;
   },
-  title(e) { return e.kind === 'notes' ? e.item.title || 'Untitled note' : fullTitle(normalizeTask(e.item)); },
+  title(e) {
+    const r = e.item;
+    switch (e.kind) {
+      case 'notes': return r.title || 'Untitled note';
+      case 'tasks': return fullTitle(normalizeTask(r));
+      case 'rates': return `Rates of ${bothDates(r.date)}`;
+      case 'zakat': return `${People.several() ? `${People.name(r.person)}: ` : ''}${zakatTitle(r)}`;
+      case 'zakatPay': return `${rupees(r.amount)} on ${fmtDay(r.date)}${r.to ? ` to ${r.to}` : ''}`;
+      default: return r.name || TRASH_KINDS[e.kind]?.name || 'Something';
+    }
+  },
+  // Delete now, into the Trash, with an Undo message that takes it all back. groups: [[kind, records], …], so a
+  // document and its renew task go (and come back) together. what: how the message names it.
+  discard(groups, what) {
+    const entries = [];
+    const keys = new Set(['trash']);
+    for (const [kind, records] of groups) {
+      const list = [].concat(records).filter(Boolean);
+      if (!list.length) continue;
+      const ids = new Set(list.map((r) => r.id));
+      DB[kind] = DB[kind].filter((x) => !ids.has(x.id));
+      entries.push(...this.add(kind, list));
+      keys.add(kind);
+    }
+    if (!entries.length) return;
+    changed(...keys);
+    const el = document.createElement('div');
+    el.className = 'toast toast-undo';
+    el.innerHTML = `<span>Deleted ${esc(what)}</span><button type="button" class="toast-btn" data-action="trash-undo" data-id="${esc(entries.map((e) => e.id).join(','))}">Undo</button>`;
+    $('#toasts').append(el);
+    setTimeout(() => el.remove(), PendingDelete.UNDO_MS);
+    Notices.add(`Deleted ${what} (it's in the Trash for 30 days)`);
+    render();
+  },
   restore(id) {
     const e = DB.trash.find((x) => x.id === id);
     if (!e) return null;
     DB.trash = DB.trash.filter((x) => x.id !== id);
     if (!DB[e.kind].some((x) => x.id === e.item.id)) {
       const item = { ...e.item };
-      if (e.kind === 'tasks') { item.todo = null; DB.tasks.push(normalizeTask(item)); } else DB.notes.push(item);
+      if (e.kind === 'tasks') { item.todo = null; DB.tasks.push(normalizeTask(item)); } else DB[e.kind].push(item);
+      if (e.kind === 'rates') DB.rates.sort(byDate);
     }
     changed(e.kind, 'trash');
     return e;
@@ -1823,6 +1866,13 @@ const Trash = {
     if (keep.length !== DB.trash.length) { DB.trash = keep; changed('trash'); }
   },
 };
+
+// After putting things back: the tasks that follow from them (a document's renew task, the zakat tasks).
+function afterRestore(entries) {
+  const kinds = new Set(entries.filter(Boolean).map((e) => e.kind));
+  if (kinds.has('docs') || kinds.has('assets')) vaultTasks();
+  if (kinds.has('zakat') || kinds.has('zakatPay') || kinds.has('assets') || kinds.has('rates')) zakatTasks();
+}
 
 // Selecting several tasks on Tasks (laptop and phone): Select, then tap tasks; the bar marks them done, moves them to
 // a bucket or deletes them (one Undo). Nothing is stored: the selection lives only on this screen.
@@ -1892,7 +1942,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
-// trash:   {id, kind:'tasks'|'notes', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
+// trash:   {id, kind:'tasks'|'notes'|'assets'|'docs'|'rates'|'zakat'|'zakatPay', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
 // people:  {id, name, zakat: {day, month, since?} | null} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
@@ -4578,10 +4628,10 @@ function renderTrash() {
   const daysLeft = (e) => Math.max(1, Math.ceil((e.at + Trash.KEEP_MS - Date.now()) / 864e5));
   const rows = list.map((e) => `
     <li class="item trash-row">
-      <span class="tl-mark" title="${e.kind === 'notes' ? 'Note' : 'Task'}">${ic(e.kind === 'notes' ? 'notes' : 'list-check')}</span>
+      <span class="tl-mark" title="${esc(TRASH_KINDS[e.kind]?.name || '')}">${ic(TRASH_KINDS[e.kind]?.icon || 'trash')}</span>
       <div class="body">
         <div class="title">${esc(Trash.title(e))}</div>
-        <div class="meta"><span>${e.kind === 'notes' ? 'Note' : 'Task'}, deleted ${esc(fmtStamp(new Date(e.at).toISOString()))}</span><span>Gone for good in ${plural(daysLeft(e), 'day')}</span></div>
+        <div class="meta"><span>${esc(TRASH_KINDS[e.kind]?.name || 'Something')}, deleted ${esc(fmtStamp(new Date(e.at).toISOString()))}</span><span>Gone for good in ${plural(daysLeft(e), 'day')}</span></div>
       </div>
       <span class="row edit-only">
         <button class="btn small" data-action="trash-restore" data-id="${esc(e.id)}">${ic('arrow-up-right', 'sm')}Restore</button>
@@ -4590,7 +4640,7 @@ function renderTrash() {
     </li>`).join('');
   return `
     <div class="page-head">
-      <div><h1>Trash</h1><p class="sub">${list.length ? `${plural(list.length, 'thing')} deleted in the last 30 days. Restore puts one back as it was.` : 'Deleted tasks and notes wait here for 30 days.'}</p></div>
+      <div><h1>Trash</h1><p class="sub">${list.length ? `${plural(list.length, 'thing')} deleted in the last 30 days. Restore puts one back as it was.` : 'Deleted tasks, notes, assets, documents, rates and zakat records wait here for 30 days.'}</p></div>
       ${list.length ? '<button class="btn danger edit-only" data-action="trash-empty">Empty Trash</button>' : ''}
     </div>
     <div class="card trash-card">
@@ -6464,7 +6514,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -6726,14 +6776,7 @@ document.addEventListener('click', (e) => {
       const d = state.assetForm && DB.docs.find((x) => x.id === state.assetForm.id);
       if (!d) break;
       closeAssetForm();
-      ask(`Delete "${d.name}" from the vault?${(d.attachments || []).length ? ' Its scans stay in the attachments folder.' : ''}`, { yes: 'Delete', danger: true }).then((yes) => {
-        if (!yes) return;
-        const tasks = Vault.openTasks(d);
-        DB.docs = DB.docs.filter((x) => x !== d);
-        changed('docs');
-        if (tasks.length) PendingDelete.start(tasks); // its renew reminder goes too (with Undo)
-        render();
-      });
+      Trash.discard([['docs', d], ['tasks', Vault.openTasks(d)]], `"${d.name}"`); // its renew reminder goes (and comes back) with it
       break;
     }
     case 'unlink-doc': {
@@ -6767,14 +6810,11 @@ document.addEventListener('click', (e) => {
       const r = f && (action === 'zpay-delete' ? DB.zakatPay.find((x) => x.id === f.id) : DB.zakat.find((x) => x.id === f.id));
       if (!r) break;
       closeAssetForm();
-      const q = action === 'zakat-delete' ? 'Delete this draft record?'
-        : action === 'zakat-reopen' ? `Reopen the ${r.hyear} record? It becomes a draft again, worked out from the assets and rates as they are now (values you typed are kept).`
-          : `Delete this payment of ${rupees(r.amount)}?`;
-      ask(q, { yes: action === 'zakat-reopen' ? 'Reopen' : 'Delete', danger: action !== 'zakat-reopen' }).then((yes) => {
+      if (action === 'zakat-delete') { Trash.discard([['zakat', r]], `the draft ${zakatTitle(r)}`); zakatTasks(); break; }
+      if (action === 'zpay-delete') { Trash.discard([['zakatPay', r]], `the payment of ${rupees(r.amount)}`); zakatTasks(); break; }
+      ask(`Reopen the ${r.hyear} record? It becomes a draft again, worked out from the assets and rates as they are now (values you typed are kept).`, { yes: 'Reopen' }).then((yes) => {
         if (!yes) return;
-        if (action === 'zakat-delete') { DB.zakat = DB.zakat.filter((x) => x !== r); changed('zakat'); }
-        else if (action === 'zpay-delete') { DB.zakatPay = DB.zakatPay.filter((x) => x !== r); changed('zakatPay'); }
-        else { r.status = 'draft'; r.doneAt = 0; Zakat.revalue(r); changed('zakat'); openAssetForm('zakat-record', { id: r.id }); }
+        r.status = 'draft'; r.doneAt = 0; Zakat.revalue(r); changed('zakat'); openAssetForm('zakat-record', { id: r.id });
         zakatTasks();
         render();
       });
@@ -6791,21 +6831,15 @@ document.addEventListener('click', (e) => {
       const a = state.assetForm && DB.assets.find((x) => x.id === state.assetForm.id);
       if (!a) break;
       closeAssetForm();
-      ask(`Delete "${a.name}"? Its amounts and owners go with it. To keep its history, set "Sold or closed on" instead.`, { yes: 'Delete', danger: true })
-        .then((yes) => {
-          if (!yes) return;
-          DB.assets = DB.assets.filter((x) => x !== a);
-          const docs = Vault.forAsset(a.id); // its documents stay in the vault, unlinked
-          docs.forEach((d) => { d.assets = d.assets.filter((x) => x !== a.id); });
-          changed('assets', ...(docs.length ? ['docs'] : []));
-          vaultTasks();
-          render();
-        });
+      // Its documents stay in the vault (still pointing at it, so Undo or Restore links them again).
+      Trash.discard([['assets', a]], `"${a.name}"`);
+      vaultTasks();
+      toast('To keep an asset\'s history instead, set its "Sold or closed on" date');
       break;
     }
     case 'delete-rates': {
       const r = DB.rates.find((x) => x.id === id);
-      if (r) ask(`Delete the rates of ${fmtDay(r.date)}?`, { yes: 'Delete', danger: true }).then((yes) => { if (yes) { DB.rates = DB.rates.filter((x) => x !== r); changed('rates'); render(); } });
+      if (r) { Trash.discard([['rates', r]], `the rates of ${fmtDay(r.date)}`); zakatTasks(); }
       break;
     }
     case 'person-off': {
@@ -6842,7 +6876,16 @@ document.addEventListener('click', (e) => {
     }
     case 'trash-restore': {
       const e = Trash.restore(id);
-      if (e) toast(`Restored "${Trash.title(e)}" to ${e.kind === 'notes' ? 'Notes' : 'Tasks'}`);
+      if (e) toast(`Restored "${Trash.title(e)}" to ${{ notes: 'Notes', tasks: 'Tasks', docs: 'the Vault', zakat: 'Zakat', zakatPay: 'Zakat' }[e.kind] || 'Assets'}`);
+      afterRestore([e]);
+      render();
+      break;
+    }
+    case 'trash-undo': { // the Undo on a delete that went straight to the Trash
+      const back = id.split(',').map((x) => Trash.restore(x)).filter(Boolean);
+      btn.closest('.toast')?.remove();
+      afterRestore(back);
+      if (back.length) toast(`Put back ${back.length === 1 ? `"${Trash.title(back[0])}"` : `${back.length} things`}`);
       render();
       break;
     }

@@ -124,6 +124,11 @@ const { loadApp, check, done, submitForm } = require('./helpers');
   check(win.eval('Zakat').paid(zr) === 25000 && zr.excess === 'charity' && !doc.querySelector('#modal form'), 'saved at once with the choice made');
   doc.querySelector('[data-zakat-tab="payments"]').click();
   check(main().includes(`For ${win.eval('zakatTitle')(zr)}`), 'a payment names its record by both dates');
+  doc.querySelector('#main [data-action="open-zpay"]').click();
+  doc.querySelector('#modal [data-action="zpay-delete"]').click();
+  check(!PA.DB.zakatPay.length && PA.DB.trash.some((e) => e.kind === 'zakatPay') && !doc.querySelector('#modal form'), 'deleting a payment: no question, it goes to the Trash');
+  doc.querySelector('#toasts [data-action="trash-undo"]').click();
+  check(PA.DB.zakatPay.length === 1 && win.eval('Zakat').paid(zr) === 25000, 'and Undo puts it back');
 
   // --- Gold: the unit typed, details on the row, zakatable ---
   doc.querySelector('[data-view="assets"]').click();
