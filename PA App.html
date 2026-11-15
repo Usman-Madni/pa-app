@@ -1451,11 +1451,13 @@ const AirtableImport = {
   },
   // Read the files into a plan: the tables found, the names used, what's in them. Changes nothing.
   async read(files) {
-    const plan = { tables: {}, unknown: [], names: [] };
+    const plan = { tables: {}, unknown: [], unreadable: [], names: [] };
     for (const f of files) {
-      const { cols, rows } = CSV.objects(await f.text());
+      let text;
+      try { text = await f.text(); } catch (e) { plan.unreadable.push(`${f.name} (${e.message || e.name || 'could not be read'})`); continue; } // e.g. a file still only in the cloud
+      const { cols, rows } = CSV.objects(text);
       const k = this.kind(cols);
-      if (k) plan.tables[k] = rows; else plan.unknown.push(f.name);
+      if (k) plan.tables[k] = rows; else plan.unknown.push(`${f.name} (columns: ${cols.slice(0, 4).join(', ') || 'none'})`);
     }
     const t = plan.tables;
     const names = [
@@ -4741,7 +4743,9 @@ function renderAssetForm() {
       <option value="new" ${guess[n] === 'new' ? 'selected' : ''}>A new person, ${esc(n)}</option>
       <option value="skip">Leave out</option></select></label>`;
     $('#modal').innerHTML = box('Bring in from Airtable', `
-      ${found.length ? `<p class="meta" style="margin:0">Found: ${esc(found.join(', '))}.${plan.unknown.length ? ` Not recognised: ${esc(plan.unknown.join(', '))}.` : ''}</p>` : '<p>None of these look like the zakat base\'s tables (Gold, Silver, Overview, Zakat Summary, Zakat Payments).</p>'}
+      ${found.length ? `<p class="meta" style="margin:0">Found: ${esc(found.join(', '))}.</p>` : '<p>None of these look like the zakat base\'s tables (Gold, Silver, Overview, Zakat Summary, Zakat Payments).</p>'}
+      ${plan.unknown.length ? `<p class="meta" style="margin:0">Not recognised: ${esc(plan.unknown.join('; '))}.</p>` : ''}
+      ${plan.unreadable.length ? `<p class="form-error" style="margin:0">Couldn't be read: ${esc(plan.unreadable.join('; '))}. If they're in a OneDrive folder, make them available on this device (or save them to Downloads) and pick them again.</p>` : ''}
       ${plan.names.length ? `<div class="balance-list"><div class="meta">Who is who</div>${plan.names.map(whoSel).join('')}</div>` : ''}
       ${plan.unlinked ? `<label class="field">Gold and silver not linked to anyone there (${plan.unlinked}), so not counted<select class="input" name="unlinked"><option value="skip">Leave them out</option><option value="${ME}">They're yours</option>${others.map((p) => `<option value="${esc(p.id)}">They're ${esc(p.name)}'s</option>`).join('')}</select></label>` : ''}
       <p class="meta" style="margin:0">Brought in: rates, savings and gold and silver as assets, each person's zakat day, every year's record (what was due) and every payment. Photos stay in Airtable. Bringing the same files in again adds nothing twice. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
@@ -6870,7 +6874,14 @@ document.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   if (kind === 'import' && !state.readOnly) importData(file);
-  if (kind === 'airtable' && !state.readOnly) AirtableImport.read([...e.target.files]).then((plan) => openAssetForm('import', { plan }));
+  if (kind === 'airtable') { // never silent: a pop-up, or a message saying why not
+    if (state.readOnly) toast('Read-only on this device: sign in to edit, then pick the files again');
+    else {
+      toast(`Reading ${plural(e.target.files.length, 'file')}…`);
+      AirtableImport.read([...e.target.files]).then((plan) => openAssetForm('import', { plan }))
+        .catch((err) => toast(`Couldn't read the files: ${err && err.message ? err.message : err}`));
+    }
+  }
   if (kind === 'attach') AT.add(currentTask(), [...e.target.files]);
   if (kind === 'ro-open') RO.open(file);
   e.target.value = '';

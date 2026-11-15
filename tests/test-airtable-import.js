@@ -48,7 +48,7 @@ const FILES = [
   check(d && d.day === 15 && d.month === 8 && d.year === 1446 && I.islamic('1st Ramzan').month === 9 && I.islamic('15th Shaban').year === 0, 'Islamic dates, spelt the local way too');
 
   const plan = await I.read(FILES);
-  check(['gold', 'silver', 'overview', 'summary', 'payments'].every((k) => plan.tables[k]) && plan.unknown.join() === 'notes.csv', 'each table recognised by its columns; another file is named as not recognised');
+  check(['gold', 'silver', 'overview', 'summary', 'payments'].every((k) => plan.tables[k]) && plan.unknown.join() === 'notes.csv (columns: Something, Else)', 'each table recognised by its columns; another file is named as not recognised, with its columns');
   check(plan.names.join() === 'Alex,Robin' && plan.unlinked === 2, 'the names used, and the gold not linked to anyone');
   const guess = I.guess(plan);
   check(guess.Alex === 'me' && guess.Robin === 'new', 'a first guess: the base\'s first person is you, others new');
@@ -102,6 +102,19 @@ const FILES = [
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
 
+  // --- Never silent: a file that can't be read is named in the pop-up ---
+  const c = loadApp();
+  c.doc.querySelector('[data-view="settings"]').click();
+  const cIn = c.doc.querySelector('[data-input="airtable"]');
+  const cloudOnly = { name: 'Gold-Grid view.csv', text: async () => { throw Object.assign(new Error('The file could not be read'), { name: 'NotReadableError' }); } };
+  Object.defineProperty(cIn, 'files', { value: [cloudOnly, FILES[4]], configurable: true });
+  cIn.dispatchEvent(new c.win.Event('change', { bubbles: true }));
+  await tick(20);
+  const cm = c.doc.querySelector('#modal [data-form="asset-import"]');
+  check(cm && /Couldn't be read: Gold-Grid view\.csv/.test(cm.textContent) && /Zakat Payments \(7 rows\)/.test(cm.textContent), 'a file that can\'t be read is named (the others still found), never nothing at all');
+  check(/Reading 2 files/.test(c.doc.querySelector('#toasts').textContent), 'and it says it\'s reading');
+  c.close();
+
   // --- Unlinked gold kept as yours; a karat missing ---
   const b = loadApp();
   const I2 = b.win.eval('AirtableImport');
@@ -119,6 +132,7 @@ const FILES = [
   roInput.dispatchEvent(new ro.win.Event('change', { bubbles: true }));
   await tick(20);
   check(!ro.doc.querySelector('#modal form') && !ro.PA.DB.assets.length, 'read-only brings nothing in');
+  check(/Read-only on this device/.test(ro.doc.querySelector('#toasts').textContent), 'and says why');
   ro.close();
   done();
 })();
