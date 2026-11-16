@@ -58,6 +58,18 @@ const { loadApp, check, done } = require('./helpers');
   doc.querySelector('[data-view="tasks"]').click();
   const badge = doc.querySelector('#main .who-badges');
   check(badge && /Kim Lee/.test(badge.textContent) && !badge.querySelector('.avatar'), 'a task shows whose it is by full name, not initials');
+  // --- Each person's colour ---
+  const sam = People.add('Sam');
+  const C = win.eval('PERSON_COLORS');
+  check(People.colorOf('me') === '' && kim.color === C[0] && sam.color === C[1], 'each new person gets the next free colour; you have none');
+  check((badge.querySelector('.pname').getAttribute('style') || '').includes('--pc:var(--lab-red)'), 'their name shows in it');
+  doc.querySelector('[data-view="settings"]').click();
+  const pick = doc.querySelector(`[data-person-color="${kim.id}"]`);
+  check(pick && pick.value === C[0] && !doc.querySelector('[data-person-color="me"]'), 'Settings › People has a colour box for each person but you');
+  pick.value = C[3];
+  pick.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(People.colorOf(kim.id) === C[3] && JSON.parse(win.localStorage.getItem('pa_people')).find((p) => p.id === kim.id).color === C[3], 'changing it is kept and saved');
+  check(People.colorOf(People.add('Lee').id) === C[0], 'a colour given up goes to the next person');
 
   check(!app.errors.length, 'no script errors');
   done();

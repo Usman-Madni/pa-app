@@ -122,18 +122,20 @@ button:disabled { cursor: not-allowed; }
 .page-filter { width: min(220px, 100%); padding: 6px 10px; font-size: var(--t-sm); }
 .page-head .page-filter { margin-left: auto; }
 .who-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.avatar { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 600; flex: none; line-height: 1; }
+.avatar { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--pc, var(--accent)) 16%, transparent); color: var(--pc, var(--accent)); font-size: 10px; font-weight: 600; flex: none; line-height: 1; }
 .person-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 2px; border-radius: 999px; background: var(--panel); font-size: var(--t-sm); }
 .person-chip .chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; display: inline-grid; place-items: center; }
 .person-chip .chip-x:hover { color: var(--danger); }
 .who-badges { display: inline-flex; gap: 2px; vertical-align: middle; }
 .who-badges .avatar { width: 18px; height: 18px; font-size: 9px; }
-.who-names { align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); font-size: var(--t-xs); font-weight: 500; white-space: nowrap; }
+.who-names { align-items: center; gap: 4px; }
+.pname { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: var(--t-xs); font-weight: 500; white-space: nowrap; color: var(--pc, var(--muted)); background: color-mix(in srgb, var(--pc, var(--muted)) 13%, transparent); }
 .note-people { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
 .person-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .person-row:first-of-type { border-top: 0; }
 .person-row .grow { flex: 1 1 120px; min-width: 0; }
 .person-row select { width: auto; }
+.person-color-gap { width: 84px; }
 /* ===== Assets ===== */
 .page-actions { gap: 8px; }
 .asset-tabs { margin-bottom: 16px; width: fit-content; }
@@ -984,8 +986,27 @@ const People = {
     if (id === ME && !DB.people.some((p) => p.id === ME)) DB.people.unshift({ id: ME, name: 'Me', zakat: null });
     return DB.people.find((p) => p.id === id) || null;
   },
+  // A person's colour (one of the label colours, kept as its hex): the one they were given, else the next one nobody
+  // has, in order. You have none, so your own things stay plain.
+  colorOf(id) {
+    if (id === ME) return '';
+    const p = DB.people.find((x) => x.id === id);
+    if (p?.color) return p.color;
+    const others = DB.people.filter((x) => x.id !== ME);
+    const taken = new Set(others.map((x) => x.color).filter(Boolean));
+    const free = PERSON_COLORS.filter((c) => !taken.has(c));
+    const i = Math.max(0, others.filter((x) => !x.color).indexOf(p));
+    return (free.length ? free : PERSON_COLORS)[i % (free.length || PERSON_COLORS.length)];
+  },
+  setColor(id, hex) {
+    const p = this.stored(id);
+    if (!p || id === ME) return;
+    p.color = hex;
+    changed('people');
+  },
   add(name) {
     const p = { id: uid(), name: name.trim(), zakat: null };
+    p.color = this.colorOf(p.id) || ''; // computed before it's on the list: the next free one
     DB.people.push(p);
     changed('people');
     return p;
@@ -2046,7 +2067,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
 // trash:   {id, kind:'tasks'|'notes'|'assets'|'docs'|'rates'|'zakat'|'zakatPay', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
-// people:  {id, name, zakat: {day, month, since?} | null} — whose tasks, notes and events they are (see People)
+// people:  {id, name, zakat: {day, month, since?} | null, color?: a label colour's hex} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
 //           acquired, closed, notes, created, unit:'g'|'tola', zakat: true|false|null} — what people own or owe (see Assets)
@@ -3782,6 +3803,7 @@ const LABEL_COLORS = [
   { name: 'Red', hex: '#ef4444', tok: 'red' }, { name: 'Orange', hex: '#f97316', tok: 'orange' }, { name: 'Green', hex: '#22c55e', tok: 'green' },
   { name: 'Blue', hex: '#3b82f6', tok: 'blue' }, { name: 'Purple', hex: '#a855f7', tok: 'purple' }, { name: 'Pink', hex: '#ec4899', tok: 'pink' }, { name: 'Grey', hex: '#64748b', tok: 'grey' },
 ];
+const PERSON_COLORS = LABEL_COLORS.filter((c) => c.tok !== 'grey').map((c) => c.hex); // people's colours (grey looks like no one's)
 const labelInk = (hex) => { const c = LABEL_COLORS.find((x) => x.hex === String(hex).toLowerCase()); return c ? `var(--lab-${c.tok})` : esc(hex); };
 const colorSelect = (cur, attrs = 'name="color"') =>
   `<select class="input" ${attrs} aria-label="Colour">${LABEL_COLORS.map((c) => `<option value="${c.hex}" ${c.hex === cur ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
@@ -3862,7 +3884,10 @@ function renderMore() {
 }
 
 // ----- People on screen -----
-const avatar = (id) => `<span class="avatar" aria-hidden="true">${esc(People.initials(id))}</span>`;
+const personInk = (id) => { const c = People.colorOf(id); return c ? labelInk(c) : ''; };
+const avatar = (id) => `<span class="avatar" aria-hidden="true"${personInk(id) ? ` style="--pc:${personInk(id)}"` : ''}>${esc(People.initials(id))}</span>`;
+// A person's name in their colour (yours plain).
+const personName = (id, extra = '') => `<span class="pname"${personInk(id) ? ` style="--pc:${personInk(id)}"` : ''}>${esc(People.name(id))}${extra ? ` ${esc(extra)}` : ''}</span>`;
 // Whose things the screens show: Everyone or one person. Only once there's someone besides you.
 function personPicker() {
   if (!People.several()) return '';
@@ -3881,7 +3906,7 @@ function whoBadges(r) {
   const on = People.of(r);
   const v = People.viewing();
   if (on.length === 1 && on[0] === (v === 'all' ? ME : v)) return '';
-  return `<span class="who-badges who-names" title="${esc(on.map((id) => People.name(id)).join(', '))}">${ic('users', 'sm')}${esc(on.map((id) => People.name(id)).join(', '))}</span>`; // names in full, not initials
+  return `<span class="who-badges who-names" title="${esc(on.map((id) => People.name(id)).join(', '))}">${on.map((id) => personName(id)).join('')}</span>`; // names in full, each in its colour
 }
 // Who a task or note is for, with + Add and a × on each (never on the last one). kind: 'tasks' | 'notes'.
 function peopleChips(r, kind) {
@@ -3909,6 +3934,7 @@ function peopleCard() {
           <span class="grow"><b>${esc(p.name)}</b>${p.id === ME ? ' <span style="color:var(--muted);font-size:var(--t-sm)">(you)</span>' : ''}</span>
           <select class="input" data-zakat-day="${esc(p.id)}" aria-label="${esc(p.name)}: zakat day" ${ro}>${days(p.zakat?.day)}</select>
           <select class="input" data-zakat-month="${esc(p.id)}" aria-label="${esc(p.name)}: zakat month" ${ro}>${months(p.zakat?.month)}</select>
+          ${p.id === ME ? '<span class="person-color-gap"></span>' : colorSelect(People.colorOf(p.id), `data-person-color="${esc(p.id)}" ${ro} title="${esc(p.name)}'s colour"`)}
           <button type="button" class="icon-btn edit-only" data-action="rename-person" data-id="${esc(p.id)}" title="Rename" aria-label="Rename ${esc(p.name)}">${ic('pencil')}</button>
           ${p.id === ME ? `<span class="icon-btn edit-only" aria-hidden="true" style="visibility:hidden">${ic('x')}</span>` : `<button type="button" class="icon-btn edit-only" data-action="remove-person" data-id="${esc(p.id)}" title="Remove" aria-label="Remove ${esc(p.name)}">${ic('x')}</button>`}
         </div>`).join('')}
@@ -5002,7 +5028,7 @@ function assetKindTab(kind, who, list) {
         <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
           <div class="title">${esc(a.name)}${Assets.zakatable(a) === !ZAKAT_SKIP.includes(a.kind) ? '' : ` <span class="pill">${Assets.zakatable(a) ? 'Zakatable' : 'Not zakatable'}</span>`}</div>
           <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDate(a.acquired))}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDate(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
-          ${People.several() ? `<div class="meta owners-line">${esc(owners.map((o) => `${People.name(o.id)} ${Math.round(Number(o.share) * 100) / 100}%`).join(', '))}</div>` : ''}
+          ${People.several() ? `<div class="meta owners-line">${owners.map((o) => personName(o.id, `${Math.round(Number(o.share) * 100) / 100}%`)).join('')}</div>` : ''}
           ${note ? `<div class="meta asset-note">${esc(note.length > 90 ? `${note.slice(0, 90)}…` : note)}</div>` : ''}
         </div>
         <span class="asset-value">${v == null ? '<span class="meta">Needs a rate</span>' : rupees(v)}</span>
@@ -5201,7 +5227,7 @@ function zakatRecordsTab(who) {
       <span class="tl-mark">${ic('calendar-event')}</span>
       <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
         <div class="title">${esc(zakatTitle(r))}</div>
-        <div class="meta">${People.several() ? `<span>${esc(People.name(r.person))}</span>` : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDate(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
+        <div class="meta">${People.several() ? personName(r.person) : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDate(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
       </div>
       ${zakatStatus(r)}
     </li>`).join('');
@@ -5217,7 +5243,7 @@ function zakatPaymentsTab(who) {
         <span class="tl-date">${esc(fmtDate(p.date))}</span>
         <div class="body clickable" data-action="open-zpay" data-id="${esc(p.id)}">
           <div class="title">${rupees(p.amount)}${p.to ? ` <span class="meta">to ${esc(p.to)}</span>` : ''}</div>
-          <div class="meta">${People.several() ? `<span>${esc(People.name(p.person))}</span>` : ''}<span>For ${r ? esc(zakatTitle(r)) : 'a removed record'}</span></div>
+          <div class="meta">${People.several() ? personName(p.person) : ''}<span>For ${r ? esc(zakatTitle(r)) : 'a removed record'}</span></div>
         </div>
       </li>`;
   }).join('');
@@ -7649,6 +7675,7 @@ document.addEventListener('change', (e) => {
     People.setZakat(id, row.querySelector('[data-zakat-day]').value, row.querySelector('[data-zakat-month]').value);
     return;
   }
+  if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
     if (l) { l.color = e.target.value; changed('labels'); render(); renderDrawer(); }
