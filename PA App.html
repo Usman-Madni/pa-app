@@ -187,6 +187,19 @@ button:disabled { cursor: not-allowed; }
 .owner-grid label { display: grid; grid-template-columns: auto 1fr 72px; align-items: center; gap: 6px; font-size: var(--t-sm); }
 .owner-grid .input { padding: 5px 8px; text-align: right; }
 .value-history { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.upkeep { gap: 8px; }
+.upkeep-h { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+.upkeep-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.upkeep-sum > div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: var(--r-md); background: var(--panel-2); }
+.upkeep-sum b { font-variant-numeric: tabular-nums; }
+.upkeep-items summary { cursor: pointer; font-size: var(--t-sm); color: var(--muted); }
+.upkeep-log { display: flex; flex-direction: column; max-height: 320px; overflow: auto; }
+.upkeep-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; border: 0; border-top: 1px solid var(--border); background: none; color: inherit; padding: 7px 2px; cursor: pointer; font: inherit; font-size: var(--t-sm); }
+.upkeep-row:hover { background: var(--panel-2); }
+.upkeep-row .ur-main { display: flex; flex-direction: column; min-width: 0; }
+.upkeep-row .ur-cost { font-variant-numeric: tabular-nums; }
+.upkeep-row .ur-ico { color: var(--muted); }
+.upkeep-filter select { width: auto; }
 .vh-row { display: grid; grid-template-columns: 1fr auto 28px; gap: 10px; align-items: center; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
 .vh-edit { grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 28px; margin: 2px 0; }
 .vh-edit .input, .amt-in .input { padding: 5px 8px; min-width: 0; }
@@ -836,6 +849,9 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2l-3 2"/><path d="M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5m2 0v1.5m0 -9v1.5"/></symbol>
 <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12v9"/><path d="M12 12l-8 -4.5"/></symbol>
 <symbol id="i-arrows-exchange" viewBox="0 0 24 24"><path d="M7 10h14l-4 -4"/><path d="M17 14h-14l4 4"/></symbol>
+<symbol id="i-tool" viewBox="0 0 24 24"><path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/></symbol>
+<symbol id="i-alert-triangle" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M13.41 10.59l2.59 -2.59"/><path d="M7 12a5 5 0 0 1 5 -5"/></symbol>
 <symbol id="i-search" viewBox="0 0 24 24"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
@@ -1642,6 +1658,179 @@ const Vault = {
 };
 function vaultTasks() { if (Vault.ensureTasks()) changed('tasks'); }
 
+// ===================== Upkeep =====================
+// What an asset costs to keep: a log (`upkeep`: {id, asset, date, type, item, cost, vendor, km, notes, attachments,
+// created}) of services, repairs, things added and other costs, and on the asset a plan of repeating jobs (`plan`:
+// [{id, item, km, months, since, sinceKm}], every so many km and/or months, whichever comes first). Vehicles also keep
+// car details (`car`: {make, model, year, regYear, plate, boughtKm}) and odometer readings (`readings`: [{date, km}]);
+// every log entry with a reading counts as one too. Each plan job keeps one open task (Upkeep.ensureTasks), due when
+// the months run out or, by km, on the day the average daily distance says the reading will get there. Logging the
+// item ticks it and the next round counts from that entry.
+const UPKEEP_TYPES = [
+  { id: 'service', name: 'Service', icon: 'tool' }, { id: 'repair', name: 'Repair', icon: 'alert-triangle' },
+  { id: 'added', name: 'Added', icon: 'plus' }, { id: 'other', name: 'Other', icon: 'receipt' },
+];
+// The plan a car starts with (every km / months; edit or delete any).
+const CAR_PLAN = [
+  { item: 'Engine oil and oil filter', km: 5000, months: 6 }, { item: 'Air filter', km: 15000, months: 12 },
+  { item: 'AC filter', km: 0, months: 12 }, { item: 'Coolant', km: 40000, months: 24 },
+  { item: 'Brake oil', km: 0, months: 24 }, { item: 'Battery check', km: 0, months: 12 },
+];
+const Upkeep = {
+  type(id) { return UPKEEP_TYPES.find((t) => t.id === id) || UPKEEP_TYPES[3]; },
+  vehicle(a) { return a?.kind === 'vehicle'; },
+  log(assetId) { return DB.upkeep.filter((e) => e.asset === assetId).sort((x, y) => (y.date || '').localeCompare(x.date || '') || (y.created || 0) - (x.created || 0)); },
+  add(data) {
+    const e = {
+      id: uid(), asset: data.asset, date: data.date || todayISO(), type: UPKEEP_TYPES.some((t) => t.id === data.type) ? data.type : 'service',
+      item: (data.item || '').trim() || 'Upkeep', cost: Number(data.cost) || 0, vendor: (data.vendor || '').trim(), km: Number(data.km) || 0,
+      notes: data.notes || '', attachments: [], created: Date.now(), ...(data.imported ? { imported: true } : {}),
+    };
+    DB.upkeep.push(e);
+    return e;
+  },
+  same(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); },
+  // Every odometer reading known for a vehicle, oldest first: when bought, readings typed, and log entries.
+  readings(a) {
+    const out = [];
+    if (a.car?.boughtKm && a.acquired) out.push({ date: a.acquired, km: Number(a.car.boughtKm) });
+    for (const r of a.readings || []) out.push({ date: r.date, km: Number(r.km) });
+    for (const e of DB.upkeep) if (e.asset === a.id && Number(e.km) > 0) out.push({ date: e.date, km: Number(e.km) });
+    return out.filter((r) => r.date && r.km > 0).sort((x, y) => x.date.localeCompare(y.date) || x.km - y.km);
+  },
+  latestKm(a) { return this.readings(a).reduce((m, r) => Math.max(m, r.km), 0); },
+  // Average km a day, from the first to the latest reading (at least 30 days apart); null when it can't tell yet.
+  kmPerDay(a) {
+    const r = this.readings(a);
+    if (r.length < 2) return null;
+    const first = r[0];
+    const last = r.reduce((m, x) => (x.km > m.km ? x : m), r[0]);
+    const days = (parseISO(last.date) - parseISO(first.date)) / 864e5;
+    return days >= 30 && last.km > first.km ? (last.km - first.km) / days : null;
+  },
+  addReading(a, date, km) {
+    a.readings = [...(a.readings || []).filter((r) => r.date !== date), { date, km: Number(km) || 0 }].sort(byDate);
+  },
+  // What it's cost: all time and this year, by type, by item (most spent first), by year; the price paid; per km.
+  costs(a, today = todayISO()) {
+    const log = this.log(a.id);
+    const year = today.slice(0, 4);
+    const byType = Object.fromEntries(UPKEEP_TYPES.map((t) => [t.id, 0]));
+    const items = new Map();
+    const years = new Map();
+    let all = 0, thisYear = 0;
+    for (const e of log) {
+      const c = Number(e.cost) || 0;
+      all += c;
+      if ((e.date || '').startsWith(year)) thisYear += c;
+      byType[e.type] = (byType[e.type] || 0) + c;
+      const k = e.item.trim().toLowerCase();
+      const it = items.get(k) || { item: e.item.trim(), count: 0, cost: 0 };
+      it.count++; it.cost += c;
+      items.set(k, it);
+      const y = (e.date || '').slice(0, 4);
+      if (y) years.set(y, (years.get(y) || 0) + c);
+    }
+    const bought = (a.values || []).slice().sort(byDate)[0];
+    const price = this.vehicle(a) && bought ? Number(bought.amount) || 0 : 0;
+    const km = this.vehicle(a) ? this.latestKm(a) - (Number(a.car?.boughtKm) || (this.readings(a)[0]?.km ?? 0)) : 0;
+    return {
+      all, thisYear, byType, price, total: all + price, perKm: km > 0 && all ? all / km : null, km,
+      items: [...items.values()].sort((x, y) => y.cost - x.cost),
+      years: [...years.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([y, c]) => ({ year: y, cost: c })),
+    };
+  },
+  // Spent on upkeep this year across the assets shown.
+  spentThisYear(assets, today = todayISO()) {
+    const ids = new Set(assets.map((a) => a.id));
+    return DB.upkeep.filter((e) => ids.has(e.asset) && (e.date || '').startsWith(today.slice(0, 4))).reduce((s, e) => s + (Number(e.cost) || 0), 0);
+  },
+  // Names typed before, most used first (for the boxes' suggestions).
+  used(field, assetId) {
+    const n = new Map();
+    for (const e of DB.upkeep) if (e[field] && (!assetId || field === 'vendor' || e.asset === assetId)) n.set(e[field].trim(), (n.get(e[field].trim()) || 0) + 1);
+    return [...n.entries()].sort((x, y) => y[1] - x[1]).map(([v]) => v);
+  },
+  // ----- The plan -----
+  taskPrefix(a, p) { return `up-${a.id}-${p.id}-`; },
+  jobOfTask(t) {
+    if (!t.id.startsWith('up-')) return null;
+    for (const a of DB.assets) for (const p of a.plan || []) if (t.id.startsWith(this.taskPrefix(a, p))) return { a, p };
+    return null;
+  },
+  entriesFor(a, p) { return DB.upkeep.filter((e) => e.asset === a.id && this.same(e.item, p.item)).sort(byDate); },
+  lastVendor(a, p) { return this.entriesFor(a, p).filter((e) => e.vendor).pop()?.vendor || ''; },
+  // When the job was last done: its latest log entry, or a task of it ticked later without one, else when the plan
+  // started. {date, km}.
+  lastDone(a, p) {
+    const e = this.entriesFor(a, p).pop();
+    let last = e ? { date: e.date, km: Number(e.km) || 0 } : { date: p.since || a.acquired || todayISO(), km: Number(p.sinceKm) || 0 };
+    // A round's task ticked without logging it: the next counts from the tick (and so on, round after round). A task
+    // ticked by Butler because a newer entry came in doesn't count: its round is no longer the latest.
+    for (let i = 0; i < 50; i++) {
+      const t = DB.tasks.find((x) => x.id === `${this.taskPrefix(a, p)}${last.date}` && x.done && x.completedAt);
+      const d = t && toISO(new Date(t.completedAt));
+      if (!d || d <= last.date) break;
+      last = { date: d, km: this.vehicle(a) ? this.latestKm(a) : 0 };
+    }
+    return last;
+  },
+  // When it's next due: by months, by km (the day the average daily distance gets there), whichever is first.
+  // {date, km (the reading it's due at, or 0), byKm (the km came first), estimated (by km, from the average)}.
+  next(a, p, today = todayISO()) {
+    const last = this.lastDone(a, p);
+    const byMonths = p.months ? toISO(addMonthsClamped(parseISO(last.date), Number(p.months))) : '';
+    let byKm = '';
+    let atKm = 0;
+    if (this.vehicle(a) && p.km) {
+      const now = this.latestKm(a);
+      const from = last.km || (this.readings(a)[0]?.km ?? 0);
+      atKm = from + Number(p.km);
+      const perDay = this.kmPerDay(a);
+      if (now >= atKm) byKm = today;
+      else if (perDay) byKm = toISO(addDays(parseISO(today), Math.ceil((atKm - now) / perDay)));
+    }
+    const dates = [byMonths, byKm].filter(Boolean).sort();
+    const date = dates[0] || '';
+    return { date, km: atKm, byKm: !!byKm && date === byKm && byKm !== byMonths, estimated: !!byKm && byKm !== today, last };
+  },
+  every(p) { return [p.km ? fmtKm(Number(p.km)) : '', p.months ? plural(Number(p.months), 'month') : ''].filter(Boolean).join(' or '); },
+  // One open task per job, for the asset's owners: due when it's next due, kept in step as readings come in; logging
+  // the job (or ticking its task) starts the next round. Ids come from the asset, the job and when it was last done,
+  // so the laptop and the phone make the same one. Returns true if any task changed (the caller saves).
+  ensureTasks(now = new Date()) {
+    if (state.readOnly) return false;
+    const today = toISO(now);
+    const gone = new Set(DB.deleted.filter((m) => m.key === 'tasks').map((m) => m.id));
+    let changedAny = false;
+    for (const a of DB.assets) {
+      const plan = a.closed && a.closed <= today ? [] : a.plan || [];
+      const owners = Assets.ownersOn(a).map((o) => o.id);
+      for (const p of plan) {
+        const n = this.next(a, p, today);
+        if (!n.date) continue;
+        const want = `${this.taskPrefix(a, p)}${n.last.date}`;
+        for (const t of DB.tasks.filter((x) => x.id.startsWith(this.taskPrefix(a, p)) && x.id !== want && !x.done)) { Series.tick(t, now, true); changedAny = true; } // done since (logged)
+        if (gone.has(want) || PendingDelete.has(want)) continue;
+        const title = `${p.item} (${a.name})`;
+        const notes = `Every ${this.every(p)}. Last done ${fmtDate(n.last.date)}${n.last.km ? ` at ${fmtKm(n.last.km)}` : ''}.${n.km ? ` Due at ${fmtKm(n.km)}${n.estimated ? ` (about ${fmtDate(n.date)}, from the readings)` : ''}.` : ''} Tick it to log it in Butler.`;
+        let t = DB.tasks.find((x) => x.id === want);
+        if (!t) {
+          t = normalizeTask({ id: want, title, due: `${n.date}T${ALL_DAY}`, people: owners, notes, created: Date.now(), reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+          DB.tasks.push(t);
+          changedAny = true;
+        } else if (!t.done) {
+          if (t.due.slice(0, 10) !== n.date) { TaskEdit.setDue(t, n.date); changedAny = true; } // a new reading moves the estimate
+          if (t.title !== title || t.notes !== notes || People.of(t).join() !== owners.join()) { t.title = title; t.notes = notes; t.people = [...owners]; changedAny = true; }
+        }
+      }
+    }
+    return changedAny;
+  },
+  // Open tasks of jobs no longer on an asset's plan (the caller deletes them, with Undo).
+  orphanTasks(a) { return DB.tasks.filter((x) => x.id.startsWith(`up-${a.id}-`) && !x.done && !(a.plan || []).some((p) => x.id.startsWith(this.taskPrefix(a, p)))); },
+};
+
 // ===================== Bringing in an Airtable zakat base =====================
 // From the CSV files Airtable downloads (one per table: Gold, Silver, Overview, Zakat Summary, Zakat Payments), read on
 // this device only. Each file is recognised by its columns, not its name. People are named in the base (the Overview
@@ -1926,7 +2115,7 @@ const fmtWeight = (a) => (a.unit === 'tola' ? `${fmtTola(Assets.tola(a))} (${fmt
 const TRASH_KINDS = {
   tasks: { name: 'Task', icon: 'list-check' }, notes: { name: 'Note', icon: 'notes' }, assets: { name: 'Asset', icon: 'wallet' },
   docs: { name: 'Document', icon: 'id' }, rates: { name: 'Rates', icon: 'coins' }, zakat: { name: 'Zakat record', icon: 'calendar-event' },
-  zakatPay: { name: 'Zakat payment', icon: 'coins' },
+  zakatPay: { name: 'Zakat payment', icon: 'coins' }, upkeep: { name: 'Upkeep entry', icon: 'tool' },
 };
 const Trash = {
   KEEP_MS: 30 * 864e5,
@@ -1995,6 +2184,7 @@ const Trash = {
 function afterRestore(entries) {
   const kinds = new Set(entries.filter(Boolean).map((e) => e.kind));
   if (kinds.has('docs') || kinds.has('assets')) vaultTasks();
+  if (kinds.has('upkeep') || kinds.has('assets')) upkeepTasks();
   if (kinds.has('zakat') || kinds.has('zakatPay') || kinds.has('assets') || kinds.has('rates')) zakatTasks();
 }
 
@@ -2077,10 +2267,13 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // docs:    {id, cat, type, name, number, issued, expires, renewMonths, people, assets: [ids], attachments, notes,
 //           created} — the ID vault (see Vault); assets may carry attachments too (photos)
+// upkeep:  {id, asset, date, type:'service'|'repair'|'added'|'other', item, cost, vendor, km, notes, attachments, created}
+//           — an asset's upkeep log (see Upkeep); assets may carry plan: [{id, item, km, months, since, sinceKm}],
+//           car: {make, model, year, regYear, plate, boughtKm} and readings: [{date, km}]
 // hijriFix: {id 'hf-<hyear>-<month>', hyear, month, shift} — an Islamic month that began a day later (+1) or
 //           earlier (-1) here than Umm al-Qura says (see Hijri)
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -2124,7 +2317,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], upkeep: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -2677,7 +2870,7 @@ const AT = {
     const dot = original.lastIndexOf('.');
     const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
     const year = (task.due ? task.due.slice(0, 4) : String(new Date().getFullYear()));
-    const base = `${shortName(task.title || task.name || 'Attachment', 85) || 'Attachment'}${task.period ? ` ${task.period}` : ''}`;
+    const base = `${shortName(task.title || task.name || task.item || 'Attachment', 85) || 'Attachment'}${task.period ? ` ${task.period}` : ''}`;
     return `${task.period || /\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
   },
 
@@ -2781,12 +2974,12 @@ const AT = {
   async remove(task, attId, key = 'tasks') {
     const att = task && (task.attachments || []).find((a) => a.id === attId);
     if (!att || state.readOnly) return;
-    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset' }[key]}?`, { yes: 'Remove', danger: true }))) return;
+    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset', upkeep: 'entry' }[key]}?`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed(key);
     if (state.assetForm) renderAssetForm();
     // Delete the file only when nothing else (another copy of a repeating task, a document, an asset) still uses it.
-    const stillUsed = ['tasks', 'docs', 'assets'].some((k) => DB[k].some((t) => (t.attachments || []).some((a) => a.file === att.file)));
+    const stillUsed = ['tasks', 'docs', 'assets', 'upkeep'].some((k) => DB[k].some((t) => (t.attachments || []).some((a) => a.file === att.file)));
     if (!stillUsed && state.phone) { try { await OD.graph('DELETE', OD.filePath(att.file)); } catch { /* already gone, or no signal: the file stays */ } } // to the OneDrive recycle bin
     else if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
     render();
@@ -2984,7 +3177,7 @@ const Viewer = {
 // case. Nothing is stored but the words, on this device only while the app is open.
 const SEARCH_KINDS = [
   ['tasks', 'Tasks', 'list-check'], ['notes', 'Notes', 'notes'], ['events', 'Events', 'calendar'], ['assets', 'Assets', 'wallet'],
-  ['docs', 'Documents', 'id'], ['zakat', 'Zakat records', 'calendar-event'], ['zakatPay', 'Zakat payments', 'coins'],
+  ['docs', 'Documents', 'id'], ['upkeep', 'Upkeep', 'tool'], ['zakat', 'Zakat records', 'calendar-event'], ['zakatPay', 'Zakat payments', 'coins'],
 ];
 const Search = {
   words(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); },
@@ -3014,6 +3207,12 @@ const Search = {
     for (const d of Vault.list()) {
       if (!this.hit(w, d.name, d.type, d.number, String(d.number || '').replace(/\s/g, ''), d.notes, Vault.cat(d.cat).name)) continue;
       out.docs.push({ id: d.id, title: d.name, sub: [d.type, d.expires && `Expires ${fmtDay(d.expires)}`].filter(Boolean).join(', '), action: 'open-doc' });
+    }
+    const shownAssets = new Map(Assets.list(who).map((a) => [a.id, a]));
+    for (const e of DB.upkeep) {
+      const a = shownAssets.get(e.asset);
+      if (!a || !this.hit(w, e.item, e.vendor, e.notes, a.name, Upkeep.type(e.type).name)) continue;
+      out.upkeep.push({ id: e.id, title: `${e.item}: ${a.name}`, sub: `${fmtDate(e.date)}${e.cost ? `, ${rupees(e.cost)}` : ''}`, action: 'upkeep-entry' });
     }
     const zwho = People.several() ? who : 'all';
     for (const r of Zakat.records(zwho)) {
@@ -4247,6 +4446,9 @@ function finishDonePrompt(data) {
   // A document's renew task: open the document for its new expiry date (the next reminder follows from it).
   const renewed = t.id.match(/^doc-renew-(.+)-\d{4}-\d{2}-\d{2}$/);
   if (renewed && DB.docs.some((d) => d.id === renewed[1])) { closeTaskDrawer(); openAssetForm('doc', { id: renewed[1], renewed: true }); }
+  // An upkeep job's task: Add entry, filled in, so the next round counts from it.
+  const job = Upkeep.jobOfTask(t);
+  if (job) { closeTaskDrawer(); openAssetForm('upkeep', { asset: job.a.id, item: job.p.item, typeId: 'service', vendor: Upkeep.lastVendor(job.a, job.p), fromTask: t.id }); }
 }
 
 
@@ -5004,6 +5206,7 @@ function assetOverview(who, list, t) {
       ${metal('gold')}${metal('silver')}
       ${cash ? card('Cash and accounts', rupees(cash)) : ''}
       ${debts ? card('Debts', rupees(debts)) : ''}
+      ${Upkeep.spentThisYear(list) ? card('Spent on upkeep this year', rupees(Upkeep.spentThisYear(list)), 'Services, repairs, things added and other costs') : ''}
     </div>
     <div class="grid chart-grid">
       <div class="card"><h2>Net worth over the last year</h2>${worthChart(who)}</div>
@@ -5334,6 +5537,72 @@ const readOwners = (data) => (People.several()
   : [{ id: ME, share: 100 }]);
 const currencyOptions = (cur) => [...new Set([...CURRENCIES, ...Assets.foreign(), cur || 'PKR'])].map((c) => `<option ${c === (cur || 'PKR') ? 'selected' : ''}>${esc(c)}</option>`).join('');
 
+// A vehicle's own details, in its pop-up.
+function carFields(a) {
+  const c = a?.car || {};
+  const f = (label, name, v, extra = '') => `<label class="field">${label}<input class="input" name="car-${name}" value="${esc(v ?? '')}" ${extra}></label>`;
+  return `<fieldset class="owner-box"><legend>Car details</legend><div class="rate-grid">
+    ${f('Make', 'make', c.make, 'placeholder="e.g. Toyota" maxlength="40"')}${f('Model', 'model', c.model, 'placeholder="e.g. Corolla" maxlength="40"')}
+    ${f('Year', 'year', c.year, 'inputmode="numeric" maxlength="4"')}${f('Registered', 'regYear', c.regYear, 'inputmode="numeric" maxlength="4"')}
+    ${f('Number plate', 'plate', c.plate, 'maxlength="20"')}<label class="field">Km when bought<input class="input" ${amountAttrs(c.boughtKm || '')} name="car-boughtKm"></label>
+  </div></fieldset>`;
+}
+const readCar = (data) => ({ make: (data['car-make'] || '').trim(), model: (data['car-model'] || '').trim(), year: (data['car-year'] || '').trim(), regYear: (data['car-regYear'] || '').trim(), plate: (data['car-plate'] || '').trim(), boughtKm: Number(data['car-boughtKm']) || 0 });
+const carName = (c) => [c.make, c.model, c.plate].filter(Boolean).join(' ');
+const fmtKm = (n) => `${Math.round(n).toLocaleString('en-IN')} km`;
+
+// An asset's upkeep, in its pop-up: what it's cost, its plan of repeating jobs, and the log (by type).
+function upkeepBlock(a) {
+  const log = Upkeep.log(a.id);
+  const filter = state.upkeepFilter || '';
+  const shown = filter ? log.filter((e) => e.type === filter) : log;
+  const c = Upkeep.costs(a);
+  const car = Upkeep.vehicle(a);
+  const km = car ? Upkeep.latestKm(a) : 0;
+  const maxYear = Math.max(1, ...c.years.map((y) => y.cost));
+  return `
+    <div class="value-history upkeep"><div class="meta upkeep-h">${ic('tool', 'sm')} Upkeep</div>
+      ${log.length ? `
+        <div class="upkeep-sum">
+          <div><span class="meta">This year</span><b>${rupees(c.thisYear)}</b></div>
+          <div><span class="meta">All time</span><b>${rupees(c.all)}</b></div>
+          ${car && c.perKm ? `<div><span class="meta">Per km</span><b>${rupees(c.perKm)}</b></div>` : ''}
+          ${c.price ? `<div><span class="meta">With the price paid</span><b>${rupees(c.total)}</b></div>` : ''}
+        </div>
+        <div class="meta upkeep-types">${UPKEEP_TYPES.filter((t) => c.byType[t.id]).map((t) => `<span>${ic(t.icon, 'sm')}${esc(t.name)} ${rupees(c.byType[t.id])}</span>`).join('')}</div>
+        ${c.years.length > 1 ? `<div class="kind-bars upkeep-years">${c.years.map((y) => `<div class="kind-bar" title="${esc(y.year)}: ${esc(rupees(y.cost))}"><span class="kb-name">${esc(y.year)}</span><span class="kb-track"><span class="kb-fill" style="width:${Math.max(2, (y.cost / maxYear) * 100).toFixed(1)}%"></span></span><span class="kb-val">${rupees(y.cost)}</span></div>`).join('')}</div>` : ''}
+        <details class="upkeep-items"><summary>By item</summary>${c.items.map((it) => `<div class="vh-row"><span>${esc(it.item)}</span><span class="meta">${plural(it.count, 'time')}</span><span>${rupees(it.cost)}</span></div>`).join('')}</details>` : '<p class="meta" style="margin:0">Nothing logged yet: services, repairs, things added and other costs go here, with what they cost.</p>'}
+      ${car ? `<p class="meta" style="margin:0">${km ? `Latest reading ${fmtKm(km)}${Upkeep.kmPerDay(a) ? `, about ${fmtKm(Upkeep.kmPerDay(a) * 30)} a month` : ''}` : 'No reading yet'}</p>` : ''}
+      ${planBlock(a)}
+      ${log.length ? `<div class="row upkeep-filter"><select class="input" data-upkeep-filter aria-label="Show which"><option value="">All ${log.length} ${log.length === 1 ? 'entry' : 'entries'}</option>${UPKEEP_TYPES.filter((t) => log.some((e) => e.type === t.id)).map((t) => `<option value="${t.id}" ${filter === t.id ? 'selected' : ''}>${esc(t.name)} (${log.filter((e) => e.type === t.id).length})</option>`).join('')}</select></div>
+        <div class="upkeep-log">${shown.map((e) => `<button type="button" class="upkeep-row" data-action="upkeep-entry" data-id="${esc(e.id)}"><span class="ur-ico" title="${esc(Upkeep.type(e.type).name)}">${ic(Upkeep.type(e.type).icon, 'sm')}</span><span class="ur-main"><span>${esc(e.item)}</span><span class="meta">${esc(fmtDate(e.date))}${e.km ? `, ${fmtKm(e.km)}` : ''}${e.vendor ? `, ${esc(e.vendor)}` : ''}${(e.attachments || []).length ? ` ${ic('paperclip', 'sm')}` : ''}</span></span><span class="ur-cost">${e.cost ? rupees(e.cost) : ''}</span></button>`).join('')}</div>` : ''}
+      <div class="row edit-only">
+        <button type="button" class="btn small" data-action="upkeep-entry" data-asset="${esc(a.id)}">${ic('plus', 'sm')}Add entry</button>
+        ${car ? `<button type="button" class="btn small" data-action="asset-form" data-form-type="reading" data-asset="${esc(a.id)}">${ic('gauge', 'sm')}Update reading</button>` : ''}
+      </div>
+    </div>`;
+}
+// The plan's jobs, each with when it's next due; a job opens to change it.
+function planBlock(a) {
+  const plan = a.plan || [];
+  const today = todayISO();
+  const rows = plan.map((p) => {
+    const n = Upkeep.next(a, p, today);
+    const late = n.date && n.date < today;
+    const soon = n.date && !late && n.date <= toISO(addDays(new Date(), 30));
+    return `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="plan" data-asset="${esc(a.id)}" data-id="${esc(p.id)}">
+      <span class="ur-ico">${ic('repeat', 'sm')}</span>
+      <span class="ur-main"><span>${esc(p.item)}</span><span class="meta">Every ${esc(Upkeep.every(p) || '…')}; last ${esc(fmtDate(n.last.date))}${n.last.km && p.km ? ` at ${fmtKm(n.last.km)}` : ''}</span></span>
+      <span class="ur-cost">${n.date ? `<span class="pill ${late ? 'zk-over' : soon ? 'zk-left' : ''}">${late ? 'Due since' : 'Due'} ${esc(fmtDate(n.date))}${n.km && n.byKm ? ` (${fmtKm(n.km)})` : ''}</span>` : ''}</span>
+    </button>`;
+  }).join('');
+  return `<div class="upkeep-plan"><div class="meta">${ic('repeat', 'sm')} Plan: repeating jobs, each with a task when it's due</div>
+    ${rows ? `<div class="upkeep-log">${rows}</div>` : '<p class="meta" style="margin:0">No repeating jobs yet.</p>'}
+    <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="plan" data-asset="${esc(a.id)}">${ic('plus', 'sm')}Add a job</button></div>
+  </div>`;
+}
+function upkeepTasks() { if (Upkeep.ensureTasks()) changed('tasks'); }
+
 function openAssetForm(type, opts = {}) {
   state.assetForm = { type, ...opts };
   renderAssetForm();
@@ -5381,6 +5650,61 @@ function renderAssetForm() {
     $('#modal input[name="name"]')?.focus();
     return;
   }
+  if (f.type === 'upkeep') { // one log entry: add, change, photos; Back returns to its asset
+    const e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
+    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset));
+    if (!a) return closeAssetForm();
+    const v = e || { date: todayISO(), type: f.typeId || 'service', item: f.item || '', cost: '', vendor: f.vendor || '', km: '', notes: '' };
+    const list = (id, vals) => `<datalist id="${id}">${vals.slice(0, 60).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`;
+    const items = [...new Set([...(a.plan || []).map((p) => p.item), ...Upkeep.used('item', a.id), ...(Upkeep.vehicle(a) ? CAR_PLAN.map((p) => p.item) : [])])];
+    $('#modal').innerHTML = box(e ? `${a.name}: ${e.item}` : `${a.name}: add to upkeep`, `
+      ${f.fromTask ? `<p class="banner" style="margin:0">Done? Fill in what it cost${Upkeep.vehicle(a) ? ' and the reading' : ''}; the next one counts from here.</p>` : ''}
+      <div class="row">
+        <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date)}" required></label>
+        <label class="field">Type<select class="input" name="type">${UPKEEP_TYPES.map((t) => `<option value="${t.id}" ${t.id === v.type ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      </div>
+      <label class="field">Item<input class="input" name="what" list="up-items" value="${esc(v.item)}" placeholder="e.g. Engine oil and oil filter" maxlength="80" required>${list('up-items', items)}</label>
+      <div class="row">
+        <label class="field">Cost<input class="input" ${amountAttrs(v.cost)} name="cost"></label>
+        ${Upkeep.vehicle(a) ? `<label class="field">Reading (km)<input class="input" ${amountAttrs(v.km || '')} name="km" placeholder="${Upkeep.latestKm(a) ? `last ${groupAmount(Upkeep.latestKm(a))}` : ''}"></label>` : ''}
+      </div>
+      <label class="field">Vendor<input class="input" name="vendor" list="up-vendors" value="${esc(v.vendor)}" maxlength="60">${list('up-vendors', Upkeep.used('vendor'))}</label>
+      <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
+    `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
+    e ? filesBlock(e, 'upkeep') : '<p class="meta" style="margin:0">Save it, then add photos or the bill.</p>');
+    $('#modal [name="what"]')?.focus();
+    return;
+  }
+  if (f.type === 'plan') { // a repeating job on an asset's plan
+    const a = DB.assets.find((x) => x.id === f.asset);
+    if (!a) return closeAssetForm();
+    const p = (a.plan || []).find((x) => x.id === f.id);
+    const car = Upkeep.vehicle(a);
+    const items = [...new Set([...Upkeep.used('item', a.id), ...(car ? CAR_PLAN.map((x) => x.item) : [])])];
+    $('#modal').innerHTML = box(p ? `${a.name}: ${p.item}` : `${a.name}: add a job`, `
+      <label class="field">Job<input class="input" name="what" list="plan-items" value="${esc(p ? p.item : '')}" placeholder="${car ? 'e.g. Engine oil and oil filter' : 'e.g. AC service'}" maxlength="80" required><datalist id="plan-items">${items.map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
+      <div class="row">
+        ${car ? `<label class="field">Every (km)<input class="input" ${amountAttrs(p ? p.km || '' : '')} name="km"></label>` : ''}
+        <label class="field">Every (months)<input class="input" type="number" min="0" max="120" name="months" value="${esc(p ? p.months || '' : '')}"></label>
+      </div>
+      <p class="meta" style="margin:0">${car ? 'Whichever comes first. ' : ''}Its task is due when the time${car ? ' or the distance' : ''} runs out; logging "${esc(p ? p.item : 'the job')}" in the upkeep (or ticking the task) starts the next round. A log entry counts when its item has the same name.</p>
+      ${p ? '' : `<label class="field">Last done (optional)<input class="input" type="date" name="since" value=""></label>`}`,
+    `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>${p ? '<button type="button" class="btn danger edit-only" data-action="plan-delete">Take off the plan</button>' : ''}`);
+    $('#modal [name="what"]')?.focus();
+    return;
+  }
+  if (f.type === 'reading') { // a vehicle's odometer reading on a day
+    const a = DB.assets.find((x) => x.id === f.asset);
+    if (!a) return closeAssetForm();
+    $('#modal').innerHTML = box(`${a.name}: reading`, `
+      <p class="meta" style="margin:0">The odometer reading on a day. Butler works out how far it goes in a month, to estimate when a job due by km comes up.${Upkeep.latestKm(a) ? ` Last: ${fmtKm(Upkeep.latestKm(a))}.` : ''}</p>
+      <div class="row">
+        <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
+        <label class="field">Km<input class="input" ${amountAttrs('')} name="km" required></label>
+      </div>`, `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>`);
+    $('#modal [name="km"]')?.focus();
+    return;
+  }
   if (f.type === 'hijri') { // today's Islamic date, from the sidebar or My Day: correct this month if the moon was sighted on another day
     const today = todayISO();
     $('#modal').innerHTML = box('Today\'s Islamic date', `
@@ -5424,7 +5748,7 @@ function renderAssetForm() {
     html = box(a ? a.name : 'Add asset', `
       <div class="row">
         ${a ? '' : `<label class="field">Kind<select class="input" name="kind" data-asset-kind>${ASSET_KINDS.map((k) => `<option value="${k.id}" ${k.id === kind ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}</select></label>`}
-        <label class="field grow">Name<input class="input" name="name" value="${esc(a ? a.name : '')}" placeholder="${esc({ cash: 'e.g. Savings account', gold: 'e.g. Gold set', silver: 'e.g. Silver ring', property: 'e.g. Plot 12', vehicle: 'e.g. Family car', debt: 'e.g. Car loan', owed: 'e.g. Loan to a friend' }[kind] || 'Name')}" maxlength="80" required></label>
+        <label class="field grow">Name<input class="input" name="name" value="${esc(a ? a.name : '')}" placeholder="${esc({ cash: 'e.g. Savings account', gold: 'e.g. Gold set', silver: 'e.g. Silver ring', property: 'e.g. Plot 12', vehicle: 'e.g. Family car (or leave it: make, model, plate)', debt: 'e.g. Car loan', owed: 'e.g. Loan to a friend' }[kind] || 'Name')}" maxlength="80" ${kind === 'vehicle' ? '' : 'required'}></label>
       </div>
       ${metal ? `
         <div class="row">
@@ -5438,15 +5762,16 @@ function renderAssetForm() {
           <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}"></label>
         </div>
         ${history.length ? `<div class="value-history"><div class="meta">${kind === 'cash' ? 'Balance history' : kind === 'debt' || kind === 'owed' ? 'Still owed, by date' : 'Value history'} <span class="meta">(change a date or amount here)</span></div>${history.map((v) => `<div class="vh-row vh-edit" data-vh="${esc(v.date)}"><input class="input" type="date" value="${esc(v.date)}" data-vh-date aria-label="Date"><span class="amt-in"><span class="meta">${esc(a.currency || 'PKR')}</span><input class="input" ${amountAttrs(v.amount)} data-vh-amount aria-label="Amount on ${esc(fmtDate(v.date))}"></span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDate(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
+      ${kind === 'vehicle' ? carFields(a) : ''}
       <div class="row">
-        <label class="field">Since (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
+        <label class="field">${kind === 'vehicle' ? 'Bought on' : 'Since'} (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
         ${a ? `<label class="field">Sold or closed on<input class="input" type="date" name="closed" value="${esc(a.closed || '')}"></label>` : ''}
       </div>
       <label class="check-line"><input type="checkbox" name="zakat" ${zakatable ? 'checked' : ''}> Zakatable <span class="meta">(counts towards zakat; ${ZAKAT_SKIP.includes(kind) ? 'things for personal use usually don\'t' : 'savings, gold, silver and money owed usually do'})</span></label>
       ${ownerInputs(owners, a && (a.owners || []).length > 1 ?'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
       a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', 'Save', ro,
-      a ? assetDocsBlock(a) + filesBlock(a, 'assets') : '');
+      a ? upkeepBlock(a) + assetDocsBlock(a) + filesBlock(a, 'assets') : '');
   } else if (f.type === 'transfer') {
     const list = Assets.list().filter((a) => !a.closed);
     const a = DB.assets.find((x) => x.id === f.id) || list[0];
@@ -5680,6 +6005,7 @@ function submitAssetForm(type, data) {
     if (data.closed && data.acquired && data.closed < data.acquired) return formError('It can\'t be closed before it was had.');
     if (a) {
       Object.assign(a, { name: data.name.trim() || a.name, notes: data.notes || '', acquired: data.acquired || '', closed: data.closed || '' });
+      if (a.kind === 'vehicle') a.car = readCar(data);
       a.zakat = (data.zakat === 'on') === !ZAKAT_SKIP.includes(a.kind) ? null : data.zakat === 'on'; // as its kind usually is: no tick kept
       if (Assets.metal(a)) { a.grams = grams; a.unit = data.unit === 'tola' ? 'tola' : 'g'; device.set('metalUnit', a.unit); if (a.kind === 'gold') a.karat = data.karat; } else {
         a.currency = data.currency || 'PKR';
@@ -5688,7 +6014,9 @@ function submitAssetForm(type, data) {
       Assets.setOwnersNow(a, owners);
       toast(`Saved "${a.name}"`);
     } else {
-      const n = Assets.add({ ...data, kind, grams, owners, zakat: data.zakat === 'on' });
+      const car = kind === 'vehicle' ? readCar(data) : null;
+      const n = Assets.add({ ...data, name: data.name.trim() || (car && carName(car)) || '', kind, grams, owners, zakat: data.zakat === 'on' });
+      if (car) { n.car = car; n.plan = CAR_PLAN.map((p) => ({ id: uid(), ...p, since: n.acquired || todayISO(), sinceKm: car.boughtKm || 0 })); } // a car starts with the usual plan
       if (Assets.metal(n)) device.set('metalUnit', n.unit);
       device.set('assetTab', n.kind);
       toast(`Added "${n.name}"`);
@@ -5731,6 +6059,49 @@ function submitAssetForm(type, data) {
     device.set('vaultTab', d.cat);
     toast(`Saved "${d.name}"${d.expires && d.renewMonths ? `. A reminder to renew it comes on ${fmtDate(Vault.renewOn(d))}` : ''}`);
     if (!f.id) { state.assetForm = { type: 'doc', id: d.id }; renderAssetForm(); render(); return; } // stays open, to add scans
+  } else if (type === 'upkeep') {
+    let e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
+    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset));
+    if (!a) return closeAssetForm();
+    if (!(data.what || '').trim()) return formError('Say what it was.');
+    const fields = { date: data.date || todayISO(), type: data.type, item: data.what.trim(), cost: Number(data.cost) || 0, vendor: (data.vendor || '').trim(), km: Number(data.km) || 0, notes: data.notes || '' };
+    if (e) Object.assign(e, fields); else e = Upkeep.add({ ...fields, asset: a.id });
+    changed('upkeep');
+    upkeepTasks();
+    toast(`Saved "${e.item}"${e.cost ? `, ${rupees(e.cost)}` : ''}`);
+    if (!f.id) { state.assetForm = { type: 'upkeep', id: e.id }; renderAssetForm(); render(); return; } // stays open, to add a photo or the bill
+    openAssetForm('asset', { id: a.id });
+    render();
+    return;
+  } else if (type === 'plan') {
+    const a = DB.assets.find((x) => x.id === f.asset);
+    if (!a) return closeAssetForm();
+    const km = Upkeep.vehicle(a) ? Number(data.km) || 0 : 0;
+    const months = Number(data.months) || 0;
+    if (!(data.what || '').trim()) return formError('Name the job.');
+    if (!km && !months) return formError(`Say how often: every so many months${Upkeep.vehicle(a) ? ' or km' : ''}.`);
+    const p = (a.plan || []).find((x) => x.id === f.id);
+    if (p) Object.assign(p, { item: data.what.trim(), km, months });
+    else a.plan = [...(a.plan || []), { id: uid(), item: data.what.trim(), km, months, since: data.since || todayISO(), sinceKm: data.since ? 0 : Upkeep.latestKm(a) }];
+    a.plan = [...a.plan]; // a new list, so the change is seen
+    changed('assets');
+    const orphans = Upkeep.orphanTasks(a);
+    if (orphans.length) PendingDelete.start(orphans);
+    upkeepTasks();
+    toast(`${data.what.trim()}: every ${Upkeep.every({ km, months })}`);
+    openAssetForm('asset', { id: a.id });
+    render();
+    return;
+  } else if (type === 'reading') {
+    const a = DB.assets.find((x) => x.id === f.asset);
+    if (!a || !(Number(data.km) > 0)) return formError('Type the reading in km.');
+    Upkeep.addReading(a, data.date || todayISO(), data.km);
+    changed('assets');
+    upkeepTasks();
+    toast(`Reading saved: ${fmtKm(Number(data.km))}`);
+    openAssetForm('asset', { id: a.id });
+    render();
+    return;
   } else if (type === 'import') {
     const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
     const out = AirtableImport.apply(f.plan, who, data.unlinked || 'skip');
@@ -6861,7 +7232,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -7156,6 +7527,30 @@ document.addEventListener('click', (e) => {
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
     case 'hijri-today': openAssetForm('hijri'); break;
+    case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset }); break;
+    case 'plan-delete': {
+      const f = state.assetForm;
+      const a = f && DB.assets.find((x) => x.id === f.asset);
+      const p = a && (a.plan || []).find((x) => x.id === f.id);
+      if (!p) break;
+      a.plan = a.plan.filter((x) => x !== p);
+      changed('assets');
+      const orphans = Upkeep.orphanTasks(a);
+      if (orphans.length) PendingDelete.start(orphans); // its open task goes too (with Undo)
+      toast(`${p.item} is off the plan`);
+      openAssetForm('asset', { id: a.id });
+      render();
+      break;
+    }
+    case 'upkeep-delete': {
+      const e = state.assetForm && DB.upkeep.find((x) => x.id === state.assetForm.id);
+      if (!e) break;
+      openAssetForm('asset', { id: e.asset });
+      Trash.discard([['upkeep', e]], `"${e.item}"`);
+      upkeepTasks();
+      renderAssetForm();
+      break;
+    }
     case 'zakat-adopt': { // the zakat day Butler found: from when the wealth went above the nisab
       const p = People.get(btn.dataset.person);
       if (!p) break;
@@ -7193,7 +7588,7 @@ document.addEventListener('click', (e) => {
       if (!a) break;
       closeAssetForm();
       // Its documents stay in the vault (still pointing at it, so Undo or Restore links them again).
-      Trash.discard([['assets', a]], `"${a.name}"`);
+      Trash.discard([['assets', a], ['tasks', DB.tasks.filter((t) => t.id.startsWith(`up-${a.id}-`) && !t.done)]], `"${a.name}"`); // its open upkeep tasks go (and come back) with it
       vaultTasks();
       toast('To keep an asset\'s history instead, set its "Sold or closed on" date');
       break;
@@ -7675,6 +8070,7 @@ document.addEventListener('change', (e) => {
     People.setZakat(id, row.querySelector('[data-zakat-day]').value, row.querySelector('[data-zakat-month]').value);
     return;
   }
+  if (e.target.matches?.('[data-upkeep-filter]') && state.assetForm) { state.upkeepFilter = e.target.value; renderAssetForm(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
@@ -7717,6 +8113,7 @@ else {
   Trash.prune(); // anything in the Trash over 30 days goes
   zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   vaultTasks(); // a renew task for each document that expires
+  upkeepTasks(); // a task for each repeating upkeep job
   render();
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
@@ -7733,7 +8130,7 @@ else {
   AT.init();
   checkReminders();
   setInterval(checkReminders, 20000);
-  setInterval(() => { zakatTasks(); vaultTasks(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
+  setInterval(() => { zakatTasks(); vaultTasks(); upkeepTasks(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
   setInterval(() => TD.sync(), TD.SYNC_MS);

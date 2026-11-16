@@ -100,6 +100,17 @@ The least wealth on which zakat is due: 52.5 tola of silver at the day's silver 
 Paid more than a year's zakat and counted towards the next year, instead of kept as extra charity.
 _Avoid_: credit, advance
 
+**Upkeep**:
+What an asset costs to look after: a log of entries (service, repair, added, other) and a plan of repeating jobs.
+_Avoid_: maintenance (that's one kind), expenses
+
+**Job**:
+One repeating item on an asset's plan, every so many km and/or months, whichever comes first. It keeps one open task.
+_Avoid_: schedule, interval
+
+**Reading**:
+A vehicle's odometer km on a day, from an entry or typed with Update reading.
+
 ## The vault
 
 **Document**:
