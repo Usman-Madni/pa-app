@@ -69,6 +69,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* hidden means gone, even on rows styled to show as flex (the page filter) */
 html, body { overflow-x: clip; }
 body { margin: 0; background: var(--bg); color: var(--text); font: var(--t-base)/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -127,6 +128,7 @@ button:disabled { cursor: not-allowed; }
 .person-chip .chip-x:hover { color: var(--danger); }
 .who-badges { display: inline-flex; gap: 2px; vertical-align: middle; }
 .who-badges .avatar { width: 18px; height: 18px; font-size: 9px; }
+.who-names { align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); font-size: var(--t-xs); font-weight: 500; white-space: nowrap; }
 .note-people { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
 .person-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .person-row:first-of-type { border-top: 0; }
@@ -160,6 +162,10 @@ button:disabled { cursor: not-allowed; }
 .kb-track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
 .kb-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 .kb-fill.minus { background: var(--muted); }
+.kb-fill.zk-overdue { background: var(--danger); }
+.kb-fill.zk-left { background: var(--warn); }
+.kb-fill.zk-paid { background: var(--ok); }
+.zk-word.over { color: var(--danger); font-weight: 600; }
 .asset-row .asset-value { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
 .asset-row.done .title { color: var(--muted); }
 .rate-line { gap: 4px 14px; }
@@ -193,7 +199,8 @@ button:disabled { cursor: not-allowed; }
 .rate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
 /* ===== Zakat ===== */
-.pill.zk-left { background: color-mix(in srgb, var(--danger) 11%, transparent); color: color-mix(in srgb, var(--danger) 78%, var(--text)); }
+.pill.zk-over { background: color-mix(in srgb, var(--danger) 13%, transparent); color: color-mix(in srgb, var(--danger) 80%, var(--text)); }
+.pill.zk-left { background: color-mix(in srgb, var(--warn) 15%, transparent); color: color-mix(in srgb, var(--warn) 78%, var(--text)); }
 .pill.zk-paid { background: color-mix(in srgb, var(--ok) 14%, transparent); color: color-mix(in srgb, var(--ok) 75%, var(--text)); }
 .zk-person { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); margin: 8px 0 10px; }
 .zk-items { display: flex; flex-direction: column; gap: 4px; }
@@ -865,7 +872,10 @@ const fmtTime = (hhmm) => {
   const [h, m] = hhmm.split(':').map(Number);
   return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }); // "1:52 PM", whatever the region's clock
 };
-const fmtDay = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+// A day: 'Wed 4 Feb', with the year when it isn't this year's (tasks, My Day, the calendar).
+const fmtDay = (k) => { const d = parseISO(k); return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
+// A day always with its year, where records span years (zakat, assets, rates, the vault): 'Wed 4 Feb 2026'.
+const fmtDate = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const fmtClock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'HH:mm' for a time box
 const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hour12: true }) : '—');
 
@@ -1296,6 +1306,13 @@ const Zakat = {
     return Math.max(0, this.paid(p) + this.carriedIn(p, depth + 1) - p.due);
   },
   remaining(rec) { return rec.status === 'done' ? Math.max(0, rec.due - this.carriedIn(rec) - this.paid(rec)) : 0; },
+  // 'draft', 'overdue' (past its Due by with money left), 'left' (still to pay, not due yet) or 'paid' (overpaid too).
+  state(rec, today = todayISO()) {
+    if (rec.status !== 'done') return 'draft';
+    if (this.remaining(rec) <= 0) return 'paid';
+    return this.dueBy(rec) < today ? 'overdue' : 'left';
+  },
+  overdue(person = 'all', today = todayISO()) { return this.records(person).filter((r) => this.state(r, today) === 'overdue').reduce((s, r) => s + this.remaining(r), 0); },
   extra(rec) { return rec.status === 'done' ? Math.max(0, this.paid(rec) + this.carriedIn(rec) - rec.due) : 0; },
   // Due by the next zakat day (the person's zakat day a year on; with none, the record's Islamic date a year on), unless
   // a date was typed for it (`dueBy`).
@@ -1396,12 +1413,12 @@ const Zakat = {
     const r = Assets.ratesOn(date);
     const back = (n) => toISO(addDays(parseISO(date), -n));
     if (!r) out.push('No rates on or before this day');
-    else if (r.date < back(3)) out.push(`The latest rates are from ${fmtDay(r.date)}${r.date.slice(0, 4) === date.slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`}`);
+    else if (r.date < back(3)) out.push(`The latest rates are from ${fmtDate(r.date)}`);
     for (const a of DB.assets) {
       if (Assets.metal(a) || !Assets.zakatable(a) || !Assets.held(a, date) || !(Assets.shareOf(a, person, date) > 0)) continue;
       const v = (a.values || []).filter((x) => x.date <= date).sort(byDate).pop();
       if (!v) continue;
-      if (v.date < back(31)) out.push(`${a.name}: last balance on ${fmtDay(v.date)}${v.date.slice(0, 4) === date.slice(0, 4) ? '' : `, ${v.date.slice(0, 4)}`}`);
+      if (v.date < back(31)) out.push(`${a.name}: last balance on ${fmtDate(v.date)}`);
     }
     return out;
   },
@@ -1510,7 +1527,7 @@ const Zakat = {
         if (p.zakat.since && d.date <= p.zakat.since) continue;
         if (d.date > toISO(addDays(now, this.TASK_AHEAD_DAYS))) continue;
         if (d === around.last && d.date < toISO(addDays(now, -330))) continue; // an old year with no record: let it be
-        const when = `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)} (${fmtDay(d.date)})`;
+        const when = `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)} (${fmtDate(d.date)})`;
         ensure(upd, `${prefix(p)}Update balances and rates for ${when}`, d.date, p.id, `The zakat record uses what Butler has for that day: type each account's balance (Assets › Update balances) and that day's gold and silver rates (Add rates).`);
         ensure(id, `${prefix(p)}Make zakat record ${d.hyear}`, d.date, p.id, `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)}. Make it on Butler's Zakat page (Make record); it uses that day's balances and rates.`);
       }
@@ -1521,7 +1538,9 @@ const Zakat = {
       if (rec.due <= 0 && !this.paid(rec)) continue; // nothing due (below the nisab): nothing to pay
       const id = `zk-pay-${rec.person}-${rec.hyear}`;
       if (this.remaining(rec) <= 0) { finish(DB.tasks.find((x) => x.id === id)); continue; }
-      ensure(id, `${prefix(p)}Pay zakat ${rec.hyear}`, toISO(addDays(parseISO(this.dueBy(rec)), -7)), rec.person, `Due by ${fmtDay(this.dueBy(rec))}. Add payments on Butler's Zakat page.`);
+      const title = `${prefix(p)}Pay zakat ${rec.hyear}${this.state(rec, today) === 'overdue' ? ' (overdue)' : ''}`;
+      const t = ensure(id, title, toISO(addDays(parseISO(this.dueBy(rec)), -7)), rec.person, `Due by ${fmtDate(this.dueBy(rec))}. Add payments on Butler's Zakat page.`);
+      if (t && !t.done && t.title !== title) { TaskEdit.rename(t, title); changedAny = true; } // past its Due by: the title says so
     }
     return changedAny;
   },
@@ -1585,7 +1604,7 @@ const Vault = {
       if (!t) {
         DB.tasks.push(normalizeTask({
           id: want, title, due: `${this.renewOn(d)}T${ALL_DAY}`, people, created: Date.now(),
-          notes: `${d.type ? `${d.type}. ` : ''}Expires ${fmtDay(d.expires)}. Once renewed, open it in Butler's Vault and type the new expiry date.`,
+          notes: `${d.type ? `${d.type}. ` : ''}Expires ${fmtDate(d.expires)}. Once renewed, open it in Butler's Vault and type the new expiry date.`,
           reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }],
         }));
         changedAny = true;
@@ -1861,7 +1880,7 @@ document.addEventListener('input', (e) => {
   try { el.setSelectionRange(pos, pos); } catch { /* not focused */ }
 });
 // An Islamic date with the normal one after it: "15th Sha'ban 1447 (Tue, Feb 3, 2026)".
-const bothDates = (iso) => `${Hijri.textOf(iso)} (${fmtDay(iso)}${iso.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${iso.slice(0, 4)}`})`;
+const bothDates = (iso) => `${Hijri.textOf(iso)} (${fmtDate(iso)})`;
 // Beside a date box: the Islamic date it is, and a choice for when the moon was sighted a day later or earlier here
 // (it corrects that month everywhere in Butler). `input` is the date box's name; the pick follows it as it changes.
 function hijriPick(iso, input) {
@@ -1902,7 +1921,7 @@ const Trash = {
       case 'tasks': return fullTitle(normalizeTask(r));
       case 'rates': return `Rates of ${bothDates(r.date)}`;
       case 'zakat': return `${People.several() ? `${People.name(r.person)}: ` : ''}${zakatTitle(r)}`;
-      case 'zakatPay': return `${rupees(r.amount)} on ${fmtDay(r.date)}${r.to ? ` to ${r.to}` : ''}`;
+      case 'zakatPay': return `${rupees(r.amount)} on ${fmtDate(r.date)}${r.to ? ` to ${r.to}` : ''}`;
       default: return r.name || TRASH_KINDS[e.kind]?.name || 'Something';
     }
   },
@@ -2965,7 +2984,7 @@ const Search = {
     }
     for (const ev of DB.events) {
       if (!People.shows(ev) || !this.hit(w, ev.title)) continue;
-      out.events.push({ id: ev.id, title: ev.title, sub: `${fmtDay(ev.date)}${ev.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${ev.date.slice(0, 4)}`}${ev.time ? `, ${fmtTime(ev.time)}` : ''}`, action: 'search-event' });
+      out.events.push({ id: ev.id, title: ev.title, sub: `${fmtDay(ev.date)}${ev.time ? `, ${fmtTime(ev.time)}` : ''}`, action: 'search-event' });
     }
     for (const a of Assets.list(who)) {
       if (!this.hit(w, a.name, a.notes, Assets.kind(a.kind).name, a.karat && `${a.karat}k`)) continue;
@@ -3010,7 +3029,11 @@ function renderSearch() {
 const FILTER_VIEWS = ['tasks', 'assets', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
-  for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) el.hidden = !!words.length && !Search.hit(words, el.textContent);
+  for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
+    const off = !!words.length && !Search.hit(words, el.textContent);
+    el.hidden = off;
+    el.style.display = off ? 'none' : ''; // rows are styled as flex, which would beat 'hidden' alone
+  }
 }
 function addPageFilter() {
   if (!FILTER_VIEWS.includes(state.view)) return;
@@ -3858,7 +3881,7 @@ function whoBadges(r) {
   const on = People.of(r);
   const v = People.viewing();
   if (on.length === 1 && on[0] === (v === 'all' ? ME : v)) return '';
-  return `<span class="who-badges" title="${esc(on.map((id) => People.name(id)).join(', '))}">${on.map(avatar).join('')}</span>`;
+  return `<span class="who-badges who-names" title="${esc(on.map((id) => People.name(id)).join(', '))}">${ic('users', 'sm')}${esc(on.map((id) => People.name(id)).join(', '))}</span>`; // names in full, not initials
 }
 // Who a task or note is for, with + Add and a × on each (never on the last one). kind: 'tasks' | 'notes'.
 function peopleChips(r, kind) {
@@ -4951,7 +4974,7 @@ function assetOverview(who, list, t) {
   return `
     ${t.missing.length ? `<div class="banner warn"><span>${ic('exclamation-mark')}<span>${plural(t.missing.length, 'asset')} can't be valued yet: ${esc(t.missing.slice(0, 3).map((a) => a.name).join(', '))}${t.missing.length > 3 ? ' and more' : ''} need${t.missing.length === 1 ? 's' : ''} a rate (gold, silver or exchange).</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="rates">Add rates</button></div>` : ''}
     <div class="stat-grid">
-      ${card('Net worth', rupees(t.net), r ? `Rates from ${esc(fmtDay(r.date))}` : 'No rates yet')}
+      ${card('Net worth', rupees(t.net), r ? `Rates from ${esc(fmtDate(r.date))}` : 'No rates yet')}
       ${metal('gold')}${metal('silver')}
       ${cash ? card('Cash and accounts', rupees(cash)) : ''}
       ${debts ? card('Debts', rupees(debts)) : ''}
@@ -4970,7 +4993,7 @@ function assetKindTab(kind, who, list) {
     const latest = Assets.latest(a);
     const detail = Assets.metal(a)
       ? `${a.kind === 'gold' ? `${esc(a.karat)}K, ` : ''}${esc(fmtWeight(a))}`
-      : `${latest ? `${esc(a.currency || 'PKR')} ${esc(groupAmount(Math.round(latest.amount)))} on ${esc(fmtDay(latest.date))}` : 'No amount yet'}`;
+      : `${latest ? `${esc(a.currency || 'PKR')} ${esc(groupAmount(Math.round(latest.amount)))} on ${esc(fmtDate(latest.date))}` : 'No amount yet'}`;
     const photo = firstPhoto(a);
     const note = String(a.notes || '').trim();
     return `
@@ -4978,7 +5001,7 @@ function assetKindTab(kind, who, list) {
         ${photo ? `<button type="button" class="thumb-btn" data-action="view-photo" data-key="assets" data-id="${esc(a.id)}" title="See its photos" aria-label="See the photos of ${esc(a.name)}"><img class="asset-thumb" data-thumb="assets:${esc(a.id)}" alt=""></button>` : `<span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>`}
         <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
           <div class="title">${esc(a.name)}${Assets.zakatable(a) === !ZAKAT_SKIP.includes(a.kind) ? '' : ` <span class="pill">${Assets.zakatable(a) ? 'Zakatable' : 'Not zakatable'}</span>`}</div>
-          <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDay(a.acquired))}${a.acquired.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${a.acquired.slice(0, 4)}`}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDay(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
+          <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDate(a.acquired))}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDate(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
           ${People.several() ? `<div class="meta owners-line">${esc(owners.map((o) => `${People.name(o.id)} ${Math.round(Number(o.share) * 100) / 100}%`).join(', '))}</div>` : ''}
           ${note ? `<div class="meta asset-note">${esc(note.length > 90 ? `${note.slice(0, 90)}…` : note)}</div>` : ''}
         </div>
@@ -4994,12 +5017,12 @@ function ratesTab() {
   const rows = list.map((r) => `
     <li class="item">
       <span class="tl-mark">${ic('coins')}</span>
-      <div class="body clickable" data-action="asset-form" data-form-type="rates" data-id="${esc(r.id)}" title="Change these rates"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDay(r.date))}${r.date.slice(0, 4) === todayISO().slice(0, 4) ? '' : `, ${r.date.slice(0, 4)}`})</span></div><div class="meta rate-line">
+      <div class="body clickable" data-action="asset-form" data-form-type="rates" data-id="${esc(r.id)}" title="Change these rates"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDate(r.date))})</span></div><div class="meta rate-line">
         ${KARATS.filter((k) => Number(r.gold?.[k])).map((k) => `<span>${k}K ${rupees(r.gold[k])}</span>`).join('')}
         ${Number(r.silver) ? `<span>Silver ${rupees(r.silver)}</span>` : ''}
         ${fx(r).map((s) => `<span>${s}</span>`).join('')}
       </div></div>
-      <button class="icon-btn edit-only" data-action="delete-rates" data-id="${esc(r.id)}" title="Delete these rates" aria-label="Delete the rates of ${esc(fmtDay(r.date))}">${ic('x')}</button>
+      <button class="icon-btn edit-only" data-action="delete-rates" data-id="${esc(r.id)}" title="Delete these rates" aria-label="Delete the rates of ${esc(fmtDate(r.date))}">${ic('x')}</button>
     </li>`).join('');
   return `<p class="sub">Gold and silver in rupees per tola (11.7 g); other currencies in rupees for one. Each value uses the latest rates on or before its day.</p>
     <div class="card"><ul class="list">${rows || '<li class="empty">No rates yet</li>'}</ul></div>`;
@@ -5019,7 +5042,7 @@ function worthChart(who) {
   const pts = worthPoints(who);
   return `<div class="worth-chart" data-worth="${esc(JSON.stringify(pts))}">${worthSvg(pts, 600)}</div>
     <details class="chart-table"><summary>Show as a table</summary>
-      <table>${pts.map((p, i) => `<tr><td>${esc(i === 11 ? 'Today' : fmtDay(p.d))}</td><td>${esc(rupees(p.v))}</td></tr>`).join('')}</table>
+      <table>${pts.map((p, i) => `<tr><td>${esc(i === 11 ? 'Today' : fmtDate(p.d))}</td><td>${esc(rupees(p.v))}</td></tr>`).join('')}</table>
     </details>`;
 }
 function drawCharts() {
@@ -5048,7 +5071,7 @@ function worthSvg(pts, W) {
       ${ticks.map((v) => `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text class="axis" x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${esc(compact(v))}</text>`).join('')}
       ${pts.map((p, i) => ((11 - i) % every === 0 ? `<text class="axis" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${i === 11 ? 'Now' : month(p.d)}</text>` : '')).join('')}
       <path class="chart-line" d="${line}"/>
-      ${pts.map((p, i) => `<g class="chart-pt"><circle class="hit" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="14"/><circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4"/><title>${esc(i === 11 ? 'Today' : fmtDay(p.d))}: ${esc(rupees(p.v))}</title></g>`).join('')}
+      ${pts.map((p, i) => `<g class="chart-pt"><circle class="hit" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="14"/><circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4"/><title>${esc(i === 11 ? 'Today' : fmtDate(p.d))}: ${esc(rupees(p.v))}</title></g>`).join('')}
     </svg>`;
 }
 
@@ -5070,10 +5093,11 @@ function kindBars(t) {
 // the Overview has a card per person and the lists say whose each line is.
 // A record by its day, in both calendars: "15th Sha'ban 1447 (Tue, Feb 3, 2026)".
 const zakatTitle = (r) => (r.date ? bothDates(r.date) : `Zakat ${r.hyear}`);
+// Red when it's past its Due by with money left, amber while it's still to pay, green once paid (the words say it too).
 function zakatStatus(r) {
   if (r.status !== 'done') return '<span class="pill zk-draft">Draft</span>';
   const left = Zakat.remaining(r);
-  if (left > 0) return `<span class="pill zk-left">${rupees(left)} left</span>`;
+  if (left > 0) return Zakat.state(r) === 'overdue' ? `<span class="pill zk-over">${rupees(left)} overdue</span>` : `<span class="pill zk-left">${rupees(left)} left</span>`;
   const extra = Zakat.extra(r);
   return `<span class="pill zk-paid">Paid${extra ? ` +${Math.round(extra).toLocaleString('en-IN')}` : ''}</span>`;
 }
@@ -5142,8 +5166,8 @@ function zakatOverview(who) {
     return `
       ${people.length > 1 ? `<h2 class="zk-person">${avatar(p.id)}${esc(p.name)}</h2>` : ''}
       <div class="stat-grid">
-        ${Zakat.ended(p.id) ? card('Next zakat day', 'None for now', 'Below the nisab on the last one') : card('Next zakat day', near.next ? esc(Hijri.text(near.next.hyear, p.zakat.month, p.zakat.day)) : 'Not set', near.next ? `${esc(fmtDay(near.next.date))}, in ${plural(days, 'day')}${p.zakat.since ? `. Sahib-e-nisab since ${esc(fmtDay(p.zakat.since))}, ${p.zakat.since.slice(0, 4)}` : ''}` : '')}
-        ${card('Left to pay', rupees(left), left ? 'Across all years' : 'Nothing left')}
+        ${Zakat.ended(p.id) ? card('Next zakat day', 'None for now', 'Below the nisab on the last one') : card('Next zakat day', near.next ? esc(Hijri.text(near.next.hyear, p.zakat.month, p.zakat.day)) : 'Not set', near.next ? `${esc(fmtDate(near.next.date))}, in ${plural(days, 'day')}${p.zakat.since ? `. Sahib-e-nisab since ${esc(fmtDate(p.zakat.since))}` : ''}` : '')}
+        ${card('Left to pay', rupees(left), left ? (Zakat.overdue(p.id) ? `<span class="pill zk-over">${rupees(Zakat.overdue(p.id))} overdue</span>` : '<span class="pill zk-left">None overdue yet</span>') : '<span class="pill zk-paid">All paid</span>')}
         ${last ? card(`${last.hyear} due`, rupees(last.due), `Paid ${rupees(Zakat.paid(last))}${Zakat.carriedIn(last) ? `, ${rupees(Zakat.carriedIn(last))} carried in` : ''}`) : ''}
         ${card('Today', nisab ? (wealth > nisab ? 'Above the nisab' : 'Below the nisab') : 'No silver rate', nisab ? `Zakatable wealth ${rupees(wealth)}, nisab ${rupees(nisab)}` : 'Add rates to see')}
       </div>`;
@@ -5164,8 +5188,8 @@ function zakatBars(recs, named) {
     return `
       <div class="kind-bar" title="${esc(zakatTitle(r))}: paid ${esc(rupees(paid))} of ${esc(rupees(due))}">
         <span class="kb-name">${named ? `${esc(People.name(r.person))}, ` : ''}${r.hyear}</span>
-        <span class="kb-track"><span class="kb-fill" style="width:${pct.toFixed(1)}%"></span></span>
-        <span class="kb-val">${rupees(paid)} of ${rupees(due)}</span>
+        <span class="kb-track"><span class="kb-fill zk-${Zakat.state(r)}" style="width:${Math.max(pct, 2).toFixed(1)}%"></span></span>
+        <span class="kb-val">${rupees(paid)} of ${rupees(due)}${{ overdue: ' <span class="zk-word over">overdue</span>', left: '', paid: '' }[Zakat.state(r)] || ''}</span>
       </div>`;
   }).join('')}</div>`;
 }
@@ -5177,7 +5201,7 @@ function zakatRecordsTab(who) {
       <span class="tl-mark">${ic('calendar-event')}</span>
       <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
         <div class="title">${esc(zakatTitle(r))}</div>
-        <div class="meta">${People.several() ? `<span>${esc(People.name(r.person))}</span>` : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDay(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
+        <div class="meta">${People.several() ? `<span>${esc(People.name(r.person))}</span>` : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDate(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
       </div>
       ${zakatStatus(r)}
     </li>`).join('');
@@ -5190,7 +5214,7 @@ function zakatPaymentsTab(who) {
     const r = DB.zakat.find((x) => x.id === p.record);
     return `
       <li class="item">
-        <span class="tl-date">${esc(fmtDay(p.date))}</span>
+        <span class="tl-date">${esc(fmtDate(p.date))}</span>
         <div class="body clickable" data-action="open-zpay" data-id="${esc(p.id)}">
           <div class="title">${rupees(p.amount)}${p.to ? ` <span class="meta">to ${esc(p.to)}</span>` : ''}</div>
           <div class="meta">${People.several() ? `<span>${esc(People.name(p.person))}</span>` : ''}<span>For ${r ? esc(zakatTitle(r)) : 'a removed record'}</span></div>
@@ -5204,7 +5228,7 @@ function zakatPaymentsTab(who) {
 // Tabs: Overview (what needs renewing, and what's coming up), then one per category in use. A row opens the document.
 const docState = (d) => {
   const s = Vault.state(d);
-  return s === 'expired' ? '<span class="pill zk-left">Expired</span>' : s === 'renew' ? `<span class="pill med">Renew by ${esc(fmtDay(d.expires))}</span>` : '';
+  return s === 'expired' ? '<span class="pill zk-left">Expired</span>' : s === 'renew' ? `<span class="pill med">Renew by ${esc(fmtDate(d.expires))}</span>` : '';
 };
 function docRow(d) {
   const linked = (d.assets || []).map((id) => DB.assets.find((a) => a.id === id)?.name).filter(Boolean);
@@ -5214,7 +5238,7 @@ function docRow(d) {
       <span class="tl-mark">${ic(Vault.cat(d.cat).icon)}</span>
       <div class="body clickable" data-action="open-doc" data-id="${esc(d.id)}">
         <div class="title">${esc(d.name)} ${whoBadges(d)}</div>
-        <div class="meta">${d.type && d.type !== d.name ? `<span>${esc(d.type)}</span>` : ''}${num ? `<span>Ending ${esc(num.slice(-4))}</span>` : ''}${d.expires ? `<span>Expires ${esc(fmtDay(d.expires))}</span>` : ''}${linked.length ? `<span>${ic('link', 'sm')}${esc(linked.join(', '))}</span>` : ''}${(d.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${d.attachments.length}</span>` : ''}</div>
+        <div class="meta">${d.type && d.type !== d.name ? `<span>${esc(d.type)}</span>` : ''}${num ? `<span>Ending ${esc(num.slice(-4))}</span>` : ''}${d.expires ? `<span>Expires ${esc(fmtDate(d.expires))}</span>` : ''}${linked.length ? `<span>${ic('link', 'sm')}${esc(linked.join(', '))}</span>` : ''}${(d.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${d.attachments.length}</span>` : ''}</div>
       </div>
       ${docState(d)}
     </li>`;
@@ -5249,7 +5273,7 @@ function assetDocsBlock(a) {
   const others = DB.docs.filter((d) => !linked.includes(d));
   return `
     <div class="value-history"><div class="meta">Documents</div>
-      ${linked.map((d) => `<div class="vh-row"><button type="button" class="link-btn" data-action="open-doc" data-id="${esc(d.id)}">${ic(Vault.cat(d.cat).icon, 'sm')} ${esc(d.name)}</button><span>${docState(d) || (d.expires ? `<span class="meta">Expires ${esc(fmtDay(d.expires))}</span>` : '')}</span><button type="button" class="icon-btn edit-only" data-action="unlink-doc" data-id="${esc(d.id)}" aria-label="Unlink ${esc(d.name)}">${ic('x', 'sm')}</button></div>`).join('')}
+      ${linked.map((d) => `<div class="vh-row"><button type="button" class="link-btn" data-action="open-doc" data-id="${esc(d.id)}">${ic(Vault.cat(d.cat).icon, 'sm')} ${esc(d.name)}</button><span>${docState(d) || (d.expires ? `<span class="meta">Expires ${esc(fmtDate(d.expires))}</span>` : '')}</span><button type="button" class="icon-btn edit-only" data-action="unlink-doc" data-id="${esc(d.id)}" aria-label="Unlink ${esc(d.name)}">${ic('x', 'sm')}</button></div>`).join('')}
       <div class="row edit-only">
         ${others.length ? `<select class="input" data-link-doc aria-label="Link a document"><option value="">Link a document…</option>${others.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select>` : ''}
         <button type="button" class="btn small" data-action="asset-form" data-form-type="doc" data-kind="${a.kind === 'property' ? 'property' : 'other'}" data-asset="${esc(a.id)}">${ic('plus', 'sm')}New document</button>
@@ -5335,7 +5359,7 @@ function renderAssetForm() {
     const today = todayISO();
     $('#modal').innerHTML = box('Today\'s Islamic date', `
       <input type="hidden" name="date" value="${esc(today)}">
-      <p class="meta" style="margin:0">${esc(fmtDay(today))}. Butler works Islamic dates out from the Umm al-Qura calendar. If the month began on a different day here, pick today's date as it is here: the whole month follows, everywhere in Butler and on both devices.</p>
+      <p class="meta" style="margin:0">${esc(fmtDate(today))}. Butler works Islamic dates out from the Umm al-Qura calendar. If the month began on a different day here, pick today's date as it is here: the whole month follows, everywhere in Butler and on both devices.</p>
       ${hijriPick(today, 'date')}`, '', '');
     $('#modal select')?.focus();
     return;
@@ -5387,7 +5411,7 @@ function renderAssetForm() {
           <label class="field">${kind === 'cash' ? 'Balance' : kind === 'debt' ? 'Still owed' : kind === 'owed' ? 'Owed to you' : 'Value'}<input class="input" ${amountAttrs('')} name="amount" ${a ? '' : 'required'} placeholder="${a ? 'New amount' : ''}"></label>
           <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}"></label>
         </div>
-        ${history.length ? `<div class="value-history"><div class="meta">${kind === 'cash' ? 'Balance history' : kind === 'debt' || kind === 'owed' ? 'Still owed, by date' : 'Value history'} <span class="meta">(change a date or amount here)</span></div>${history.map((v) => `<div class="vh-row vh-edit" data-vh="${esc(v.date)}"><input class="input" type="date" value="${esc(v.date)}" data-vh-date aria-label="Date"><span class="amt-in"><span class="meta">${esc(a.currency || 'PKR')}</span><input class="input" ${amountAttrs(v.amount)} data-vh-amount aria-label="Amount on ${esc(fmtDay(v.date))}"></span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDay(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
+        ${history.length ? `<div class="value-history"><div class="meta">${kind === 'cash' ? 'Balance history' : kind === 'debt' || kind === 'owed' ? 'Still owed, by date' : 'Value history'} <span class="meta">(change a date or amount here)</span></div>${history.map((v) => `<div class="vh-row vh-edit" data-vh="${esc(v.date)}"><input class="input" type="date" value="${esc(v.date)}" data-vh-date aria-label="Date"><span class="amt-in"><span class="meta">${esc(a.currency || 'PKR')}</span><input class="input" ${amountAttrs(v.amount)} data-vh-amount aria-label="Amount on ${esc(fmtDate(v.date))}"></span><button type="button" class="icon-btn edit-only" data-action="asset-value-off" data-date="${esc(v.date)}" title="Remove this amount" aria-label="Remove the amount of ${esc(fmtDate(v.date))}">${ic('x', 'sm')}</button></div>`).join('')}</div>` : ''}`}
       <div class="row">
         <label class="field">Since (optional)<input class="input" type="date" name="acquired" value="${esc(a ? a.acquired : '')}"></label>
         ${a ? `<label class="field">Sold or closed on<input class="input" type="date" name="closed" value="${esc(a.closed || '')}"></label>` : ''}
@@ -5493,20 +5517,20 @@ function zakatForm(f, box) {
         ${carried ? `<div><span>Carried in from the year before</span><b>-${rupees(carried)}</b></div>` : ''}
         ${!draft ? `<div><span>Paid</span><b>${rupees(Zakat.paid(r))}</b></div><div class="zk-due"><span>Left to pay</span><b>${rupees(Zakat.remaining(r))}</b></div>` : ''}
       </div>`;
-    const pays = !draft ? Zakat.payments(r).map((p) => `<div class="vh-row"><span>${esc(fmtDay(p.date))}${p.to ? `, to ${esc(p.to)}` : ''}</span><span>${rupees(p.amount)}</span><span></span></div>`).join('') : '';
+    const pays = !draft ? Zakat.payments(r).map((p) => `<div class="vh-row"><span>${esc(fmtDate(p.date))}${p.to ? `, to ${esc(p.to)}` : ''}</span><span>${rupees(p.amount)}</span><span></span></div>`).join('') : '';
     const problems = draft ? Zakat.problems(r) : [];
     const zchecks = draft ? Zakat.checks(r.person, r.date) : [];
     const dueField = `<div class="row"><label class="field">Due by<input class="input" type="date" name="zdue" value="${esc(Zakat.dueBy(r))}" data-zrec ${ro ? 'disabled' : ''}></label><p class="meta" style="margin:0;align-self:end">${r.dueBy ? 'Changed by hand. Clear it to go back to the next zakat day.' : `The next zakat day, ${esc(Hijri.textOf(Zakat.dueBy(r)))}.`}</p></div>`;
     if (r.imported) { // brought in from Airtable: the base kept what was due, not what it was worked out from
       return box(`${you ? '' : `${name}: `}${zakatTitle(r)}`, `
-        <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. Brought in from Airtable, which kept only the amount due.</p>
+        <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDate(r.date))}. Brought in from Airtable, which kept only the amount due.</p>
         ${sums}${dueField}
         <label class="field">If more than is due is paid<select class="input" name="zexcess" data-zrec ${ro ? 'disabled' : ''}><option value="carry" ${r.excess !== 'charity' ? 'selected' : ''}>Count it towards next year</option><option value="charity" ${r.excess === 'charity' ? 'selected' : ''}>Keep it as extra charity</option></select></label>
         ${pays ? `<div class="value-history"><div class="meta">Payments</div>${pays}</div>` : ''}`,
       Zakat.remaining(r) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="zakat-pay" data-record="${esc(r.id)}" style="margin-right:auto">Add payment</button>` : '', '', ro);
     }
     const inner = `
-      <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDay(r.date))}. ${draft ? 'Untick anything that doesn\'t count; type a value to replace the worked-out one (leave it empty to go back). Changes save as you make them.' : `Done ${r.doneAt ? esc(fmtDay(toISO(new Date(r.doneAt)))) : ''}: frozen, so later changes to assets or rates don't touch it.`}</p>
+      <p class="meta" style="margin:0">${you ? '' : `${esc(name)}, `}${esc(fmtDate(r.date))}. ${draft ? 'Untick anything that doesn\'t count; type a value to replace the worked-out one (leave it empty to go back). Changes save as you make them.' : `Done ${r.doneAt ? esc(fmtDate(toISO(new Date(r.doneAt)))) : ''}: frozen, so later changes to assets or rates don't touch it.`}</p>
       ${draft ? `<div class="row"><label class="field">Date<input class="input" type="date" name="zdate" value="${esc(r.date)}" data-zrec></label>${hijriPick(r.date, 'zdate')}</div>` : ''}
       <fieldset class="owner-box"><legend>Rates on the day</legend><div class="rate-grid">
         ${draft ? `${karats.map((k) => rateIn(`Gold ${k}K`, `zr-gold-${k}`, r.rates.gold?.[k])).join('')}${rateIn('Silver', 'zr-silver', r.rates.silver)}${curs.map((c) => rateIn(esc(c), `zr-fx-${c}`, r.rates.fx?.[c])).join('')}`
@@ -5651,7 +5675,7 @@ function submitAssetForm(type, data) {
     if (!owners.length || !Assets.sharesOk(owners)) return formError('The new shares need to add up to 100%.');
     Assets.transfer(a, data.from, owners);
     changed('assets');
-    toast(`"${a.name}" belongs to ${owners.map((o) => People.name(o.id)).join(' and ')} from ${fmtDay(data.from)}`);
+    toast(`"${a.name}" belongs to ${owners.map((o) => People.name(o.id)).join(' and ')} from ${fmtDate(data.from)}`);
     const docs = Vault.forAsset(a.id);
     const to = owners.map((o) => o.id);
     if (docs.length && docs.some((d) => People.of(d).join() !== to.join())) {
@@ -5667,7 +5691,7 @@ function submitAssetForm(type, data) {
       Assets.setValue(a, data.date, v);
       n++;
     }
-    if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDay(data.date)}`); }
+    if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDate(data.date)}`); }
   } else if (type === 'doc') {
     const people = People.several() ? People.list().filter((p) => data[`doc-p-${p.id}`] === 'on').map((p) => p.id) : [ME];
     if (!people.length) return formError('Pick whose it is.');
@@ -5679,7 +5703,7 @@ function submitAssetForm(type, data) {
     changed('docs');
     vaultTasks();
     device.set('vaultTab', d.cat);
-    toast(`Saved "${d.name}"${d.expires && d.renewMonths ? `. A reminder to renew it comes on ${fmtDay(Vault.renewOn(d))}` : ''}`);
+    toast(`Saved "${d.name}"${d.expires && d.renewMonths ? `. A reminder to renew it comes on ${fmtDate(Vault.renewOn(d))}` : ''}`);
     if (!f.id) { state.assetForm = { type: 'doc', id: d.id }; renderAssetForm(); render(); return; } // stays open, to add scans
   } else if (type === 'import') {
     const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
@@ -5726,7 +5750,7 @@ function submitAssetForm(type, data) {
     r.doneAt = Date.now();
     changed('zakat');
     zakatTasks();
-    toast(`Zakat ${r.hyear}${r.person === ME && !People.several() ? '' : ` for ${People.name(r.person)}`}: ${rupees(r.due)} due by ${fmtDay(Zakat.dueBy(r))}`);
+    toast(`Zakat ${r.hyear}${r.person === ME && !People.several() ? '' : ` for ${People.name(r.person)}`}: ${rupees(r.due)} due by ${fmtDate(Zakat.dueBy(r))}`);
   } else if (type === 'zakat-pay') {
     const pay = f.id ? DB.zakatPay.find((x) => x.id === f.id) : null;
     const rec = DB.zakat.find((x) => x.id === data.record);
@@ -5758,12 +5782,12 @@ function submitAssetForm(type, data) {
       Assets.setRates({ date: data.date, gold, silver: data.silver, fx });
       changed('rates');
       zakatTasks();
-      toast(`Rates saved for ${fmtDay(data.date)}`);
+      toast(`Rates saved for ${fmtDate(data.date)}`);
       closeAssetForm();
       render();
     };
     if (clash) {
-      ask(`${fmtDay(data.date)} already has rates. Replace them with these?`, { yes: 'Replace', danger: true }).then((yes) => { if (yes) save(); else renderAssetForm(); });
+      ask(`${fmtDate(data.date)} already has rates. Replace them with these?`, { yes: 'Replace', danger: true }).then((yes) => { if (yes) save(); else renderAssetForm(); });
       return;
     }
     return save();

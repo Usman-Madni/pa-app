@@ -41,7 +41,7 @@ const { loadApp, check, done, submitForm } = require('./helpers');
   doc.querySelector('[data-view="assets"]').click();
   doc.querySelector('[data-asset-tab="rates"]').click();
   const fmtDay = win.eval('fmtDay');
-  check(main().includes(`${H.textOf(day)} (${fmtDay(day)}`),'the Rates tab shows the Islamic date, the normal one in brackets');
+  check(main().includes(`${H.textOf(day)} (${win.eval('fmtDate')(day)})`),'the Rates tab shows the Islamic date, the normal one in brackets');
   check(doc.querySelector('#main [data-form-type="asset"]') && doc.querySelector('#main [data-form-type="rates"]'), 'Add asset and Add rates are both on the Rates tab');
   doc.querySelector('[data-asset-tab="overview"]').click();
   check(doc.querySelector('#main [data-form-type="asset"]') && doc.querySelector('#main [data-form-type="rates"]'), 'and both on the Overview');
@@ -98,7 +98,7 @@ const { loadApp, check, done, submitForm } = require('./helpers');
     doc.querySelector(`[data-zakat-tab="${tab}"]`).click();
     check(doc.querySelector('#main [data-form-type="zakat-make"]') && doc.querySelector('#main [data-form-type="rates"]'), `Make record and Add rates on Zakat's ${tab} tab`);
   }
-  check(win.eval('zakatTitle')({ date: day, hyear: u.year }) === `${H.textOf(day)} (${fmtDay(day)}${today.slice(0, 4) === '2026' ? '' : ', 2026'})`, 'a zakat record is named by both dates');
+  check(win.eval('zakatTitle')({ date: day, hyear: u.year }) === `${H.textOf(day)} (${win.eval('fmtDate')(day)})` && /2026/.test(win.eval('zakatTitle')({ date: day })), 'a zakat record is named by both dates, always with the year');
   check(win.eval('ASSET_KINDS').find((k) => k.id === 'silver').icon === 'silver-coin' && doc.querySelector('#i-silver-coin') && doc.querySelector('#i-gold-bar'), 'silver has a coin and gold a bar for icons');
 
   // --- A payment as you type ---
