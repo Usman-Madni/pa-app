@@ -7,6 +7,8 @@ const { loadApp, check, done } = require('./helpers');
 const pad = (n) => String(n).padStart(2, '0');
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
+// The app's clock is set to noon today (it keeps ticking), so "past" and "still to come" hold whenever this runs.
+const noon = () => { const d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime(); };
 
 function seed(PA) {
   // 00:01 is always past and 23:58 always still to come (23:59 means "any time that day")
@@ -30,7 +32,7 @@ const titlesIn = (doc, heading) => {
 };
 
 (async () => {
-  const app = loadApp({});
+  const app = loadApp({ now: noon() });
   const { doc, PA } = app;
   PA.changed = app.win.eval('changed');
   seed(PA);

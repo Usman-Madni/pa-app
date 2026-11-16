@@ -92,6 +92,17 @@ function loadApp(opts = {}) {
       win.prompt = () => { throw new Error('the browser\'s prompt() was used'); };
       win.scrollTo = () => {};
       if (opts.fetch) win.fetch = opts.fetch; // a fake Microsoft (see test-todo-sync)
+      // opts.now (ms): the app's clock starts there and keeps ticking, so a test about the time of day can't depend on
+      // when it's run (just after midnight, say).
+      if (opts.now != null) {
+        const Real = win.Date;
+        const shift = opts.now - Real.now();
+        class TestDate extends Real {
+          constructor(...a) { if (a.length) super(...a); else super(Real.now() + shift); }
+          static now() { return Real.now() + shift; }
+        }
+        win.Date = TestDate;
+      }
       if (!win.TextEncoder) win.TextEncoder = require('util').TextEncoder;
       if (win.crypto && !win.crypto.subtle) {
         try { Object.defineProperty(win.crypto, 'subtle', { value: require('crypto').webcrypto.subtle }); } catch { /* sign-in tests will say so */ }
