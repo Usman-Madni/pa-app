@@ -1915,18 +1915,25 @@ const AirtableImport = {
   async fetchPhotos(list) {
     const out = { added: 0, failed: [] };
     for (const p of list) {
-      const a = DB.assets.find((x) => x.id === p.asset);
+      const key = p.key || 'assets'; // an asset's photo, or an upkeep entry's
+      const a = DB[key].find((x) => x.id === (p.id || p.asset));
       if (!a) continue;
       try {
         const res = await fetch(p.url);
         if (!res.ok) throw new Error(String(res.status));
         const blob = await res.blob();
         const before = (a.attachments || []).length;
-        await AT.add(a, [new File([blob], p.name, { type: blob.type || '' })], 'assets', true);
-        if ((a.attachments || []).length > before) out.added++; else out.failed.push(`${a.name} (${p.name})`);
-      } catch { out.failed.push(`${a.name} (${p.name})`); }
+        await AT.add(a, [new File([blob], p.name, { type: blob.type || '' })], key, true);
+        if ((a.attachments || []).length > before) out.added++; else out.failed.push(`${a.name || a.item} (${p.name})`);
+      } catch { out.failed.push(`${a.name || a.item} (${p.name})`); }
     }
     return out;
+  },
+  // The cars base's three log tables have the same columns: which one is told by the file's name (Airtable names the
+  // file after the table), else by the cars' links to its rows (see apply).
+  logType(name) {
+    const n = String(name).toLowerCase();
+    return /repair/.test(n) ? 'repair' : /expense/.test(n) ? 'added' : /mainten|service/.test(n) ? 'service' : '';
   },
   // Which table a file is, by its columns.
   kind(cols) {
@@ -1936,6 +1943,8 @@ const AirtableImport = {
     if (has('Rates Date')) return 'overview';
     if (has('Islamic Date')) return 'summary';
     if (has('Amount') && has('Person')) return 'payments';
+    if (has('License Plate')) return 'cars'; // the cars base
+    if (has('Item') && has('Car') && has('Cost')) return 'carlog'; // Maintenance, Expenses or Repairs (the same columns)
     return '';
   },
   // Read the files into a plan: the tables found, the names used, what's in them. Changes nothing.
@@ -1946,7 +1955,8 @@ const AirtableImport = {
       try { text = await f.text(); } catch (e) { plan.unreadable.push(`${f.name} (${e.message || e.name || 'could not be read'})`); continue; } // e.g. a file still only in the cloud
       const { cols, rows } = CSV.objects(text);
       const k = this.kind(cols);
-      if (k) plan.tables[k] = rows; else plan.unknown.push(`${f.name} (columns: ${cols.slice(0, 4).join(', ') || 'none'})`);
+      if (k === 'carlog') (plan.tables.carlog = plan.tables.carlog || []).push({ file: f.name, type: this.logType(f.name), rows });
+      else if (k) plan.tables[k] = rows; else plan.unknown.push(`${f.name} (columns: ${cols.slice(0, 4).join(', ') || 'none'})`);
     }
     const t = plan.tables;
     const names = [
@@ -1968,7 +1978,7 @@ const AirtableImport = {
     }));
   },
   // Bring it in. who: {name: person id | 'new' | 'skip'}; unlinkedTo: a person id or 'skip'. Returns what was added.
-  apply(plan, who, unlinkedTo = 'skip') {
+  apply(plan, who, unlinkedTo = 'skip', carsTo = ME) {
     const t = plan.tables;
     const out = { people: 0, assets: 0, rates: 0, records: 0, payments: 0, days: 0, skipped: 0, notes: [], photos: [] };
     const ids = {};
@@ -2056,7 +2066,84 @@ const AirtableImport = {
       DB.zakatPay.push({ id: uid(), person: p, date, amount, to: r.Description || '', record: rec.id });
       out.payments++;
     }
+    this.applyCars(plan, carsTo, out);
     return out;
+  },
+  // The cars base: each car a vehicle asset (whose: carsTo) with its details, price and km when bought; each row of
+  // Maintenance, Expenses and Repairs an upkeep entry (service, added, repair) on the car its "Car" names, with its
+  // photos to fetch; then each new car's plan, from the usual one fitted to what was done (the names used there, and
+  // the gaps seen between times). Bringing the same files in again adds nothing twice.
+  applyCars(plan, carsTo, out) {
+    const t = plan.tables;
+    if (!t.cars && !t.carlog) return;
+    Object.assign(out, { cars: out.cars || 0, entries: out.entries || 0 });
+    const owner = carsTo && carsTo !== 'skip' ? carsTo : ME;
+    const byName = new Map();
+    const fresh = new Set();
+    for (const r of t.cars || []) {
+      const car = { make: r.Company || '', model: r.Model || '', year: r.Year || '', regYear: r['Registered Year'] || '', plate: r['License Plate'] || '', boughtKm: this.num(r['Buying Mileage']) || 0 };
+      const name = (r.Name || carName(car)).trim() || 'Car';
+      let a = DB.assets.find((x) => x.kind === 'vehicle' && ((car.plate && x.car?.plate === car.plate) || x.name === name));
+      if (!a) {
+        const date = this.date(r['Buying Date']);
+        const price = this.num(r['Buying Price']);
+        a = Assets.add({ kind: 'vehicle', name, currency: 'PKR', acquired: date, ...(price != null ? { amount: price, date: date || todayISO() } : {}), owners: [{ id: owner, share: 100 }] });
+        a.car = car;
+        a.imported = true;
+        fresh.add(a);
+        out.cars++;
+      } else if (!a.car) a.car = car;
+      byName.set(name.toLowerCase(), a);
+    }
+    // Which log a row is in, when its file's name doesn't say: the car's link columns list each row's name.
+    const linked = new Map();
+    for (const r of t.cars || []) for (const [col, type] of [['Maintenance', 'service'], ['Expenses', 'added'], ['Repairs', 'repair']]) for (const n of CSV.parse(r[col] || '')[0] || []) linked.set(n.trim(), type);
+    for (const file of t.carlog || []) {
+      for (const r of file.rows) {
+        const a = byName.get(String(r.Car || '').split(',')[0].trim().toLowerCase());
+        if (!a) { if (r.Car) out.notes.push(`"${r.Item || r.Name}" is for a car not in the Cars file (${r.Car}): left out`); continue; }
+        const date = this.date(r.Date);
+        const cost = this.num(r.Cost) || 0;
+        const item = (r.Item || r.Description || 'Upkeep').trim();
+        const type = file.type || linked.get((r.Name || '').trim()) || 'service';
+        const had = DB.upkeep.find((e) => e.asset === a.id && e.date === date && this.same(e.item, item) && e.cost === cost);
+        if (had) { // brought in before: only its photos still missing
+          out.photos.push(...this.pictures(r.Picture).filter((p) => !(had.attachments || []).some((x) => x.original === p.name)).map((p) => ({ key: 'upkeep', id: had.id, ...p })));
+          continue;
+        }
+        const e = Upkeep.add({ asset: a.id, date, type, item, cost, vendor: r.Vendor || '', km: this.num(r.Mileage) || 0, notes: r.Description && r.Description !== item ? r.Description : '', imported: true });
+        out.photos.push(...this.pictures(r.Picture).map((p) => ({ key: 'upkeep', id: e.id, ...p })));
+        out.entries++;
+      }
+    }
+    for (const a of fresh) a.plan = this.planFromHistory(a);
+    out.plans = [...fresh].reduce((n, a) => n + a.plan.length, 0);
+  },
+  same(x, y) { return Upkeep.same(x, y); },
+  // A new car's plan: the usual jobs, each named as the history names it ("Engine Oil") and spaced as it was done (the
+  // middle gap in km and in months), plus any other service done three times or more; each counts from its last time.
+  planFromHistory(a) {
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');
+    const services = Upkeep.log(a.id).filter((e) => e.type === 'service').reverse(); // oldest first
+    const items = [...new Set(services.map((e) => e.item))];
+    const mid = (xs) => { const s = xs.filter((x) => x > 0).sort((p, q) => p - q); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+    const fit = (item, base) => {
+      const done = services.filter((e) => this.same(e.item, item));
+      const kms = done.slice(1).map((e, i) => (e.km && done[i].km ? e.km - done[i].km : 0));
+      const days = done.slice(1).map((e, i) => (parseISO(e.date) - parseISO(done[i].date)) / 864e5);
+      const km = done.length > 1 && mid(kms) ? Math.round(mid(kms) / 500) * 500 : base.km;
+      const months = done.length > 1 && mid(days) ? Math.max(1, Math.round(mid(days) / 30.4)) : base.months;
+      const last = done[done.length - 1];
+      return { id: uid(), item, km, months, since: last ? last.date : a.acquired || todayISO(), sinceKm: last ? Number(last.km) || 0 : Number(a.car?.boughtKm) || 0 };
+    };
+    const used = new Set();
+    const plan = CAR_PLAN.map((d) => {
+      const h = items.find((i) => !used.has(i) && (norm(d.item).includes(norm(i)) || norm(i).includes(norm(d.item))));
+      if (h) used.add(h);
+      return fit(h || d.item, d);
+    });
+    for (const i of items) if (!used.has(i) && services.filter((e) => this.same(e.item, i)).length >= 3) plan.push(fit(i, { km: 0, months: 12 }));
+    return plan;
   },
 };
 // Rupees grouped the local way (9,00,000); a minus goes in front: -Rs 5,000.
@@ -5719,6 +5806,9 @@ function renderAssetForm() {
     const t = plan.tables;
     const label = { gold: 'Gold', silver: 'Silver', overview: 'Overview', summary: 'Zakat Summary', payments: 'Zakat Payments' };
     const found = Object.keys(label).filter((k) => t[k]).map((k) => `${label[k]} (${plural(t[k].length, 'row')})`);
+    const zakatFound = found.length > 0;
+    if (t.cars) found.push(`Cars (${plural(t.cars.length, 'car')})`);
+    for (const l of t.carlog || []) found.push(`${l.type ? { service: 'Maintenance', added: 'Expenses', repair: 'Repairs' }[l.type] : l.file} (${plural(l.rows.length, 'row')})`);
     const guess = AirtableImport.guess(plan);
     const others = People.list().filter((p) => p.id !== ME);
     const whoSel = (n, i) => `<label class="bal-row"><span>${esc(n)}</span><select class="input" name="who-${i}">
@@ -5727,12 +5817,15 @@ function renderAssetForm() {
       <option value="new" ${guess[n] === 'new' ? 'selected' : ''}>A new person, ${esc(n)}</option>
       <option value="skip">Leave out</option></select></label>`;
     $('#modal').innerHTML = box('Bring in from Airtable', `
-      ${found.length ? `<p class="meta" style="margin:0">Found: ${esc(found.join(', '))}.</p>` : '<p>None of these look like the zakat base\'s tables (Gold, Silver, Overview, Zakat Summary, Zakat Payments).</p>'}
+      ${found.length ? `<p class="meta" style="margin:0">Found: ${esc(found.join(', '))}.</p>` : '<p>None of these look like a base Butler knows: zakat (Gold, Silver, Overview, Zakat Summary, Zakat Payments) or cars (Cars, Maintenance, Expenses, Repairs).</p>'}
+      ${t.cars ? `<label class="field">Whose cars<select class="input" name="carsTo"><option value="${ME}">Yours</option>${others.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}'s</option>`).join('')}</select></label>` : ''}
       ${plan.unknown.length ? `<p class="meta" style="margin:0">Not recognised: ${esc(plan.unknown.join('; '))}.</p>` : ''}
       ${plan.unreadable.length ? `<p class="form-error" style="margin:0">Couldn't be read: ${esc(plan.unreadable.join('; '))}. If they're in a OneDrive folder, make them available on this device (or save them to Downloads) and pick them again.</p>` : ''}
       ${plan.names.length ? `<div class="balance-list"><div class="meta">Who is who</div>${plan.names.map(whoSel).join('')}</div>` : ''}
       ${plan.unlinked ? `<label class="field">Gold and silver not linked to anyone there (${plan.unlinked}), so not counted<select class="input" name="unlinked"><option value="skip">Leave them out</option><option value="${ME}">They're yours</option>${others.map((p) => `<option value="${esc(p.id)}">They're ${esc(p.name)}'s</option>`).join('')}</select></label>` : ''}
-      <p class="meta" style="margin:0">Brought in: rates, savings and gold and silver as assets, each person's zakat day, every year's record (what was due) and every payment. Gold and silver photos are fetched from Airtable into the attachments folder (download the CSVs just before: Airtable's photo links last a couple of hours). Bringing the same files in again adds nothing twice, only photos still missing. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
+      ${t.cars || t.carlog ? '<p class="meta" style="margin:0">Cars: each becomes a vehicle with its details and price; maintenance, expenses and repairs go in its upkeep log (as Service, Added and Repair) with their photos; and each new car gets a plan fitted to how often things were done.</p>' : ''}
+      ${zakatFound ? '<p class="meta" style="margin:0">Zakat: rates, savings and gold and silver as assets, each person\'s zakat day, every year\'s record (what was due) and every payment, with the gold and silver photos.</p>' : ''}
+      <p class="meta" style="margin:0">Photos are fetched from Airtable into the attachments folder, so download the CSVs just before (Airtable's photo links last a couple of hours). Bringing the same files in again adds nothing twice, only photos still missing. It's all read on this device.</p>`, '', found.length ? 'Bring in' : '');
     $('#modal select, #modal button.primary')?.focus();
     return;
   }
@@ -6104,19 +6197,20 @@ function submitAssetForm(type, data) {
     return;
   } else if (type === 'import') {
     const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
-    const out = AirtableImport.apply(f.plan, who, data.unlinked || 'skip');
+    const out = AirtableImport.apply(f.plan, who, data.unlinked || 'skip', data.carsTo || ME);
     changed(...DATA_KEYS.filter((k) => k !== 'deleted'));
     zakatTasks();
-    const parts = [out.assets && plural(out.assets, 'asset'), out.rates && plural(out.rates, 'day') + ' of rates', out.records && plural(out.records, 'zakat year'), out.payments && plural(out.payments, 'payment'), out.people && (out.people === 1 ? '1 person' : `${out.people} people`)].filter(Boolean);
+    upkeepTasks();
+    const parts = [out.cars && plural(out.cars, 'car'), out.entries && `${out.entries} upkeep ${out.entries === 1 ? 'entry' : 'entries'}`, out.assets - (out.cars || 0) > 0 && plural(out.assets - (out.cars || 0), 'asset'), out.rates && plural(out.rates, 'day') + ' of rates', out.records && plural(out.records, 'zakat year'), out.payments && plural(out.payments, 'payment'), out.people && (out.people === 1 ? '1 person' : `${out.people} people`)].filter(Boolean);
     if (out.photos.length) parts.push(plural(out.photos.length, 'photo') + ' to fetch');
     toast(parts.length ? `Brought in ${andList(parts)}` : 'Nothing new to bring in: it was all here already');
     out.notes.forEach((n) => toast(n));
     if (out.photos.length) {
-      if (!state.phone && AT.status !== 'ok') toast('To bring the photos in, choose the attachments folder in Settings, then pick the Gold and Silver files again');
+      if (!state.phone && AT.status !== 'ok') toast('To bring the photos in, choose the attachments folder in Settings, then pick the files again');
       else {
         toast(`Fetching ${plural(out.photos.length, 'photo')} from Airtable…`);
         AirtableImport.fetchPhotos(out.photos).then((r) => {
-          if (r.added) toast(`Attached ${plural(r.added, 'photo')} to gold and silver`);
+          if (r.added) toast(`Attached ${plural(r.added, 'photo')}`);
           if (r.failed.length) toast(`Airtable didn't hand over ${plural(r.failed.length, 'photo')} (its links last a couple of hours; download the CSVs again and pick them, or attach by hand): ${r.failed.slice(0, 5).join(', ')}${r.failed.length > 5 ? ` and ${r.failed.length - 5} more` : ''}`);
           render();
         });
