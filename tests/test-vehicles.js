@@ -61,8 +61,23 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   const so = doc.querySelector('[data-list-tool="vehicleLog"][data-kind="sort"]');
   so.value = 'cost';
   so.dispatchEvent(new win.Event('change', { bubbles: true }));
-  check(JSON.stringify(win.eval('device').get('list-vehicleLog', {})) === '{"group":"car","sort":"cost"}', 'the choice is remembered for that list on this device');
+  const pref = win.eval('device').get('list-vehicleLog', {});
+  check(pref.groups.join() === 'car' && pref.sort === 'cost', 'the choice is remembered for that list on this device');
   check(doc.querySelector('#main li.item .title').textContent.startsWith('AC fan'), 'and sorted by cost');
+  // A second level, folding
+  const g2 = doc.querySelector('[data-list-tool="vehicleLog"][data-kind="group"][data-level="1"]');
+  check(g2 && ![...g2.options].some((x) => x.value === 'car'), 'a "then by" appears, without the level above');
+  g2.value = 'type';
+  g2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(doc.querySelectorAll('#main .list-group.lv1').length >= 3 && doc.querySelector('[data-list-tool="vehicleLog"][data-level="2"]'), 'subgroups under each group, and a third level to choose');
+  const corollaHead = [...doc.querySelectorAll('#main .list-group.lv0')].find((h) => /Corolla/.test(h.textContent));
+  corollaHead.click();
+  check(!doc.querySelector('#main .list-group.lv1[data-path^="Corolla"]') && win.eval('device').get('list-vehicleLog').folded.includes('Corolla'), 'clicking a group folds it (remembered)');
+  doc.querySelector('[data-list-fold="vehicleLog"][data-fold-all="0"]').click();
+  check(doc.querySelector('#main .list-group.lv1[data-path^="Corolla"]'), 'Unfold all opens it again');
+  doc.querySelector('[data-list-fold="vehicleLog"][data-fold-all="1"]').click();
+  check(!doc.querySelector('#main li.item') && doc.querySelectorAll('#main .list-group.lv0').length === 3, 'Fold all shows the groups only');
+  doc.querySelector('[data-list-fold="vehicleLog"][data-fold-all="0"]').click();
 
   // --- The store ---
   doc.querySelector('#main [data-action="upkeep-entry"][data-asset="store"]').click();

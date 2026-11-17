@@ -146,7 +146,12 @@ button:disabled { cursor: not-allowed; }
 .list-count { margin-left: auto; font-size: var(--t-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .list-tool { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--muted); }
 .list-tool select { width: auto; padding: 4px 8px; font-size: var(--t-sm); }
-.list .list-group { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 4px 4px; border-bottom: 1px solid var(--border); font-size: var(--t-sm); }
+.list .list-group { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 4px 6px; border-bottom: 1px solid var(--border); font-size: var(--t-sm); cursor: pointer; user-select: none; }
+.list .list-group:hover { background: var(--panel-2); }
+.list .list-group .lg-name { display: inline-flex; align-items: center; gap: 6px; }
+.list .list-group.lv1 { padding-left: 22px; }
+.list .list-group.lv2 { padding-left: 40px; }
+.list .list-group.lv1 b, .list .list-group.lv2 b { font-weight: 500; }
 .list .list-group:first-child { padding-top: 2px; }
 .vehicle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .vehicle-card { display: flex; flex-direction: column; gap: 10px; }
@@ -5834,26 +5839,39 @@ function vehicleStore() {
       empty: 'Nothing in the store. Add supplies you buy for the cars and keep for later.',
     })}`;
 }
-// A list with "Group by" and "Sort" above it, remembered per list on this device (dev_list-<id>). o: {group: {key:
-// label} (none first), sort: {key: label}, key: {group key: row → its group's name}, cmp: {sort key: compare}, row:
-// row → html, total?: row → amount (each group shows its sum), empty}. Groups come in the order of their first row.
-function listTools(id, rows, o) {
+// A list with Group by (up to three levels: "then by"), Sort and folding above it, like Airtable's: a group's heading
+// shows how many and their total and folds or unfolds it; Fold all / Unfold all. All remembered per list on this device
+// (dev_list-<id>: {groups: [...], sort, folded: [paths]}). o: {group: {key: label} (none first), sort: {key: label},
+// key: {group key: row → its group's name}, cmp: {sort key: compare}, row: row → html, total?: row → amount, lead?:
+// html before the tools (a picker), one/many: what a row is called, empty}. Groups come in the order of their first row.
+function listPrefs(id, o) {
   const pref = device.get(`list-${id}`, {});
-  const group = o.group[pref.group] && (pref.group === 'none' || o.key[pref.group]) ? pref.group : 'none';
-  const sort = o.cmp[pref.sort] ? pref.sort : Object.keys(o.cmp)[0];
+  const ok = (g) => g && g !== 'none' && o.key[g];
+  const groups = (Array.isArray(pref.groups) ? pref.groups : [pref.group]).filter(ok).filter((g, i, a) => a.indexOf(g) === i).slice(0, 3);
+  return { groups, sort: o.cmp[pref.sort] ? pref.sort : Object.keys(o.cmp)[0], folded: new Set(pref.folded || []) };
+}
+function listTools(id, rows, o) {
+  const { groups, sort, folded } = listPrefs(id, o);
   const list = rows.slice().sort(o.cmp[sort]);
-  const sel = (kind, opts, cur) => `<label class="list-tool">${kind === 'group' ? 'Group by' : 'Sort'}<select class="input" data-list-tool="${esc(id)}" data-kind="${kind}">${Object.entries(opts).map(([k, l]) => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
-  const sum = o.total ? rows.reduce((t, r) => t + o.total(r), 0) : 0;
-  const count = `<span class="list-count">${rows.length} ${rows.length === 1 ? (o.one || 'item') : (o.many || 'items')}${o.total && rows.length ? `, ${rupees(sum)}` : ''}</span>`;
-  const tools = `<div class="list-tools">${o.lead || ''}${rows.length > 1 && Object.keys(o.group).length > 1 ? sel('group', o.group, group) : ''}${rows.length > 1 && Object.keys(o.sort).length > 1 ? sel('sort', o.sort, sort) : ''}${rows.length ? count : ''}</div>`;
-  let body;
-  if (group === 'none') body = list.map(o.row).join('');
-  else {
-    const groups = new Map();
-    for (const r of list) { const k = o.key[group](r) || '–'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
-    body = [...groups.entries()].map(([k, rs]) => `<li class="list-group"><b>${esc(k)}</b><span class="meta">${rs.length}${o.total ? `, ${rupees(rs.reduce((t, r) => t + o.total(r), 0))}` : ''}</span></li>${rs.map(o.row).join('')}`).join('');
-  }
-  return `${tools}<div class="card"><ul class="list">${body || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
+  const opts = (cur, skip) => Object.entries(o.group).filter(([k]) => k === 'none' || k === cur || !skip.includes(k)).map(([k, l]) => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(k === 'none' && skip.length ? 'No more' : l)}</option>`).join('');
+  const levelSel = (i) => `<label class="list-tool">${i ? 'then by' : 'Group by'}<select class="input" data-list-tool="${esc(id)}" data-kind="group" data-level="${i}">${opts(groups[i] || 'none', groups.slice(0, i))}</select></label>`;
+  const sum = (rs) => rs.reduce((t, r) => t + o.total(r), 0);
+  const count = `<span class="list-count">${rows.length} ${rows.length === 1 ? (o.one || 'item') : (o.many || 'items')}${o.total && rows.length ? `, ${rupees(sum(rows))}` : ''}</span>`;
+  const canGroup = rows.length > 1 && Object.keys(o.group).length > 1;
+  const levels = canGroup ? [0, ...groups.map((_, i) => i + 1).filter((i) => i < 3 && i < Object.keys(o.group).length - 1)] : [];
+  const tools = `<div class="list-tools">${o.lead || ''}${levels.map(levelSel).join('')}${rows.length > 1 && Object.keys(o.sort).length > 1 ? `<label class="list-tool">Sort<select class="input" data-list-tool="${esc(id)}" data-kind="sort">${Object.entries(o.sort).map(([k, l]) => `<option value="${esc(k)}" ${k === sort ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}${groups.length ? `<button type="button" class="btn small" data-list-fold="${esc(id)}" data-fold-all="1">Fold all</button><button type="button" class="btn small" data-list-fold="${esc(id)}" data-fold-all="0">Unfold all</button>` : ''}${rows.length ? count : ''}</div>`;
+  // The rows under a group, grouped again by the next level; a folded group shows its heading only.
+  const nest = (rs, level, path) => {
+    if (level >= groups.length) return rs.map(o.row).join('');
+    const byKey = new Map();
+    for (const r of rs) { const k = o.key[groups[level]](r) || '–'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); }
+    return [...byKey.entries()].map(([k, sub]) => {
+      const p = `${path}${path ? ' › ' : ''}${k}`;
+      const shut = folded.has(p);
+      return `<li class="list-group lv${level}" data-list-fold="${esc(id)}" data-path="${esc(p)}" role="button" tabindex="0" aria-expanded="${!shut}"><span class="lg-name">${ic(shut ? 'chevron-right' : 'chevron-down', 'sm')}<b>${esc(k)}</b></span><span class="meta">${sub.length}${o.total ? `, ${rupees(sum(sub))}` : ''}</span></li>${shut ? '' : nest(sub, level + 1, p)}`;
+    }).join('');
+  };
+  return `${tools}<div class="card"><ul class="list">${nest(list, 0, '') || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
 }
 
 // ===================== Vault page =====================
@@ -7717,6 +7735,17 @@ document.addEventListener('click', (e) => {
   if (assetTab) { device.set('assetTab', assetTab.dataset.assetTab); return render(); }
   const zakatTab = e.target.closest('[data-zakat-tab]');
   if (zakatTab) { device.set('zakatTab', zakatTab.dataset.zakatTab); return render(); }
+  const fold = e.target.closest('[data-list-fold]'); // a group's heading folds or unfolds it; Fold all, Unfold all
+  if (fold) {
+    const id = fold.dataset.listFold;
+    const pref = device.get(`list-${id}`, {});
+    let folded = new Set(pref.folded || []);
+    if (fold.dataset.foldAll === '1') $$(`#main [data-list-fold="${id}"][data-path]`).forEach((h) => folded.add(h.dataset.path));
+    else if (fold.dataset.foldAll === '0') folded = new Set();
+    else if (folded.has(fold.dataset.path)) folded.delete(fold.dataset.path); else folded.add(fold.dataset.path);
+    device.set(`list-${id}`, { ...pref, folded: [...folded] });
+    return render();
+  }
   const vehicleTab = e.target.closest('[data-vehicle-tab]');
   if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
@@ -8541,7 +8570,17 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-upkeep-filter]') && state.assetForm) { state.upkeepFilter = e.target.value; renderAssetForm(); return; }
-  if (e.target.matches?.('[data-list-tool]')) { const id = e.target.dataset.listTool; device.set(`list-${id}`, { ...device.get(`list-${id}`, {}), [e.target.dataset.kind]: e.target.value }); return render(); }
+  if (e.target.matches?.('[data-list-tool]')) { // Group by (a level), or Sort
+    const id = e.target.dataset.listTool;
+    const pref = device.get(`list-${id}`, {});
+    if (e.target.dataset.kind === 'group') {
+      const lv = Number(e.target.dataset.level) || 0;
+      const groups = (Array.isArray(pref.groups) ? pref.groups : [pref.group]).filter((g) => g && g !== 'none').slice(0, lv);
+      if (e.target.value !== 'none') groups.push(e.target.value);
+      device.set(`list-${id}`, { ...pref, groups, group: undefined, folded: [] });
+    } else device.set(`list-${id}`, { ...pref, sort: e.target.value });
+    return render();
+  }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
   if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
