@@ -142,6 +142,11 @@ button:disabled { cursor: not-allowed; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .vehicle-pick { display: inline-flex; align-items: center; gap: 8px; margin: -8px 0 12px; color: var(--muted); }
 .vehicle-pick select { width: auto; }
+.list-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 10px; }
+.list-tool { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--muted); }
+.list-tool select { width: auto; padding: 4px 8px; font-size: var(--t-sm); }
+.list .list-group { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 4px 4px; border-bottom: 1px solid var(--border); font-size: var(--t-sm); }
+.list .list-group:first-child { padding-top: 2px; }
 .vehicle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .vehicle-card { display: flex; flex-direction: column; gap: 10px; }
 .stat-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
@@ -1711,6 +1716,9 @@ const ButlerTasks = {
 // every log entry with a reading counts as one too. Each plan job keeps one open task (Upkeep.ensureTasks), due when
 // the months run out or, by km, on the day the average daily distance says the reading will get there. Logging the
 // item ticks it and the next round counts from that entry.
+// The store: supplies bought for the cars and kept until used. Its items are log entries whose asset is 'store',
+// with a quantity (`qty`, what's left); Use on a car moves them (or some) into that car's log at what they cost.
+const STORE = { id: 'store', name: 'Store', kind: 'store' };
 const UPKEEP_TYPES = [
   { id: 'service', name: 'Service', icon: 'tool' }, { id: 'repair', name: 'Repair', icon: 'alert-triangle' },
   { id: 'added', name: 'Added', icon: 'plus' }, { id: 'other', name: 'Other', icon: 'receipt' },
@@ -1795,6 +1803,26 @@ const Upkeep = {
     const n = new Map();
     for (const e of DB.upkeep) if (e[field] && (!assetId || field === 'vendor' || e.asset === assetId)) n.set(e[field].trim(), (n.get(e[field].trim()) || 0) + 1);
     return [...n.entries()].sort((x, y) => y[1] - x[1]).map(([v]) => v);
+  },
+  // ----- The store -----
+  stock() { return DB.upkeep.filter((e) => e.asset === STORE.id && Number(e.qty) > 0).sort((x, y) => (y.date || '').localeCompare(x.date || '')); },
+  // Use some of a store item on a car: a log entry there (its share of the cost), and less left in the store.
+  useFromStore(item, car, { qty = 1, date = todayISO(), km = 0, type } = {}) {
+    qty = Math.min(Number(qty) || 1, Number(item.qty) || 0);
+    if (!qty || !car) return null;
+    const share = item.qty ? (Number(item.cost) || 0) * (qty / Number(item.qty)) : 0;
+    const e = this.add({ asset: car.id, date, type: type || ((car.plan || []).some((p) => this.same(p.item, item.item)) ? 'service' : 'added'), item: item.item, cost: Math.round(share), vendor: item.vendor, km, notes: `From the store${qty > 1 ? ` (${qty})` : ''}${item.notes ? `. ${item.notes}` : ''}` });
+    e.attachments = (item.attachments || []).map((x) => ({ ...x, id: uid() })); // the bill or photo comes along
+    item.cost = Math.round((Number(item.cost) || 0) - share);
+    item.qty = Number(item.qty) - qty;
+    if (item.qty <= 0) DB.upkeep = DB.upkeep.filter((x) => x !== item); // used up
+    return e;
+  },
+  // A vehicle that wasn't a car (a place supplies were kept): its entries go to the store, one of each.
+  toStore(a) {
+    const moved = DB.upkeep.filter((e) => e.asset === a.id);
+    moved.forEach((e) => { e.asset = STORE.id; e.qty = e.qty || 1; e.type = 'added'; });
+    return moved.length;
   },
   // ----- The plan -----
   taskPrefix(a, p) { return `up-${a.id}-${p.id}-`; },
@@ -2399,7 +2427,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // docs:    {id, cat, type, name, number, issued, expires, renewMonths, people, assets: [ids], attachments, notes,
 //           created} — the ID vault (see Vault); assets may carry attachments too (photos)
-// upkeep:  {id, asset, date, type:'service'|'repair'|'added'|'other', item, cost, vendor, km, notes, attachments, created}
+// upkeep:  {id, asset ('store': supplies kept for the cars, qty: how many left), date, type:'service'|'repair'|'added'|'other', item, cost, vendor, km, notes, attachments, created}
 //           — an asset's upkeep log (see Upkeep); assets may carry plan: [{id, item, km, months, since, sinceKm}],
 //           car: {make, model, year, regYear, plate, boughtKm} and readings: [{date, km}]
 // hijriFix: {id 'hf-<hyear>-<month>', hyear, month, shift} — an Islamic month that began a day later (+1) or
@@ -5363,7 +5391,15 @@ function assetOverview(who, list, t) {
 
 // One kind's assets as rows: name, owners, details, value now. A row opens it.
 function assetKindTab(kind, who, list) {
-  const rows = list.filter((a) => a.kind === kind).map((a) => {
+  const val = (a) => Assets.partOn(a, who) ?? -Infinity;
+  return listTools(`assets-${kind}`, list.filter((a) => a.kind === kind), {
+    group: { none: 'No grouping', ...(People.several() ? { owner: 'Owner' } : {}), held: 'Held or sold' },
+    sort: { value: 'Most valuable first', name: 'By name', since: 'Had longest first', recent: 'Newest first' },
+    key: { owner: (a) => Assets.ownersOn(a).map((o) => People.name(o.id)).join(' and '), held: (a) => (a.closed ? 'Sold or closed' : 'Held') },
+    cmp: { value: (x, y) => val(y) - val(x), name: (x, y) => x.name.localeCompare(y.name), since: (x, y) => (x.acquired || '9').localeCompare(y.acquired || '9'), recent: (x, y) => (y.acquired || '').localeCompare(x.acquired || '') },
+    total: (a) => Math.max(0, Assets.partOn(a, who) || 0),
+    empty: 'Nothing here',
+    row: (a) => {
     const v = Assets.partOn(a, who);
     const owners = Assets.ownersOn(a);
     const latest = Assets.latest(a);
@@ -5383,8 +5419,8 @@ function assetKindTab(kind, who, list) {
         </div>
         <span class="asset-value">${v == null ? '<span class="meta">Needs a rate</span>' : rupees(v)}</span>
       </li>`;
-  }).join('');
-  return `<div class="card"><ul class="list">${rows || '<li class="empty">Nothing here</li>'}</ul></div>`;
+    },
+  });
 }
 
 function ratesTab() {
@@ -5571,8 +5607,15 @@ function zakatBars(recs, named) {
 }
 
 function zakatRecordsTab(who) {
-  const recs = Zakat.records(who).reverse();
-  const rows = recs.map((r) => `
+  const STATE = { draft: 'Drafts', overdue: 'Overdue', left: 'Still to pay', paid: 'Paid' };
+  return listTools('zakatRecords', Zakat.records(who), {
+    group: { none: 'No grouping', status: 'Status', person: 'Person' },
+    sort: { date: 'Newest first', old: 'Oldest first', due: 'Most due first' },
+    key: { status: (r) => STATE[Zakat.state(r)], person: (r) => People.name(r.person) },
+    cmp: { date: (x, y) => y.date.localeCompare(x.date), old: (x, y) => x.date.localeCompare(y.date), due: (x, y) => (y.due || 0) - (x.due || 0) },
+    total: (r) => Number(r.due) || 0,
+    empty: 'No records yet',
+    row: (r) => `
     <li class="item">
       <span class="tl-mark">${ic('calendar-event')}</span>
       <div class="body clickable" data-action="open-zakat" data-id="${esc(r.id)}">
@@ -5580,14 +5623,21 @@ function zakatRecordsTab(who) {
         <div class="meta">${People.several() ? personName(r.person) : ''}${r.status === 'done' ? `${r.imported ? '' : `<span>Wealth ${rupees(r.total)}</span>`}<span>Due ${rupees(r.due)}</span><span>Paid ${rupees(Zakat.paid(r))}</span>${Zakat.carriedIn(r) ? `<span>${rupees(Zakat.carriedIn(r))} carried in</span>` : ''}<span>Due by ${esc(fmtDate(Zakat.dueBy(r)))}</span>` : '<span>Being checked</span>'}</div>
       </div>
       ${zakatStatus(r)}
-    </li>`).join('');
-  return `<div class="card"><ul class="list">${rows || '<li class="empty">No records yet</li>'}</ul></div>`;
+    </li>`,
+  });
 }
 
 function zakatPaymentsTab(who) {
-  const pays = DB.zakatPay.filter((p) => who === 'all' || p.person === who).sort(byDate).reverse();
-  const rows = pays.map((p) => {
-    const r = DB.zakat.find((x) => x.id === p.record);
+  const recOf = (p) => DB.zakat.find((x) => x.id === p.record);
+  return listTools('zakatPayments', DB.zakatPay.filter((p) => who === 'all' || p.person === who), {
+    group: { none: 'No grouping', record: 'Year paid for', person: 'Person', month: 'Month paid' },
+    sort: { date: 'Newest first', old: 'Oldest first', amount: 'Largest first' },
+    key: { record: (p) => (recOf(p) ? zakatTitle(recOf(p)) : 'A removed record'), person: (p) => People.name(p.person), month: (p) => monthName(p.date) },
+    cmp: { date: (x, y) => y.date.localeCompare(x.date), old: (x, y) => x.date.localeCompare(y.date), amount: (x, y) => y.amount - x.amount },
+    total: (p) => Number(p.amount) || 0,
+    empty: 'No payments yet',
+    row: (p) => {
+    const r = recOf(p);
     return `
       <li class="item">
         <span class="tl-date">${esc(fmtDate(p.date))}</span>
@@ -5596,8 +5646,8 @@ function zakatPaymentsTab(who) {
           <div class="meta">${People.several() ? personName(p.person) : ''}<span>For ${r ? esc(zakatTitle(r)) : 'a removed record'}</span></div>
         </div>
       </li>`;
-  }).join('');
-  return `<div class="card"><ul class="list">${rows || '<li class="empty">No payments yet</li>'}</ul></div>`;
+    },
+  });
 }
 
 // ===================== Vehicles page =====================
@@ -5625,7 +5675,7 @@ function renderVehicles() {
       <div><h1>Vehicles</h1><p class="sub">${list.length ? `${plural(list.length, 'vehicle')}${car ? `, showing ${esc(car.name)}` : ''}` : 'Cars, their upkeep and supplies'}</p></div>
       <div class="row edit-only page-actions">
         ${list.length ? `<button class="btn primary" data-action="upkeep-entry" data-asset="${esc(car ? car.id : '')}" data-choose="${car ? '' : '1'}">${ic('plus', 'sm')}Add entry</button>` : ''}
-        <button class="btn" data-action="asset-form" data-form-type="store-add">${ic('plus', 'sm')}Add to store</button>
+        <button class="btn" data-action="upkeep-entry" data-asset="store">${ic('plus', 'sm')}Add to store</button>
         ${car && Upkeep.vehicle(car) ? `<button class="btn" data-action="asset-form" data-form-type="reading" data-asset="${esc(car.id)}">${ic('gauge', 'sm')}Update reading</button>` : ''}
         <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="vehicle">${ic('plus', 'sm')}Add a car</button>
       </div>
@@ -5711,15 +5761,45 @@ function vehicleDetails(shown, car) {
     ${row('Bought on', car.acquired && fmtDate(car.acquired))}${row('Km when bought', c.boughtKm && fmtKm(c.boughtKm))}${row('Latest reading', Upkeep.latestKm(car) && fmtKm(Upkeep.latestKm(car)))}
     ${row('Documents', Vault.forAsset(car.id).map((d) => d.name).join(', '))}${row('Photos and files', (car.attachments || []).length ? String(car.attachments.length) : '')}
     ${row('Sold on', car.closed && fmtDate(car.closed))}
-  </div><div class="row" style="margin-top:10px"><button class="btn" data-action="open-asset" data-id="${esc(car.id)}">${ic('pencil', 'sm')}Change details, price, owners, documents</button></div></div>`;
+  </div><div class="row" style="margin-top:10px"><button class="btn" data-action="open-asset" data-id="${esc(car.id)}">${ic('pencil', 'sm')}Change details, price, owners, documents</button><button class="btn edit-only" data-action="not-a-car" data-id="${esc(car.id)}">This isn't a car: move its entries to the store</button></div></div>`;
 }
 const monthName = (iso) => (iso ? parseISO(`${iso.slice(0, 7)}-01`).toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'No date');
-// Filled in by the store step.
-function vehicleStore() { return '<div class="card empty-state"><p>The store comes next.</p></div>'; }
-// Filled in by the grouping step: for now a plain list.
+// Supplies kept for the cars, with how many are left and what they cost; Use on a car moves them into its log.
+function vehicleStore() {
+  const stock = Upkeep.stock();
+  const worth = stock.reduce((t, e) => t + (Number(e.cost) || 0), 0);
+  return `${stock.length ? `<p class="sub">${plural(stock.length, 'item')} in store, worth ${rupees(worth)}</p>` : ''}
+    ${listTools('vehicleStore', stock.map((e) => ({ e })), {
+      group: { none: 'No grouping', vendor: 'Vendor', month: 'Month bought' },
+      sort: { date: 'Newest first', item: 'By name', cost: 'Cost, highest first' },
+      key: { vendor: (r) => r.e.vendor || 'No vendor', month: (r) => monthName(r.e.date) },
+      cmp: { date: (x, y) => (y.e.date || '').localeCompare(x.e.date || ''), item: (x, y) => x.e.item.localeCompare(y.e.item), cost: (x, y) => (Number(y.e.cost) || 0) - (Number(x.e.cost) || 0) },
+      total: (r) => Number(r.e.cost) || 0,
+      row: (r) => `<li class="item"><span class="tl-mark">${ic('box')}</span>
+        <div class="body clickable" data-action="upkeep-entry" data-id="${esc(r.e.id)}"><div class="title">${esc(r.e.item)} <span class="meta">× ${esc(String(r.e.qty))}</span></div>
+        <div class="meta"><span>Bought ${esc(fmtDate(r.e.date))}</span>${r.e.vendor ? `<span>${esc(r.e.vendor)}</span>` : ''}${r.e.cost ? `<span>${rupees(r.e.cost)}</span>` : ''}</div></div>
+        <button class="btn small edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(r.e.id)}">Use on a car</button></li>`,
+      empty: 'Nothing in the store. Add supplies you buy for the cars and keep for later.',
+    })}`;
+}
+// A list with "Group by" and "Sort" above it, remembered per list on this device (dev_list-<id>). o: {group: {key:
+// label} (none first), sort: {key: label}, key: {group key: row → its group's name}, cmp: {sort key: compare}, row:
+// row → html, total?: row → amount (each group shows its sum), empty}. Groups come in the order of their first row.
 function listTools(id, rows, o) {
-  const list = rows.slice().sort(o.cmp[Object.keys(o.cmp)[0]]);
-  return `<div class="card"><ul class="list">${list.map(o.row).join('') || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
+  const pref = device.get(`list-${id}`, {});
+  const group = o.group[pref.group] && (pref.group === 'none' || o.key[pref.group]) ? pref.group : 'none';
+  const sort = o.cmp[pref.sort] ? pref.sort : Object.keys(o.cmp)[0];
+  const list = rows.slice().sort(o.cmp[sort]);
+  const sel = (kind, opts, cur) => `<label class="list-tool">${kind === 'group' ? 'Group by' : 'Sort'}<select class="input" data-list-tool="${esc(id)}" data-kind="${kind}">${Object.entries(opts).map(([k, l]) => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+  const tools = rows.length > 1 ? `<div class="list-tools">${Object.keys(o.group).length > 1 ? sel('group', o.group, group) : ''}${Object.keys(o.sort).length > 1 ? sel('sort', o.sort, sort) : ''}</div>` : '';
+  let body;
+  if (group === 'none') body = list.map(o.row).join('');
+  else {
+    const groups = new Map();
+    for (const r of list) { const k = o.key[group](r) || '–'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    body = [...groups.entries()].map(([k, rs]) => `<li class="list-group"><b>${esc(k)}</b><span class="meta">${rs.length}${o.total ? `, ${rupees(rs.reduce((t, r) => t + o.total(r), 0))}` : ''}</span></li>${rs.map(o.row).join('')}`).join('');
+  }
+  return `${tools}<div class="card"><ul class="list">${body || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
 }
 
 // ===================== Vault page =====================
@@ -5755,7 +5835,14 @@ function renderVault() {
       <h2 class="vault-h">Expiring in the next year</h2>${list(soon, 'Nothing expires in the next year')}`
       : `<div class="card empty-state"><p><b>Nothing here yet.</b> Keep IDs, passports, licences, deeds and certificates here, with their numbers, dates and scans. Anything that expires gets a renew reminder.</p>
         <button class="btn primary edit-only" data-action="asset-form" data-form-type="doc" data-kind="id">${ic('plus', 'sm')}Add document</button></div>`)
-    : list(docs.filter((d) => d.cat === tab).sort((a, b) => a.name.localeCompare(b.name)), 'Nothing here');
+    : listTools(`vault-${tab}`, docs.filter((d) => d.cat === tab), {
+      group: { none: 'No grouping', ...(People.several() ? { whose: 'Whose' } : {}), type: 'Type', state: 'Renewal' },
+      sort: { name: 'By name', expiry: 'Expiring first' },
+      key: { whose: (d) => People.of(d).map((id) => People.name(id)).join(' and '), type: (d) => d.type || 'No type', state: (d) => ({ expired: 'Expired', renew: 'To renew', ok: 'In date', '': "Doesn't expire" }[Vault.state(d)]) },
+      cmp: { name: (x, y) => x.name.localeCompare(y.name), expiry: (x, y) => (x.expires || '9').localeCompare(y.expires || '9') },
+      row: docRow,
+      empty: 'Nothing here',
+    });
   return `
     <div class="page-head">
       <div><h1>ID vault</h1><p class="sub">${docs.length ? `${plural(docs.length, 'document')}${due.length ? `, ${due.length} to renew` : ''}` : 'Documents, with their numbers, dates and scans'}</p></div>
@@ -5922,17 +6009,21 @@ function renderAssetForm() {
   if (f.type === 'upkeep') { // one log entry: add, change, photos; Back returns to its asset
     const e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
     const choosing = !e && f.choose; // from the Vehicles page with all of them shown: say which
-    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset)) || (choosing ? vehicles()[0] : null);
+    const a = (e ? e.asset : f.asset) === STORE.id ? STORE : DB.assets.find((x) => x.id === (e ? e.asset : f.asset)) || (choosing ? vehicles()[0] : null);
     if (!a) return closeAssetForm();
+    const inStore = a === STORE;
+    const homes = [STORE, ...DB.assets.filter((x) => !x.closed || x.id === a.id).sort((x, y) => (x.kind === 'vehicle' ? 0 : 1) - (y.kind === 'vehicle' ? 0 : 1) || x.name.localeCompare(y.name))];
     const v = e || { date: todayISO(), type: f.typeId || 'service', item: f.item || '', cost: '', vendor: f.vendor || '', km: '', notes: '' };
     const list = (id, vals) => `<datalist id="${id}">${vals.slice(0, 60).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`;
     const items = [...new Set([...(a.plan || []).map((p) => p.item), ...Upkeep.used('item', a.id), ...(Upkeep.vehicle(a) ? CAR_PLAN.map((p) => p.item) : [])])];
-    $('#modal').innerHTML = box(e ? `${a.name}: ${e.item}` : `${a.name}: add to upkeep`, `
+    $('#modal').innerHTML = box(e ? `${a.name}: ${e.item}` : inStore ? 'Add to store' : `${a.name}: add to upkeep`, `
+      ${inStore && !e ? '<p class="meta" style="margin:0">Supplies bought for the cars and kept until used (oil, filters, wipers). Use on a car moves them into its log at what they cost.</p>' : ''}
       ${choosing ? `<label class="field">Vehicle<select class="input" name="asset">${vehicles().map((x) => `<option value="${esc(x.id)}" ${x === a ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
       ${f.fromTask ? `<p class="banner" style="margin:0">Done? Fill in what it cost${Upkeep.vehicle(a) ? ' and the reading' : ''}; the next one counts from here.</p>` : ''}
       <div class="row">
         <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date)}" required></label>
-        <label class="field">Type<select class="input" name="type">${UPKEEP_TYPES.map((t) => `<option value="${t.id}" ${t.id === v.type ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+        ${inStore ? `<label class="field">How many<input class="input" type="number" min="1" step="any" name="qty" value="${esc(v.qty || 1)}"></label>` : ''}
+        <label class="field" ${inStore ? 'hidden' : ''}>Type<select class="input" name="type">${UPKEEP_TYPES.map((t) => `<option value="${t.id}" ${t.id === v.type ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       </div>
       <label class="field">Item<input class="input" name="what" list="up-items" value="${esc(v.item)}" placeholder="e.g. Engine oil and oil filter" maxlength="80" required>${list('up-items', items)}</label>
       <div class="row">
@@ -5940,10 +6031,26 @@ function renderAssetForm() {
         ${Upkeep.vehicle(a) ? `<label class="field">Reading (km)<input class="input" ${amountAttrs(v.km || '')} name="km" placeholder="${Upkeep.latestKm(a) ? `last ${groupAmount(Upkeep.latestKm(a))}` : ''}"></label>` : ''}
       </div>
       <label class="field">Vendor<input class="input" name="vendor" list="up-vendors" value="${esc(v.vendor)}" maxlength="60">${list('up-vendors', Upkeep.used('vendor'))}</label>
-      <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
-    `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
+      <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>
+      ${e ? `<label class="field">Belongs to <span class="meta">(move it to another car, or to the store)</span><select class="input" name="asset">${homes.map((x) => `<option value="${esc(x.id)}" ${x.id === a.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}`,
+    `${inStore ? (e && Number(e.qty) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(e.id)}" style="margin-right:auto">Use on a car</button>` : '<span style="margin-right:auto"></span>') : `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>`}${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
     e ? filesBlock(e, 'upkeep') : '<p class="meta" style="margin:0">Save it, then add photos or the bill.</p>');
     $('#modal [name="what"]')?.focus();
+    return;
+  }
+  if (f.type === 'store-use') { // some of a store item, used on a car
+    const it = DB.upkeep.find((x) => x.id === f.id && x.asset === STORE.id);
+    const cars = vehicles().filter((a) => !a.closed);
+    if (!it || !cars.length) { closeAssetForm(); if (it) toast('Add a car first'); return; }
+    const pick = cars.find((a) => a.id === device.get('vehicleCar', '')) || cars[0];
+    $('#modal').innerHTML = box(`Use ${it.item}`, `
+      <p class="meta" style="margin:0">${esc(String(it.qty))} in the store${it.cost ? `, ${rupees(it.cost)}` : ''}. What's used goes into the car's log at its share of the cost.</p>
+      <label class="field">On<select class="input" name="car">${cars.map((a) => `<option value="${esc(a.id)}" ${a === pick ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+      <div class="row">
+        <label class="field">How many<input class="input" type="number" min="1" max="${esc(String(it.qty))}" step="any" name="qty" value="1"></label>
+        <label class="field">Date<input class="input" type="date" name="date" value="${todayISO()}"></label>
+        <label class="field">Reading (km)<input class="input" ${amountAttrs('')} name="km"></label>
+      </div>`, '', 'Use');
     return;
   }
   if (f.type === 'plan') { // a repeating job on an asset's plan
@@ -6338,18 +6445,31 @@ function submitAssetForm(type, data) {
     if (!f.id) { state.assetForm = { type: 'doc', id: d.id }; renderAssetForm(); render(); return; } // stays open, to add scans
   } else if (type === 'upkeep') {
     let e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
-    const a = DB.assets.find((x) => x.id === (e ? e.asset : data.asset || f.asset));
+    const to = data.asset || (e ? e.asset : f.asset);
+    const a = to === STORE.id ? STORE : DB.assets.find((x) => x.id === to);
     if (!a) return closeAssetForm();
     if (!(data.what || '').trim()) return formError('Say what it was.');
-    const fields = { date: data.date || todayISO(), type: data.type, item: data.what.trim(), cost: Number(data.cost) || 0, vendor: (data.vendor || '').trim(), km: Number(data.km) || 0, notes: data.notes || '' };
-    if (e) Object.assign(e, fields); else e = Upkeep.add({ ...fields, asset: a.id });
+    const fields = { asset: a.id, date: data.date || todayISO(), type: a === STORE ? 'added' : data.type, item: data.what.trim(), cost: Number(data.cost) || 0, vendor: (data.vendor || '').trim(), km: Number(data.km) || (e && e.asset === a.id ? e.km : 0) || 0, notes: data.notes || '' };
+    if (a === STORE) fields.qty = Number(data.qty) > 0 ? Number(data.qty) : (e?.qty || 1);
+    const moved = e && e.asset !== a.id;
+    if (e) Object.assign(e, fields); else { e = Upkeep.add(fields); if (a === STORE) e.qty = fields.qty; }
     changed('upkeep');
     upkeepTasks();
-    toast(`Saved "${e.item}"${e.cost ? `, ${rupees(e.cost)}` : ''}`);
+    toast(moved ? `Moved "${e.item}" to ${a.name}` : `Saved "${e.item}"${e.cost ? `, ${rupees(e.cost)}` : ''}`);
+    if (a === STORE) { if (f.id) { closeAssetForm(); render(); return; } state.assetForm = { type: 'upkeep', id: e.id }; renderAssetForm(); render(); return; }
     if (!f.id) { state.assetForm = { type: 'upkeep', id: e.id }; renderAssetForm(); render(); return; } // stays open, to add a photo or the bill
     openAssetForm('asset', { id: a.id });
     render();
     return;
+  } else if (type === 'store-use') {
+    const it = DB.upkeep.find((x) => x.id === f.id && x.asset === STORE.id);
+    const car = DB.assets.find((a) => a.id === data.car);
+    if (!it || !car) return closeAssetForm();
+    const e = Upkeep.useFromStore(it, car, { qty: data.qty, date: data.date || todayISO(), km: Number(data.km) || 0 });
+    if (!e) return formError('How many?');
+    changed('upkeep');
+    upkeepTasks();
+    toast(`${e.item} logged on ${car.name}${e.cost ? `, ${rupees(e.cost)}` : ''}`);
   } else if (type === 'plan') {
     const a = DB.assets.find((x) => x.id === f.asset);
     if (!a) return closeAssetForm();
@@ -7510,7 +7630,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -7810,6 +7930,20 @@ document.addEventListener('click', (e) => {
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
     case 'hijri-today': openAssetForm('hijri'); break;
     case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset, choose: !!btn.dataset.choose }); break;
+    case 'not-a-car': { // a 'car' that was a place for supplies: its entries go to the store, it goes to the Trash
+      const a = DB.assets.find((x) => x.id === id);
+      if (!a) break;
+      ask(`Move ${a.name}'s log to the store and delete ${a.name}? Its entries become store items (one of each); ${a.name} goes to the Trash.`, { yes: 'Move and delete' }).then((yes) => {
+        if (!yes) return;
+        const n = Upkeep.toStore(a);
+        changed('upkeep');
+        Trash.discard([['assets', a], ['tasks', DB.tasks.filter((t) => t.id.startsWith(`up-${a.id}-`) && !t.done)]], `"${a.name}" (${n} ${n === 1 ? 'entry' : 'entries'} moved to the store)`);
+        device.set('vehicleCar', 'all');
+        device.set('vehicleTab', 'store');
+        render();
+      });
+      break;
+    }
     case 'plan-delete': {
       const f = state.assetForm;
       const a = f && DB.assets.find((x) => x.id === f.asset);
@@ -8353,6 +8487,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-upkeep-filter]') && state.assetForm) { state.upkeepFilter = e.target.value; renderAssetForm(); return; }
+  if (e.target.matches?.('[data-list-tool]')) { const id = e.target.dataset.listTool; device.set(`list-${id}`, { ...device.get(`list-${id}`, {}), [e.target.dataset.kind]: e.target.value }); return render(); }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
   if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
