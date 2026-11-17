@@ -38,3 +38,12 @@ Tabler outline icons, built into the file as an SVG sprite: `<svg class="i"><use
 ## States
 Every control has hover, `:focus-visible` (2px accent ring), active and disabled. Motion is short ease-out and turns off
 under `prefers-reduced-motion`.
+
+## Page layout
+Every page has the same parts, in this order:
+1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, one of them the main (primary) one. On a phone the main button stays and the rest go in a **More** menu.
+2. **Tabs row:** the tabs on the left, **Filter this page** on the right (full width on a phone).
+3. **Toolbar** for the open tab's list: the picker (whose, which car), Group by and Sort on the left; how many and their total on the right.
+4. **The content:** cards, then lists.
+
+Pages only say what goes in each part (`page-head` with `page-actions`, the `tabs` under it, `listTools` for the toolbar); `tabsRow()` and `tidyPageActions()` lay them out the same everywhere.

@@ -93,6 +93,25 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   check(!PA.DB.assets.includes(shed) && PA.DB.upkeep.some((e) => e.item === 'Wiper blades' && e.asset === 'store' && e.qty === 1), '"This isn\'t a car" moves its log to the store and deletes it (to the Trash)');
   check(win.eval('device').get('vehicleTab') === 'store', 'and shows the store');
 
+  // --- Open, bars, and the page layout ---
+  win.eval('device').set('vehicleCar', 'all');
+  win.eval('device').set('vehicleTab', 'overview');
+  win.eval('render')();
+  const opens = doc.querySelectorAll('#main .vehicle-card [data-vehicle-open]');
+  check(opens.length === 2, 'with all cars showing, each card has Open');
+  opens[1].click();
+  check(win.eval('device').get('vehicleTab') === 'details' && !doc.querySelector('#main .vehicle-card [data-vehicle-open]'), 'Open goes to that car\'s Details; with one car picked there\'s no Open');
+  check(win.eval('barPct')(0, 1000) === '0.0' && win.eval('barPct')(5, 1000) === '2.0', 'nothing has no bar; a little has at least a sliver');
+  const head = doc.querySelector('#main .page-head');
+  const row = head.nextElementSibling;
+  check(row.classList.contains('tabs-row') && row.querySelector('.tabs') && row.querySelector('[data-input="page-filter"]'), 'under the title: the tabs, with the filter on the same row');
+  check(head.querySelector('.page-actions .page-more') && head.querySelectorAll('.page-actions > .wide-only').length >= 2, 'the page\'s other buttons also sit in a More menu (shown on a phone)');
+  doc.querySelector('[data-vehicle-tab="log"]').click();
+  check(/\d+ entries?, Rs/.test(doc.querySelector('#main .list-count')?.textContent || ''), 'the toolbar says how many and their total');
+  doc.querySelector('[data-view="tasks"]').click();
+  const th = doc.querySelector('#main .page-head');
+  check(th.querySelector('[data-action="new-task"]') && th.nextElementSibling.classList.contains('tabs-row') && th.nextElementSibling.querySelector('[data-input="page-filter"]'), 'Tasks follows the same layout');
+
   // --- Zakat and the Vault have the tools too ---
   doc.querySelector('[data-view="zakat"]').click();
   doc.querySelector('[data-zakat-tab="payments"]').click();
