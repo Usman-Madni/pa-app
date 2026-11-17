@@ -1021,6 +1021,8 @@ const People = {
     changed('people');
   },
   add(name) {
+    const had = this.list().find((x) => sameName(x.name, name));
+    if (had) { toast(`There's already someone called ${had.name}`); return had; } // the same person, not a second
     const p = { id: uid(), name: name.trim(), zakat: null };
     p.color = this.colorOf(p.id) || ''; // computed before it's on the list: the next free one
     DB.people.push(p);
@@ -1030,6 +1032,7 @@ const People = {
   rename(id, name) {
     const p = this.stored(id);
     if (!p || !name.trim()) return false;
+    if (this.list().some((x) => x.id !== id && sameName(x.name, name))) { toast(`There's already someone called ${name.trim()}`); return false; }
     p.name = name.trim();
     changed('people');
     return true;
@@ -3210,7 +3213,8 @@ function render() {
 // Fill in the small pictures on screen (an asset's first photo), once each can be read.
 // What kind of file an attachment is, by its stored type or else its name (photos fetched from Airtable came with none).
 const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain' };
-const mimeOf = (att) => att.type || MIME_BY_EXT[String(att.file || att.name || '').split('.').pop().toLowerCase()] || '';
+// A label that says only "some file" (application/octet-stream, as Airtable sends some photos) gives way to the name.
+const mimeOf = (att) => { const byName = MIME_BY_EXT[String(att.file || att.name || '').split('.').pop().toLowerCase()] || ''; return /^(image\/|application\/pdf|text\/)/.test(att.type || '') ? att.type : byName || att.type || ''; };
 const isImage = (att) => /^image\//.test(mimeOf(att)) && !/heic/.test(mimeOf(att)); // the browser can't show HEIC
 const photosOf = (r) => (r?.attachments || []).filter(isImage);
 const firstPhoto = (r) => photosOf(r)[0];
@@ -4094,7 +4098,11 @@ const labelInk = (hex) => { const c = LABEL_COLORS.find((x) => x.hex === String(
 const colorSelect = (cur, attrs = 'name="color"') =>
   `<select class="input" ${attrs} aria-label="Colour">${LABEL_COLORS.map((c) => `<option value="${c.hex}" ${c.hex === cur ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
 
+// A name already used by another (ignoring capitals and extra spaces): 'Home', 'home' and ' Home ' are one name.
+const sameName = (a, b) => String(a || '').trim().replace(/s+/g, ' ').toLowerCase() === String(b || '').trim().replace(/s+/g, ' ').toLowerCase();
+const nameTaken = (list, name, exceptId) => list.find((x) => x.id !== exceptId && sameName(x.name, name));
 function addBucket(name) {
+  if (nameTaken(DB.buckets, name)) { toast(`There's already a bucket called ${nameTaken(DB.buckets, name).name}`); return false; }
   const order = DB.buckets.reduce((m, b) => Math.max(m, b.order), 0) + 1;
   DB.buckets.push({ id: uid(), name: name.trim(), order });
   changed('buckets');
@@ -4103,6 +4111,7 @@ async function renameBucket(id) {
   const b = DB.buckets.find((x) => x.id === id);
   const name = b && (await askText('Rename bucket', b.name, { yes: 'Rename' }));
   if (!name || !name.trim()) return;
+  if (nameTaken(DB.buckets, name, id)) { toast(`There's already a bucket called ${nameTaken(DB.buckets, name, id).name}`); return; }
   b.name = name.trim();
   changed('buckets');
 }
@@ -4133,6 +4142,8 @@ function moveTaskToBucket(taskId, bucketId) {
 }
 
 function addLabel(name, color, task) {
+  const had = nameTaken(DB.labels, name);
+  if (had) { if (task && !task.labels.includes(had.id)) { task.labels.push(had.id); changed('tasks'); } toast(`There's already a label called ${had.name}`); return false; } // the one there is goes on the task instead
   const l = { id: uid(), name: name.trim(), color: color || LABEL_COLORS[DB.labels.length % LABEL_COLORS.length].hex };
   DB.labels.push(l);
   if (task) task.labels.push(l.id);
@@ -4142,6 +4153,7 @@ async function renameLabel(id) {
   const l = DB.labels.find((x) => x.id === id);
   const name = l && (await askText('Rename label', l.name, { yes: 'Rename' }));
   if (!name || !name.trim()) return;
+  if (nameTaken(DB.labels, name, id)) { toast(`There's already a label called ${nameTaken(DB.labels, name, id).name}`); return; }
   l.name = name.trim();
   changed('labels');
 }

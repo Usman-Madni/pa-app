@@ -71,6 +71,13 @@ const { loadApp, check, done } = require('./helpers');
   check(People.colorOf(kim.id) === C[3] && JSON.parse(win.localStorage.getItem('pa_people')).find((p) => p.id === kim.id).color === C[3], 'changing it is kept and saved');
   check(People.colorOf(People.add('Lee').id) === C[0], 'a colour given up goes to the next person');
 
+  // --- No two with the same name (capitals and spaces aside) ---
+  const addBucket = win.eval('addBucket');
+  addBucket('Home');
+  check(addBucket(' home ') === false && PA.DB.buckets.filter((x) => /home/i.test(x.name)).length === 1 && /already a bucket called Home/.test(doc.querySelector('#toasts').textContent), 'a bucket name already used (any capitals or spaces) is not added again, and it says so');
+  win.eval('addLabel')('Urgent');
+  check(win.eval('addLabel')('URGENT') === false && PA.DB.labels.length === 1, 'nor a label');
+  check(People.add('kim lee') === kim && People.list().filter((p) => /kim lee/i.test(p.name)).length === 1 && People.rename(sam.id, 'KIM LEE') === false, 'nor a person (adding or renaming)');
   check(!app.errors.length, 'no script errors');
   done();
 })();

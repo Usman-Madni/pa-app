@@ -82,6 +82,7 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   folder.files['side.jpg'] = (await folder.getFileHandle('x.jpg', { create: true }));
   changed('assets');
   check(win.eval('photosOf')(car).length === 2 && win.eval('isImage')(car.attachments[2]), 'a photo with no type is known by its name; a PDF isn\'t a photo');
+  check(win.eval('isImage')({ name: 'IMG.JPG', file: 'IMG.JPG', type: 'application/octet-stream' }) && !win.eval('isImage')({ file: 'a.pdf', type: 'application/octet-stream' }), 'a photo labelled only "some file" (as Airtable sends some) is known by its name');
   doc.querySelector('[data-view="assets"]').click();
   doc.querySelector('[data-asset-tab="vehicle"]').click();
   type(doc.querySelector('#main [data-input="page-filter"]'), '');
