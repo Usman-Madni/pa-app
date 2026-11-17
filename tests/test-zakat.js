@@ -143,7 +143,7 @@ const { loadApp, check, done, answer, submitForm } = require('./helpers');
 
   // --- The phone's More ---
   doc.querySelector('[data-action="more"]').click();
-  check([...doc.querySelectorAll('#more-sheet [data-view]')].map((b) => b.dataset.view).join() === 'zakat,vault,notices,settings,trash', 'More lists Zakat, the Vault, Notifications, Settings and Trash');
+  check([...doc.querySelectorAll('#more-sheet [data-view]')].map((b) => b.dataset.view).join() === 'vehicles,zakat,vault,notices,settings,trash', 'More lists Vehicles, Zakat, the Vault, Notifications, Settings and Trash');
   doc.querySelector('#more-sheet [data-view="settings"]').click();
   check(PA.state.view === 'settings' && !doc.querySelector('#more-sheet .more-panel') && doc.querySelector('.more-btn').classList.contains('active'), 'picking one opens it and closes the sheet; More stays lit');
   check(!/[—·]/.test(main()), 'no em dashes or middle dots');

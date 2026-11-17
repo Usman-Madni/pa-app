@@ -93,7 +93,7 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   check(/2 of 2/.test(doc.querySelector('#viewer').textContent) && /side\.jpg/.test(doc.querySelector('#viewer').textContent), 'the arrow keys go through them');
   doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   check(!doc.querySelector('#viewer'), 'Esc closes it');
-  doc.querySelector('#main [data-action="open-asset"]').click();
+  doc.querySelector('#main [data-vehicle-open]').click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
   const att = [...doc.querySelectorAll('#modal [data-action="rec-file-open"]')];
   att.find((b) => /side\.jpg/.test(b.textContent)).click();
   await tick(10);

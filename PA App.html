@@ -140,6 +140,10 @@ button:disabled { cursor: not-allowed; }
 .page-actions { gap: 8px; }
 .asset-tabs { margin-bottom: 16px; width: fit-content; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.vehicle-pick { display: inline-flex; align-items: center; gap: 8px; margin: -8px 0 12px; color: var(--muted); }
+.vehicle-pick select { width: auto; }
+.vehicle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.vehicle-card { display: flex; flex-direction: column; gap: 10px; }
 .stat-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
 .stat-label { font-size: var(--t-sm); color: var(--muted); }
 .stat-card .stat { font-size: var(--t-xl); }
@@ -767,6 +771,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
     <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
+    <button class="nav-btn more-item" data-view="vehicles" title="Vehicles"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-car"/></svg></span><span>Vehicles</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="ID vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
     <button class="nav-btn more-item" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
@@ -3226,7 +3231,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -3374,7 +3379,7 @@ function renderSearch() {
 }
 
 // A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
-const FILTER_VIEWS = ['tasks', 'assets', 'zakat', 'vault', 'notices', 'trash'];
+const FILTER_VIEWS = ['tasks', 'assets', 'vehicles', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
   for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
@@ -4206,7 +4211,7 @@ async function deleteLabel(id) {
 }
 
 // ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
-const MORE_VIEWS = [['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+const MORE_VIEWS = [['vehicles', 'car', 'Vehicles'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
 function renderMore() {
   const btn = $('.more-btn');
   if (!btn) return;
@@ -5370,7 +5375,7 @@ function assetKindTab(kind, who, list) {
     return `
       <li class="item asset-row ${a.closed ? 'done' : ''}">
         ${photo ? `<button type="button" class="thumb-btn" data-action="view-photo" data-key="assets" data-id="${esc(a.id)}" title="See its photos" aria-label="See the photos of ${esc(a.name)}"><img class="asset-thumb" data-thumb="assets:${esc(a.id)}" alt=""></button>` : `<span class="tl-mark">${ic(Assets.kind(a.kind).icon)}</span>`}
-        <div class="body clickable" data-action="open-asset" data-id="${esc(a.id)}">
+        <div class="body clickable" ${a.kind === 'vehicle' ? `data-vehicle-open="${esc(a.id)}"` : `data-action="open-asset" data-id="${esc(a.id)}"`}>
           <div class="title">${esc(a.name)}${Assets.zakatable(a) === !ZAKAT_SKIP.includes(a.kind) ? '' : ` <span class="pill">${Assets.zakatable(a) ? 'Zakatable' : 'Not zakatable'}</span>`}</div>
           <div class="meta"><span>${detail}</span>${a.acquired ? `<span>Since ${esc(fmtDate(a.acquired))}</span>` : ''}${a.closed ? `<span>Closed ${esc(fmtDate(a.closed))}</span>` : ''}${(a.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${a.attachments.length}</span>` : ''}</div>
           ${People.several() ? `<div class="meta owners-line">${owners.map((o) => personName(o.id, `${Math.round(Number(o.share) * 100) / 100}%`)).join('')}</div>` : ''}
@@ -5595,6 +5600,128 @@ function zakatPaymentsTab(who) {
   return `<div class="card"><ul class="list">${rows || '<li class="empty">No payments yet</li>'}</ul></div>`;
 }
 
+// ===================== Vehicles page =====================
+// The cars on their own page: a picker (all cars or one), and tabs Overview, Log, Plan, Tasks, Store and Details (one
+// car). Cars stay assets (they count in Assets); opening one from Assets comes here. Whose cars follows the person
+// picker.
+const VEHICLE_TABS = [['overview', 'Overview'], ['log', 'Log'], ['plan', 'Plan'], ['tasks', 'Tasks'], ['store', 'Store'], ['details', 'Details']];
+const vehicles = () => Assets.list(People.viewing()).filter((a) => a.kind === 'vehicle').sort((x, y) => (x.closed ? 1 : 0) - (y.closed ? 1 : 0) || x.name.localeCompare(y.name));
+function vehiclePicked() {
+  const list = vehicles();
+  const id = device.get('vehicleCar', 'all');
+  return list.find((a) => a.id === id) || null;
+}
+function renderVehicles() {
+  const list = vehicles();
+  const car = vehiclePicked();
+  const shown = car ? [car] : list;
+  let tab = device.get('vehicleTab', 'overview');
+  if (!VEHICLE_TABS.some(([k]) => k === tab) || (tab === 'details' && !car)) tab = 'overview';
+  const body = !list.length && tab !== 'store'
+    ? `<div class="card empty-state"><p><b>No vehicles yet.</b> Add a car on the Assets page (kind: Vehicles), and its upkeep, plan and tasks show here.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="asset" data-kind="vehicle">${ic('plus', 'sm')}Add a car</button></div>`
+    : { overview: vehicleOverview, log: vehicleLog, plan: vehiclePlan, tasks: vehicleTasks, store: vehicleStore, details: vehicleDetails }[tab](shown, car);
+  return `
+    <div class="page-head">
+      <div><h1>Vehicles</h1><p class="sub">${list.length ? `${plural(list.length, 'vehicle')}${car ? `, showing ${esc(car.name)}` : ''}` : 'Cars, their upkeep and supplies'}</p></div>
+      <div class="row edit-only page-actions">
+        ${list.length ? `<button class="btn primary" data-action="upkeep-entry" data-asset="${esc(car ? car.id : '')}" data-choose="${car ? '' : '1'}">${ic('plus', 'sm')}Add entry</button>` : ''}
+        <button class="btn" data-action="asset-form" data-form-type="store-add">${ic('plus', 'sm')}Add to store</button>
+        ${car && Upkeep.vehicle(car) ? `<button class="btn" data-action="asset-form" data-form-type="reading" data-asset="${esc(car.id)}">${ic('gauge', 'sm')}Update reading</button>` : ''}
+        <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="vehicle">${ic('plus', 'sm')}Add a car</button>
+      </div>
+    </div>
+    ${list.length > 1 ? `<label class="vehicle-pick">${ic('car', 'sm')}<select class="input" data-vehicle-pick aria-label="Which vehicle"><option value="all">All vehicles</option>${list.map((a) => `<option value="${esc(a.id)}" ${car && car.id === a.id ? 'selected' : ''}>${esc(a.name)}${a.closed ? ' (sold)' : ''}</option>`).join('')}</select></label>` : ''}
+    <div class="tabs asset-tabs" role="tablist">${VEHICLE_TABS.filter(([k]) => k !== 'details' || car).map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-vehicle-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
+    <div class="asset-body">${body}</div>`;
+}
+// Each car's card: its reading, this year's upkeep, what's due next and what's late; then upkeep cost by year.
+function vehicleOverview(shown) {
+  const today = todayISO();
+  const cards = shown.map((a) => {
+    const c = Upkeep.costs(a);
+    const jobs = (a.plan || []).map((p) => ({ p, n: Upkeep.next(a, p, today) })).filter((x) => x.n.date).sort((x, y) => x.n.date.localeCompare(y.n.date));
+    const late = jobs.filter((x) => x.n.date < today);
+    const next = jobs.find((x) => x.n.date >= today);
+    return `<div class="card vehicle-card">
+      <div class="row" style="justify-content:space-between;align-items:baseline"><h2 style="margin:0">${ic(a.closed ? 'car' : 'car')} ${esc(a.name)}</h2>${a.closed ? '<span class="pill">Sold</span>' : ''}</div>
+      <div class="upkeep-sum">
+        <div><span class="meta">Reading</span><b>${Upkeep.latestKm(a) ? fmtKm(Upkeep.latestKm(a)) : '–'}</b></div>
+        <div><span class="meta">Upkeep this year</span><b>${rupees(c.thisYear)}</b></div>
+        <div><span class="meta">All time</span><b>${rupees(c.all)}</b></div>
+      </div>
+      ${late.length ? `<p class="meta" style="margin:0"><span class="pill zk-over">${plural(late.length, 'job')} overdue</span> ${esc(late.slice(0, 3).map((x) => x.p.item).join(', '))}</p>` : ''}
+      ${next ? `<p class="meta" style="margin:0">Next: ${esc(next.p.item)}, ${esc(fmtDate(next.n.date))}${next.n.km && next.n.byKm ? ` (${fmtKm(next.n.km)})` : ''}</p>` : ''}
+      <div class="row"><button class="btn small" data-vehicle-open="${esc(a.id)}">Open</button></div>
+    </div>`;
+  }).join('');
+  const years = new Map();
+  for (const a of shown) for (const y of Upkeep.costs(a).years) years.set(y.year, (years.get(y.year) || 0) + y.cost);
+  const ys = [...years.entries()].sort((x, y) => x[0].localeCompare(y[0]));
+  const max = Math.max(1, ...ys.map(([, v]) => v));
+  return `<div class="grid vehicle-grid">${cards}</div>
+    ${ys.length ? `<div class="card"><h2>Upkeep by year</h2><div class="kind-bars">${ys.map(([y, v]) => `<div class="kind-bar" title="${esc(y)}: ${esc(rupees(v))}"><span class="kb-name">${esc(y)}</span><span class="kb-track"><span class="kb-fill" style="width:${Math.max(2, (v / max) * 100).toFixed(1)}%"></span></span><span class="kb-val">${rupees(v)}</span></div>`).join('')}</div></div>` : ''}`;
+}
+// Every entry of the cars shown, newest first (the list tools group and sort it).
+function vehicleLog(shown) {
+  const names = new Map(shown.map((a) => [a.id, a.name]));
+  const rows = DB.upkeep.filter((e) => names.has(e.asset)).map((e) => ({ e, car: names.get(e.asset) }));
+  return listTools('vehicleLog', rows, {
+    group: { none: 'No grouping', type: 'Type', item: 'Item', car: 'Vehicle', vendor: 'Vendor', month: 'Month' },
+    sort: { date: 'Newest first', old: 'Oldest first', cost: 'Cost, highest first' },
+    key: { type: (r) => Upkeep.type(r.e.type).name, item: (r) => r.e.item, car: (r) => r.car, vendor: (r) => r.e.vendor || 'No vendor', month: (r) => monthName(r.e.date) },
+    cmp: { date: (x, y) => (y.e.date || '').localeCompare(x.e.date || ''), old: (x, y) => (x.e.date || '').localeCompare(y.e.date || ''), cost: (x, y) => (Number(y.e.cost) || 0) - (Number(x.e.cost) || 0) },
+    total: (r) => Number(r.e.cost) || 0,
+    row: (r) => `<li class="item"><span class="tl-mark" title="${esc(Upkeep.type(r.e.type).name)}">${ic(Upkeep.type(r.e.type).icon)}</span>
+      <div class="body clickable" data-action="upkeep-entry" data-id="${esc(r.e.id)}"><div class="title">${esc(r.e.item)}${shown.length > 1 ? ` <span class="meta">${esc(r.car)}</span>` : ''}</div>
+      <div class="meta"><span>${esc(fmtDate(r.e.date))}</span>${r.e.km ? `<span>${fmtKm(r.e.km)}</span>` : ''}${r.e.vendor ? `<span>${esc(r.e.vendor)}</span>` : ''}${(r.e.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${r.e.attachments.length}</span>` : ''}</div></div>
+      <span class="asset-value">${r.e.cost ? rupees(r.e.cost) : ''}</span></li>`,
+    empty: 'Nothing logged yet',
+  });
+}
+// Every job of the cars shown with when it's due: red when it's late, amber within 30 days.
+function vehiclePlan(shown) {
+  const today = todayISO();
+  const soon = toISO(addDays(new Date(), 30));
+  const rows = shown.flatMap((a) => (a.plan || []).map((p) => ({ a, p, n: Upkeep.next(a, p, today) })));
+  const when = (r) => (!r.n.date ? 'No date yet' : r.n.date < today ? 'Overdue' : r.n.date <= soon ? 'Within 30 days' : 'Later');
+  return `${listTools('vehiclePlan', rows, {
+    group: { none: 'No grouping', car: 'Vehicle', when: 'When due' },
+    sort: { due: 'Due first', item: 'By name' },
+    key: { car: (r) => r.a.name, when },
+    cmp: { due: (x, y) => (x.n.date || '9').localeCompare(y.n.date || '9'), item: (x, y) => x.p.item.localeCompare(y.p.item) },
+    row: (r) => `<li class="item"><span class="tl-mark">${ic('repeat')}</span>
+      <div class="body clickable" data-action="asset-form" data-form-type="plan" data-asset="${esc(r.a.id)}" data-id="${esc(r.p.id)}"><div class="title">${esc(r.p.item)}${shown.length > 1 ? ` <span class="meta">${esc(r.a.name)}</span>` : ''}</div>
+      <div class="meta"><span>Every ${esc(Upkeep.every(r.p) || '…')}</span><span>Last ${esc(fmtDate(r.n.last.date))}${r.n.last.km && r.p.km ? ` at ${fmtKm(r.n.last.km)}` : ''}</span></div></div>
+      ${r.n.date ? `<span class="pill ${r.n.date < today ? 'zk-over' : r.n.date <= soon ? 'zk-left' : ''}">${r.n.date < today ? 'Due since' : 'Due'} ${esc(fmtDate(r.n.date))}${r.n.km && r.n.byKm ? ` (${fmtKm(r.n.km)})` : ''}</span>` : ''}</li>`,
+    empty: 'No repeating jobs',
+  })}${shown.length === 1 ? `<div class="row edit-only" style="margin-top:10px"><button class="btn small" data-action="asset-form" data-form-type="plan" data-asset="${esc(shown[0].id)}">${ic('plus', 'sm')}Add a job</button></div>` : ''}`;
+}
+// The open upkeep tasks of the cars shown (tick them here too).
+function vehicleTasks(shown) {
+  const ids = shown.map((a) => `up-${a.id}-`);
+  const list = DB.tasks.filter((t) => !t.done && ids.some((p) => t.id.startsWith(p))).sort((x, y) => (x.due || '9').localeCompare(y.due || '9'));
+  return `<div class="card"><ul class="list">${list.map(taskItem).join('') || '<li class="empty">No open upkeep tasks</li>'}</ul></div>`;
+}
+// One car's details: what it is, and the way to change it (its pop-up has the price, owners, documents and photos).
+function vehicleDetails(shown, car) {
+  const c = car.car || {};
+  const row = (k, v) => (v ? `<div class="vh-row"><span class="meta">${k}</span><span>${esc(v)}</span><span></span></div>` : '');
+  return `<div class="card"><div class="value-history" style="border:0;padding:0">
+    ${row('Make', c.make)}${row('Model', c.model)}${row('Year', c.year)}${row('Registered', c.regYear)}${row('Number plate', c.plate)}
+    ${row('Bought on', car.acquired && fmtDate(car.acquired))}${row('Km when bought', c.boughtKm && fmtKm(c.boughtKm))}${row('Latest reading', Upkeep.latestKm(car) && fmtKm(Upkeep.latestKm(car)))}
+    ${row('Documents', Vault.forAsset(car.id).map((d) => d.name).join(', '))}${row('Photos and files', (car.attachments || []).length ? String(car.attachments.length) : '')}
+    ${row('Sold on', car.closed && fmtDate(car.closed))}
+  </div><div class="row" style="margin-top:10px"><button class="btn" data-action="open-asset" data-id="${esc(car.id)}">${ic('pencil', 'sm')}Change details, price, owners, documents</button></div></div>`;
+}
+const monthName = (iso) => (iso ? parseISO(`${iso.slice(0, 7)}-01`).toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'No date');
+// Filled in by the store step.
+function vehicleStore() { return '<div class="card empty-state"><p>The store comes next.</p></div>'; }
+// Filled in by the grouping step: for now a plain list.
+function listTools(id, rows, o) {
+  const list = rows.slice().sort(o.cmp[Object.keys(o.cmp)[0]]);
+  return `<div class="card"><ul class="list">${list.map(o.row).join('') || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
+}
+
 // ===================== Vault page =====================
 // Tabs: Overview (what needs renewing, and what's coming up), then one per category in use. A row opens the document.
 const docState = (d) => {
@@ -5794,12 +5921,14 @@ function renderAssetForm() {
   }
   if (f.type === 'upkeep') { // one log entry: add, change, photos; Back returns to its asset
     const e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
-    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset));
+    const choosing = !e && f.choose; // from the Vehicles page with all of them shown: say which
+    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset)) || (choosing ? vehicles()[0] : null);
     if (!a) return closeAssetForm();
     const v = e || { date: todayISO(), type: f.typeId || 'service', item: f.item || '', cost: '', vendor: f.vendor || '', km: '', notes: '' };
     const list = (id, vals) => `<datalist id="${id}">${vals.slice(0, 60).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`;
     const items = [...new Set([...(a.plan || []).map((p) => p.item), ...Upkeep.used('item', a.id), ...(Upkeep.vehicle(a) ? CAR_PLAN.map((p) => p.item) : [])])];
     $('#modal').innerHTML = box(e ? `${a.name}: ${e.item}` : `${a.name}: add to upkeep`, `
+      ${choosing ? `<label class="field">Vehicle<select class="input" name="asset">${vehicles().map((x) => `<option value="${esc(x.id)}" ${x === a ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
       ${f.fromTask ? `<p class="banner" style="margin:0">Done? Fill in what it cost${Upkeep.vehicle(a) ? ' and the reading' : ''}; the next one counts from here.</p>` : ''}
       <div class="row">
         <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date)}" required></label>
@@ -6209,7 +6338,7 @@ function submitAssetForm(type, data) {
     if (!f.id) { state.assetForm = { type: 'doc', id: d.id }; renderAssetForm(); render(); return; } // stays open, to add scans
   } else if (type === 'upkeep') {
     let e = f.id ? DB.upkeep.find((x) => x.id === f.id) : null;
-    const a = DB.assets.find((x) => x.id === (e ? e.asset : f.asset));
+    const a = DB.assets.find((x) => x.id === (e ? e.asset : data.asset || f.asset));
     if (!a) return closeAssetForm();
     if (!(data.what || '').trim()) return formError('Say what it was.');
     const fields = { date: data.date || todayISO(), type: data.type, item: data.what.trim(), cost: Number(data.cost) || 0, vendor: (data.vendor || '').trim(), km: Number(data.km) || 0, notes: data.notes || '' };
@@ -7414,6 +7543,10 @@ document.addEventListener('click', (e) => {
   if (assetTab) { device.set('assetTab', assetTab.dataset.assetTab); return render(); }
   const zakatTab = e.target.closest('[data-zakat-tab]');
   if (zakatTab) { device.set('zakatTab', zakatTab.dataset.zakatTab); return render(); }
+  const vehicleTab = e.target.closest('[data-vehicle-tab]');
+  if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
+  const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
+  if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', 'overview'); state.moreOpen = false; return setView('vehicles'); }
   const vaultTab = e.target.closest('[data-vault-tab]');
   if (vaultTab) { device.set('vaultTab', vaultTab.dataset.vaultTab); return render(); }
 
@@ -7676,7 +7809,7 @@ document.addEventListener('click', (e) => {
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
     case 'hijri-today': openAssetForm('hijri'); break;
-    case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset }); break;
+    case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset, choose: !!btn.dataset.choose }); break;
     case 'plan-delete': {
       const f = state.assetForm;
       const a = f && DB.assets.find((x) => x.id === f.asset);
@@ -8220,6 +8353,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-upkeep-filter]') && state.assetForm) { state.upkeepFilter = e.target.value; renderAssetForm(); return; }
+  if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
   if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {

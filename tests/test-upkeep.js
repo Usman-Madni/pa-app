@@ -41,7 +41,7 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
   // --- In the pop-up ---
   doc.querySelector('[data-view="assets"]').click();
   doc.querySelector('[data-asset-tab="vehicle"]').click();
-  doc.querySelector('#main [data-action="open-asset"]').click();
+  doc.querySelector('#main [data-vehicle-open]').click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
   const box = () => doc.querySelector('#modal .upkeep');
   check(box() && /All time\s*Rs 38,000/.test(box().textContent) && /Latest reading 18,000 km/.test(box().textContent), 'the car shows what it\'s cost and its latest reading');
   check(box().querySelectorAll('.upkeep-log [data-action="upkeep-entry"]').length === 3, 'and its log');
