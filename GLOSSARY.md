@@ -111,6 +111,10 @@ _Avoid_: schedule, interval
 **Reading**:
 A vehicle's odometer km on a day, from an entry or typed with Update reading.
 
+**Piece**:
+One thing written, on the Musings page: its title, text, cover, gallery and collections.
+_Avoid_: post, entry, note (a note is quick, a piece is written)
+
 ## The vault
 
 **Document**:

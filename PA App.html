@@ -142,6 +142,35 @@ button:disabled { cursor: not-allowed; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .vehicle-pick { display: inline-flex; align-items: center; gap: 8px; margin: -8px 0 12px; color: var(--muted); }
 .vehicle-pick select { width: auto; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); }
+.musing-page { max-width: 720px; margin: 0 auto; padding-bottom: 40px; }
+.musing-cover-btn, .musing-pic { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.musing-cover { display: block; max-width: 100%; max-height: 66vh; margin: 0 auto 22px; border-radius: var(--r-lg); object-fit: contain; }
+.musing-cover:not([src]) { min-height: 120px; width: 100%; background: var(--panel-2); }
+.musing-cover.small { max-height: 180px; margin: 0 0 8px; }
+.musing-title { font-family: var(--font-display); font-weight: 500; font-size: var(--t-2xl); line-height: 1.15; margin: 0 0 6px; }
+.musing-meta { color: var(--muted); font-size: var(--t-sm); margin: 0 0 24px; }
+.musing-body { font-family: var(--font-display); font-size: 19px; line-height: 1.7; }
+.musing-body p { margin: 0 0 1em; }
+.musing-body h2 { font-family: var(--font-display); font-weight: 500; font-size: var(--t-xl); margin: 1.4em 0 .5em; }
+.musing-body h3 { font-family: var(--font-display); font-weight: 500; font-size: var(--t-lg); margin: 1.2em 0 .4em; }
+.musing-body blockquote { margin: 1em 0; padding-left: 16px; border-left: 3px solid var(--border); color: var(--muted); font-style: italic; }
+.musing-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-top: 32px; }
+.musing-gallery figure { margin: 0; }
+.musing-gallery img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--r-md); background: var(--panel-2); }
+.musing-gallery figcaption { font-size: var(--t-sm); color: var(--muted); margin-top: 4px; }
+.musing-edit { display: flex; flex-direction: column; gap: 12px; max-width: 820px; }
+.musing-title-in { font-family: var(--font-display); font-size: var(--t-xl); padding: 10px 12px; }
+.musing-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.musing-text { min-height: 50vh; font-family: var(--font-display); font-size: 18px; line-height: 1.65; resize: vertical; }
+.musing-gallery-edit { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.mg-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
+@media print {
+  .sidebar, #more-sheet, #banner, #who-bar, .toasts, #modal, .page-head, .tabs-row, .list-tools { display: none !important; }
+  body, .main { background: #fff !important; color: #000 !important; padding: 0 !important; margin: 0 !important; }
+  .musing-page { max-width: none; }
+  .musing-cover-btn, .musing-pic { cursor: default; }
+}
 .list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 10px; }
 .list-count { margin-left: auto; font-size: var(--t-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .list-tool { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--muted); }
@@ -798,6 +827,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
     <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
     <button class="nav-btn more-item" data-view="vehicles" title="Vehicles"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-car"/></svg></span><span>Vehicles</span></button>
+    <button class="nav-btn more-item" data-view="musings" title="Musings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="ID vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
     <button class="nav-btn more-item" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
@@ -2296,7 +2326,7 @@ const fmtWeight = (a) => (a.unit === 'tola' ? `${fmtTola(Assets.tola(a))} (${fmt
 const TRASH_KINDS = {
   tasks: { name: 'Task', icon: 'list-check' }, notes: { name: 'Note', icon: 'notes' }, assets: { name: 'Asset', icon: 'wallet' },
   docs: { name: 'Document', icon: 'id' }, rates: { name: 'Rates', icon: 'coins' }, zakat: { name: 'Zakat record', icon: 'calendar-event' },
-  zakatPay: { name: 'Zakat payment', icon: 'coins' }, upkeep: { name: 'Upkeep entry', icon: 'tool' },
+  zakatPay: { name: 'Zakat payment', icon: 'coins' }, upkeep: { name: 'Upkeep entry', icon: 'tool' }, musings: { name: 'Musing', icon: 'pencil' },
 };
 const Trash = {
   KEEP_MS: 30 * 864e5,
@@ -2451,10 +2481,11 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // upkeep:  {id, asset ('store': supplies kept for the cars, qty: how many left), date, type:'service'|'repair'|'added'|'other', item, cost, vendor, km, notes, attachments, created}
 //           — an asset's upkeep log (see Upkeep); assets may carry plan: [{id, item, km, months, since, sinceKm}],
 //           car: {make, model, year, regYear, plate, boughtKm} and readings: [{date, km}]
+// musings: {id, title, body, written, status, collections, cover, attachments (caption each), people, created} (see Musings)
 // hijriFix: {id 'hf-<hyear>-<month>', hyear, month, shift} — an Islamic month that began a day later (+1) or
 //           earlier (-1) here than Umm al-Qura says (see Hijri)
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'musings', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -2498,7 +2529,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], upkeep: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], upkeep: [], musings: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -2641,6 +2672,8 @@ const state = {
   taskFilter: 'active',
   noteQuery: '',
   search: '',         // the words in the search across Butler
+  musing: null,       // the piece open on Musings (to read), and whether it's being edited
+  musingEdit: false,
   pageFilter: {},     // view → words in that page's filter box (this screen only)
   activeNote: null,
   calMonth: monthStart(new Date()),
@@ -3155,12 +3188,12 @@ const AT = {
   async remove(task, attId, key = 'tasks') {
     const att = task && (task.attachments || []).find((a) => a.id === attId);
     if (!att || state.readOnly) return;
-    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset', upkeep: 'entry' }[key]}?`, { yes: 'Remove', danger: true }))) return;
+    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset', upkeep: 'entry', musings: 'piece' }[key]}?`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed(key);
     if (state.assetForm) renderAssetForm();
     // Delete the file only when nothing else (another copy of a repeating task, a document, an asset) still uses it.
-    const stillUsed = ['tasks', 'docs', 'assets', 'upkeep'].some((k) => DB[k].some((t) => (t.attachments || []).some((a) => a.file === att.file)));
+    const stillUsed = ['tasks', 'docs', 'assets', 'upkeep', 'musings'].some((k) => DB[k].some((t) => (t.attachments || []).some((a) => a.file === att.file)));
     if (!stillUsed && state.phone) { try { await OD.graph('DELETE', OD.filePath(att.file)); } catch { /* already gone, or no signal: the file stays */ } } // to the OneDrive recycle bin
     else if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
     render();
@@ -3290,7 +3323,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -3369,7 +3402,7 @@ const Viewer = {
 // case. Nothing is stored but the words, on this device only while the app is open.
 const SEARCH_KINDS = [
   ['tasks', 'Tasks', 'list-check'], ['notes', 'Notes', 'notes'], ['events', 'Events', 'calendar'], ['assets', 'Assets', 'wallet'],
-  ['docs', 'Documents', 'id'], ['upkeep', 'Upkeep', 'tool'], ['zakat', 'Zakat records', 'calendar-event'], ['zakatPay', 'Zakat payments', 'coins'],
+  ['docs', 'Documents', 'id'], ['musings', 'Musings', 'pencil'], ['upkeep', 'Upkeep', 'tool'], ['zakat', 'Zakat records', 'calendar-event'], ['zakatPay', 'Zakat payments', 'coins'],
 ];
 const Search = {
   words(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); },
@@ -3399,6 +3432,10 @@ const Search = {
     for (const d of Vault.list()) {
       if (!this.hit(w, d.name, d.type, d.number, String(d.number || '').replace(/\s/g, ''), d.notes, Vault.cat(d.cat).name)) continue;
       out.docs.push({ id: d.id, title: d.name, sub: [d.type, d.expires && `Expires ${fmtDay(d.expires)}`].filter(Boolean).join(', '), action: 'open-doc' });
+    }
+    for (const m of Musings.list()) {
+      if (!this.hit(w, m.title, m.body, ...(m.collections || []), ...(m.attachments || []).map((a) => a.caption))) continue;
+      out.musings.push({ id: m.id, title: m.title || 'Untitled', sub: `${fmtDate(m.written || todayISO())}, ${Musings.words(m)} words`, action: 'musing-open' });
     }
     const shownAssets = new Map(Assets.list(who).map((a) => [a.id, a]));
     for (const e of DB.upkeep) {
@@ -3438,7 +3475,7 @@ function renderSearch() {
 }
 
 // A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
-const FILTER_VIEWS = ['tasks', 'assets', 'vehicles', 'zakat', 'vault', 'notices', 'trash'];
+const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
   for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
@@ -3477,7 +3514,7 @@ function tidyPageActions() {
 }
 function addPageFilter() {
   tidyPageActions();
-  if (!FILTER_VIEWS.includes(state.view)) return;
+  if (!FILTER_VIEWS.includes(state.view) || (state.view === 'musings' && state.musing)) return; // a piece open: no list to filter
   const head = $('#main .page-head');
   if (!head || $('#main [data-input="page-filter"]')) return;
   const box = document.createElement('input');
@@ -3499,9 +3536,9 @@ document.addEventListener('touchend', (e) => {
 });
 function loadThumbs() {
   for (const img of $$('img[data-thumb]:not([src])')) {
-    const [key, id] = img.dataset.thumb.split(':');
+    const [key, id, attId] = img.dataset.thumb.split(':');
     const r = (DB[key] || []).find((x) => x.id === id);
-    const att = r && firstPhoto(r);
+    const att = r && (attId ? (r.attachments || []).find((a) => a.id === attId) : firstPhoto(r));
     if (!att) continue;
     AT.thumbUrl(att).then((url) => { if (url) img.src = url; else img.remove(); });
   }
@@ -4293,7 +4330,7 @@ async function deleteLabel(id) {
 }
 
 // ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
-const MORE_VIEWS = [['vehicles', 'car', 'Vehicles'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['vehicles', 'car', 'Vehicles'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
 function renderMore() {
   const btn = $('.more-btn');
   if (!btn) return;
@@ -5877,6 +5914,130 @@ function listTools(id, rows, o) {
     }).join('');
   };
   return `${tools}<div class="card"><ul class="list">${nest(list, 0, '') || `<li class="empty">${esc(o.empty)}</li>`}</ul></div>`;
+}
+
+// ===================== Musings =====================
+// Pieces you've written (`musings`: {id, title, body, written, status 'draft'|'finished', collections: [names], cover:
+// attachment id or '', attachments (a cover and a gallery, each picture with a `caption`), people, created}). The list
+// groups and sorts like the others; a piece opens to read (a page in a serif, its cover whole above the title, the
+// gallery at the end, Print or save as PDF), and Edit changes it, saving as you type. Its pictures live where every
+// other file does (AT with the key 'musings').
+const Musings = {
+  list() { return DB.musings.filter((m) => People.shows(m) && !PendingDelete.has(m.id)); },
+  get(id) { return DB.musings.find((m) => m.id === id) || null; },
+  add() {
+    const m = { id: uid(), title: '', body: '', written: todayISO(), status: 'draft', collections: [], cover: '', attachments: [], people: People.forNew(), created: Date.now() };
+    DB.musings.push(m);
+    return m;
+  },
+  words(m) { return (String(m.body || '').match(/[\p{L}\p{N}'’-]+/gu) || []).length; },
+  cover(m) { return (m.attachments || []).find((a) => a.id === m.cover) || null; },
+  gallery(m) { return (m.attachments || []).filter((a) => a.id !== m.cover && isImage(a)); },
+  collections() { return [...new Set(DB.musings.flatMap((m) => m.collections || []))].sort((x, y) => x.localeCompare(y)); },
+};
+// The text's few kinds of formatting, as typed: "# " a heading, "## " a smaller one, "> " a quote, "- " a list, a
+// blank line between paragraphs, **bold** and *italics*. Everything else is shown as it is.
+function musingHtml(text) {
+  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<i>$2</i>');
+  const out = [];
+  let list = null;
+  let para = [];
+  const flush = () => { if (para.length) out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = []; if (list) { out.push(`<ul>${list.join('')}</ul>`); list = null; } };
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim()) { flush(); continue; }
+    let m;
+    if ((m = line.match(/^##\s+(.*)/))) { flush(); out.push(`<h3>${inline(m[1])}</h3>`); } else if ((m = line.match(/^#\s+(.*)/))) { flush(); out.push(`<h2>${inline(m[1])}</h2>`); } else if ((m = line.match(/^>\s?(.*)/))) { flush(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); } else if ((m = line.match(/^[-*]\s+(.*)/))) { if (para.length) { const keep = list; list = null; flush(); list = keep; } (list = list || []).push(`<li>${inline(m[1])}</li>`); } else { if (list) { out.push(`<ul>${list.join('')}</ul>`); list = null; } para.push(line); }
+  }
+  flush();
+  return out.join('');
+}
+const MUSING_TABS = [['all', 'All'], ['draft', 'Drafts'], ['finished', 'Finished']];
+function renderMusings() {
+  const open = state.musing && Musings.get(state.musing);
+  if (open) return state.musingEdit && !state.readOnly ? musingEditor(open) : musingRead(open);
+  state.musing = null;
+  let tab = device.get('musingTab', 'all');
+  if (!MUSING_TABS.some(([k]) => k === tab)) tab = 'all';
+  const all = Musings.list();
+  const rows = tab === 'all' ? all : all.filter((m) => m.status === tab);
+  const words = all.reduce((t, m) => t + Musings.words(m), 0);
+  return `
+    <div class="page-head">
+      <div><h1>Musings</h1><p class="sub">${all.length ? `${plural(all.length, 'piece')}, ${words.toLocaleString('en-IN')} words` : 'Pieces you\'ve written, with their pictures'}</p></div>
+      <div class="row edit-only page-actions"><button class="btn primary" data-action="musing-new">${ic('plus', 'sm')}New piece</button></div>
+    </div>
+    <div class="tabs asset-tabs" role="tablist">${MUSING_TABS.map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-musing-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
+    ${all.length ? listTools('musings', rows, {
+    group: { none: 'No grouping', collection: 'Collection', status: 'Draft or finished', year: 'Year written' },
+    sort: { newest: 'Newest first', oldest: 'Oldest first', title: 'By title' },
+    key: { collection: (m) => (m.collections || [])[0] || 'No collection', status: (m) => (m.status === 'finished' ? 'Finished' : 'Drafts'), year: (m) => (m.written || '').slice(0, 4) || 'No date' },
+    cmp: { newest: (x, y) => (y.written || '').localeCompare(x.written || '') || (y.created || 0) - (x.created || 0), oldest: (x, y) => (x.written || '').localeCompare(y.written || ''), title: (x, y) => (x.title || '').localeCompare(y.title || '') },
+    row: (m) => `<li class="item musing-row">
+      ${Musings.cover(m) ? `<img class="asset-thumb" data-thumb="musings:${esc(m.id)}:${esc(m.cover)}" alt="">` : `<span class="tl-mark">${ic('pencil')}</span>`}
+      <div class="body clickable" data-action="musing-open" data-id="${esc(m.id)}"><div class="title">${esc(m.title || 'Untitled')}${m.status === 'finished' ? '' : ' <span class="pill">Draft</span>'}</div>
+      <div class="meta"><span>${esc(fmtDate(m.written || todayISO()))}</span><span>${Musings.words(m).toLocaleString('en-IN')} words</span>${(m.collections || []).length ? `<span>${esc(m.collections.join(', '))}</span>` : ''}${Musings.gallery(m).length ? `<span>${ic('photo', 'sm')}${Musings.gallery(m).length}</span>` : ''}${whoBadges(m)}</div></div></li>`,
+    one: 'piece', many: 'pieces', empty: 'Nothing here',
+  }) : `<div class="card empty-state"><p><b>Write your first piece.</b> Poems, stories, letters, thoughts: each keeps its text, a cover picture and a gallery, and reads like a page.</p><button class="btn primary edit-only" data-action="musing-new">${ic('plus', 'sm')}New piece</button></div>`}`;
+}
+// A piece to read: its cover whole, the title, the text in a serif, the gallery at the end.
+function musingRead(m) {
+  const cover = Musings.cover(m);
+  const gallery = Musings.gallery(m);
+  return `
+    <div class="page-head">
+      <div><button class="link-btn back-link" data-action="musing-close">${ic('chevron-left', 'sm')}Musings</button></div>
+      <div class="row page-actions">
+        <button class="btn edit-only" data-action="musing-delete" data-id="${esc(m.id)}">${ic('trash', 'sm')}Delete</button>
+        <button class="btn" data-action="musing-print">Print or save as PDF</button>
+        <button class="btn primary edit-only" data-action="musing-edit">${ic('pencil', 'sm')}Edit</button>
+      </div>
+    </div>
+    <article class="musing-page">
+      ${cover ? `<button type="button" class="musing-cover-btn" data-action="musing-view" data-id="${esc(m.id)}" data-att="${esc(cover.id)}"><img class="musing-cover" data-thumb="musings:${esc(m.id)}:${esc(cover.id)}" alt="${esc(cover.caption || 'Cover')}"></button>` : ''}
+      <h1 class="musing-title">${esc(m.title || 'Untitled')}</h1>
+      <p class="musing-meta">${esc(fmtDate(m.written || todayISO()))} · ${Musings.words(m).toLocaleString('en-IN')} words${(m.collections || []).length ? ` · ${esc(m.collections.join(', '))}` : ''}${m.status === 'finished' ? '' : ' · Draft'}</p>
+      <div class="musing-body">${musingHtml(m.body) || '<p class="meta">Nothing written yet.</p>'}</div>
+      ${gallery.length ? `<div class="musing-gallery">${gallery.map((a) => `<figure><button type="button" class="musing-pic" data-action="musing-view" data-id="${esc(m.id)}" data-att="${esc(a.id)}"><img data-thumb="musings:${esc(m.id)}:${esc(a.id)}" alt="${esc(a.caption || a.name)}"></button>${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
+    </article>`;
+}
+// Writing it: title, when, draft or finished, collections, the cover, the text (with its few formats) and the gallery.
+function musingEditor(m) {
+  const cover = Musings.cover(m);
+  const gallery = Musings.gallery(m);
+  const fileIn = (kind, label, multiple) => `<label class="btn small">${ic('photo', 'sm')}${label}<input type="file" accept="image/*" ${multiple ? 'multiple' : ''} data-input="${kind}" hidden></label>`;
+  return `
+    <div class="page-head">
+      <div><button class="link-btn back-link" data-action="musing-close">${ic('chevron-left', 'sm')}Musings</button></div>
+      <div class="row page-actions">
+        <button class="btn" data-action="musing-delete" data-id="${esc(m.id)}">${ic('trash', 'sm')}Delete</button>
+        <button class="btn primary" data-action="musing-done">Done</button>
+      </div>
+    </div>
+    <div class="musing-edit">
+      <input class="input musing-title-in" data-musing-field="title" value="${esc(m.title)}" placeholder="Title" aria-label="Title" maxlength="160">
+      <div class="row">
+        <label class="field">Written<input class="input" type="date" data-musing-field="written" value="${esc(m.written || '')}"></label>
+        <label class="field">Status<select class="input" data-musing-field="status"><option value="draft" ${m.status !== 'finished' ? 'selected' : ''}>Draft</option><option value="finished" ${m.status === 'finished' ? 'selected' : ''}>Finished</option></select></label>
+        <label class="field grow">Collections <span class="meta">(commas between)</span><input class="input" data-musing-field="collections" list="musing-cols" value="${esc((m.collections || []).join(', '))}" placeholder="Poems, Travel"><datalist id="musing-cols">${Musings.collections().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
+      </div>
+      <div class="musing-cover-edit">
+        ${cover ? `<img class="musing-cover small" data-thumb="musings:${esc(m.id)}:${esc(cover.id)}" alt="Cover"><div class="row">${fileIn('musing-cover', 'Change cover')}<button type="button" class="btn small" data-action="musing-cover-off">Remove cover</button></div>` : `<div class="row">${fileIn('musing-cover', 'Add a cover picture')}</div>`}
+      </div>
+      <div class="musing-tools" role="toolbar" aria-label="Formatting">
+        <button type="button" class="btn small" data-md="h" title="Heading"><b>H</b></button>
+        <button type="button" class="btn small" data-md="b" title="Bold"><b>B</b></button>
+        <button type="button" class="btn small" data-md="i" title="Italics"><i>I</i></button>
+        <button type="button" class="btn small" data-md="q" title="Quote">“ ”</button>
+        <button type="button" class="btn small" data-md="l" title="List">${ic('list', 'sm')}</button>
+        <span class="list-count" data-musing-words>${Musings.words(m).toLocaleString('en-IN')} words</span>
+      </div>
+      <textarea class="input musing-text" data-musing-field="body" placeholder="Write here. A blank line starts a new paragraph." aria-label="The text">${esc(m.body)}</textarea>
+      <div class="musing-gallery-edit">
+        <div class="meta">Gallery <span class="meta">(at the end of the piece)</span></div>
+        ${gallery.map((a) => `<div class="mg-row"><img class="asset-thumb" data-thumb="musings:${esc(m.id)}:${esc(a.id)}" alt=""><input class="input" data-caption="${esc(a.id)}" value="${esc(a.caption || '')}" placeholder="Caption" aria-label="Caption for ${esc(a.name)}"><button type="button" class="icon-btn" data-action="rec-file-remove" data-key="musings" data-att="${esc(a.id)}" data-rec="${esc(m.id)}" aria-label="Remove ${esc(a.name)}">${ic('x', 'sm')}</button></div>`).join('')}
+        <div class="row">${fileIn('musing-pics', 'Add pictures', true)}${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="musing-pics" hidden></label>` : ''}</div>
+      </div>
+    </div>`;
 }
 
 // ===================== Vault page =====================
@@ -7707,7 +7868,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -7751,6 +7912,10 @@ document.addEventListener('click', (e) => {
     device.set(`list-${id}`, { ...pref, folded: [...folded] });
     return render();
   }
+  const musingTab = e.target.closest('[data-musing-tab]');
+  if (musingTab) { device.set('musingTab', musingTab.dataset.musingTab); return render(); }
+  const md = e.target.closest('[data-md]'); // a format, round the text chosen (or at the start of its line)
+  if (md) { musingFormat(md.dataset.md); return; }
   const vehicleTab = e.target.closest('[data-vehicle-tab]');
   if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
@@ -8008,7 +8173,7 @@ document.addEventListener('click', (e) => {
     }
     case 'rec-file-open': case 'rec-file-remove': {
       const key = btn.dataset.key;
-      const r = state.assetForm && DB[key].find((x) => x.id === state.assetForm.id);
+      const r = btn.dataset.rec ? DB[key].find((x) => x.id === btn.dataset.rec) : state.assetForm && DB[key].find((x) => x.id === state.assetForm.id);
       const att = r && (r.attachments || []).find((x) => x.id === btn.dataset.att);
       if (!att) break;
       if (action === 'rec-file-open') { if (isImage(att)) Viewer.open(photosOf(r), photosOf(r).indexOf(att)); else AT.open(att); } else AT.remove(r, att.id, key).then(() => renderAssetForm());
@@ -8017,6 +8182,23 @@ document.addEventListener('click', (e) => {
     case 'more': state.moreOpen = !state.moreOpen; renderMore(); break;
     case 'open-zakat': openAssetForm('zakat-record', { id }); break;
     case 'hijri-today': openAssetForm('hijri'); break;
+    case 'musing-new': { const m = Musings.add(); changed('musings'); state.musing = m.id; state.musingEdit = true; setView('musings'); $('#main [data-musing-field="title"]')?.focus(); break; }
+    case 'musing-open': state.musing = id; state.musingEdit = false; setView('musings'); break;
+    case 'musing-close': state.musing = null; state.musingEdit = false; render(); break;
+    case 'musing-edit': state.musingEdit = true; render(); break;
+    case 'musing-done': musingSave(); state.musingEdit = false; render(); try { window.scrollTo(0, 0); } catch { /* tests */ } break;
+    case 'musing-print': window.print(); break;
+    case 'musing-view': { const m = Musings.get(id); if (!m) break; const pics = [Musings.cover(m), ...Musings.gallery(m)].filter(Boolean); Viewer.open(pics, Math.max(0, pics.findIndex((a) => a.id === btn.dataset.att))); break; }
+    case 'musing-cover-off': { const m = Musings.get(state.musing); if (m) { m.cover = ''; changed('musings'); render(); } break; }
+    case 'musing-delete': {
+      const m = Musings.get(id);
+      if (!m) break;
+      musingSave();
+      state.musing = null;
+      state.musingEdit = false;
+      Trash.discard([['musings', m]], `"${m.title || 'Untitled'}"`);
+      break;
+    }
     case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset, choose: !!btn.dataset.choose }); break;
     case 'not-a-car': { // a 'car' that was a place for supplies: its entries go to the store, it goes to the Trash
       const a = DB.assets.find((x) => x.id === id);
@@ -8136,7 +8318,7 @@ document.addEventListener('click', (e) => {
     }
     case 'trash-restore': {
       const e = Trash.restore(id);
-      if (e) toast(`Restored "${Trash.title(e)}" to ${{ notes: 'Notes', tasks: 'Tasks', docs: 'the Vault', zakat: 'Zakat', zakatPay: 'Zakat' }[e.kind] || 'Assets'}`);
+      if (e) toast(`Restored "${Trash.title(e)}" to ${{ notes: 'Notes', tasks: 'Tasks', docs: 'the Vault', zakat: 'Zakat', zakatPay: 'Zakat', musings: 'Musings' }[e.kind] || 'Assets'}`);
       afterRestore([e]);
       render();
       break;
@@ -8307,6 +8489,64 @@ document.addEventListener('input', (e) => {
   if (e.target.matches?.('[data-zpay-amount]')) zpayLive(e.target.form);
 });
 document.addEventListener('change', (e) => { if (e.target.matches?.('[data-zpay-record]')) zpayLive(e.target.form); });
+// Musings: a piece's fields save as they're typed (a moment after the last key); captions likewise.
+let musingTimer = null;
+function musingSave() {
+  clearTimeout(musingTimer);
+  const m = state.musing && Musings.get(state.musing);
+  if (!m || state.readOnly) return;
+  for (const el of $$('#main [data-musing-field]')) {
+    const k = el.dataset.musingField;
+    const v = k === 'collections' ? el.value.split(',').map((x) => x.trim()).filter(Boolean).filter((x, i, a) => a.findIndex((y) => sameName(x, y)) === i) : el.value;
+    if (JSON.stringify(m[k]) !== JSON.stringify(v)) m[k] = v;
+  }
+  for (const el of $$('#main [data-caption]')) { const a = (m.attachments || []).find((x) => x.id === el.dataset.caption); if (a && (a.caption || '') !== el.value) a.caption = el.value; }
+  changed('musings');
+}
+document.addEventListener('input', (e) => {
+  if (!e.target.matches?.('[data-musing-field], [data-caption]') || state.readOnly) return;
+  if (e.target.dataset.musingField === 'body') { const n = $('[data-musing-words]'); if (n) n.textContent = `${(e.target.value.match(/[\p{L}\p{N}'’-]+/gu) || []).length.toLocaleString('en-IN')} words`; }
+  clearTimeout(musingTimer);
+  musingTimer = setTimeout(musingSave, 700);
+});
+document.addEventListener('change', (e) => {
+  const kind = e.target.dataset?.input;
+  if ((kind !== 'musing-cover' && kind !== 'musing-pics') || state.readOnly) return;
+  const m = state.musing && Musings.get(state.musing);
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!m || !files.length) return;
+  musingSave();
+  const before = new Set((m.attachments || []).map((a) => a.id));
+  AT.add(m, files, 'musings').then(() => {
+    const fresh = (m.attachments || []).filter((a) => !before.has(a.id));
+    if (kind === 'musing-cover' && fresh[0]) { m.cover = fresh[0].id; changed('musings'); }
+    render();
+  });
+});
+// The format buttons: round what's chosen in the text (bold, italics), or at the start of its line (heading, quote,
+// list); nothing chosen, they put the marks in for you to type between.
+function musingFormat(kind) {
+  const ta = $('#main [data-musing-field="body"]');
+  if (!ta || state.readOnly) return;
+  const { selectionStart: a, selectionEnd: b, value: v } = ta;
+  let text = v;
+  let caret = b;
+  if (kind === 'b' || kind === 'i') {
+    const mark = kind === 'b' ? '**' : '*';
+    text = `${v.slice(0, a)}${mark}${v.slice(a, b)}${mark}${v.slice(b)}`;
+    caret = b + mark.length * (a === b ? 1 : 2);
+  } else {
+    const start = v.lastIndexOf('\n', a - 1) + 1;
+    const mark = { h: '# ', q: '> ', l: '- ' }[kind];
+    text = `${v.slice(0, start)}${mark}${v.slice(start)}`;
+    caret = b + mark.length;
+  }
+  ta.value = text;
+  ta.focus();
+  try { ta.setSelectionRange(caret, caret); } catch { /* not shown */ }
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
 // A date box with an Islamic date beside it: the pick follows the date; choosing a reading corrects that month.
 function redrawHijriPick(form, name) {
   const box = form?.querySelector(`[data-hijri-for="${name}"]`);
@@ -8481,6 +8721,7 @@ document.addEventListener('input', (e) => {
     else $('#search-results').innerHTML = searchResults(state.search);
     return;
   }
+  if (kind === 'musing-cover' || kind === 'musing-pics') return; // files: on change
   if (kind === 'page-filter') { state.pageFilter[state.view] = e.target.value; applyPageFilter(); return; }
   if (kind === 'device-name') { device.set('name', e.target.value.trim() || 'Computer'); return; }
   if (kind === 'task-bucket') { state.taskBucket = e.target.value; render(); return; }
