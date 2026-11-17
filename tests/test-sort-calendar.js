@@ -21,7 +21,8 @@ const { loadApp, check, done } = require('./helpers');
   doc.querySelector('[data-filter="all"]').click();
   const order = () => [...doc.querySelectorAll('#main .item .title')].map((x) => x.textContent.trim().split(/\s/)[0]);
   const sortBy = (v) => { const s = doc.querySelector('[data-input="task-sort"]'); s.value = v; s.dispatchEvent(new win.Event('input', { bubbles: true })); };
-  const groupBy = (v) => { const s = doc.querySelector('[data-input="task-group"]'); s.value = v; s.dispatchEvent(new win.Event('input', { bubbles: true })); };
+  const groupBy = (v, level = 0) => { const s = doc.querySelector(`[data-list-tool="tasks"][data-level="${level}"]`); s.value = v; s.dispatchEvent(new win.Event('change', { bubbles: true })); };
+  const headsAt = (lv) => [...doc.querySelectorAll(`#main .list-group.lv${lv} b`)].map((h) => h.textContent.trim());
 
   check(order().join(',') === 'Charlie,alpha,Bravo,Delta,Echo,Foxtrot,Hotel,Golf', `due date (default): overdue first, no date last, done at the end (got ${order().join(',')})`);
   sortBy('priority');
@@ -41,21 +42,26 @@ const { loadApp, check, done } = require('./helpers');
   // Group by due date
   sortBy('due');
   groupBy('due');
-  const heads = [...doc.querySelectorAll('#main .group-h')].map((h) => h.childNodes[0].textContent.trim());
+  const heads = headsAt(0);
   check(heads.join('|') === 'Overdue|Today|Tomorrow|Next 7 days|Later|No date|Done', `group by due date (got ${heads.join('|')})`);
-  check(doc.querySelectorAll('#main .group-h')[0].textContent.includes('1'), 'each heading shows its count');
+  check(doc.querySelector('#main .list-group .meta').textContent.trim() === '1', 'each heading shows its count');
   groupBy('bucket');
-  const bheads = [...doc.querySelectorAll('#main .group-h')].map((h) => h.childNodes[0].textContent.trim());
+  const bheads = headsAt(0);
   check(bheads.join('|') === 'No bucket|Home|Bills', 'group by bucket, in bucket order');
-  check(win.localStorage.getItem('dev_taskGroup') === '"bucket"', 'grouping is remembered too');
+  check(JSON.parse(win.localStorage.getItem('dev_list-tasks')).groups.join() === 'bucket', 'grouping is remembered too');
+  groupBy('priority', 1);
+  check(headsAt(1).length >= 3 && headsAt(1).includes('High'), 'then by priority: subgroups under each bucket');
+  groupBy('none', 1);
+  groupBy('label');
+  check(headsAt(0).includes('No label'), 'by label (and person, too)');
   groupBy('none');
-  check(!doc.querySelector('#main .group-h'), 'no groups');
+  check(!doc.querySelector('#main .list-group'), 'no groups');
 
   // Sticky top on List; on Board the board scrolls and column names stick
   check(doc.querySelector('#main .sticky-top .tabs') && doc.querySelector('#main .sticky-top [data-input="task-sort"]'), 'tabs, filters and sort sit in the sticky top');
   check(!doc.querySelector('#main .sticky-top form.quick-add'), 'the add box is not in the sticky part');
   doc.querySelector('[data-action="layout"][data-layout="board"]').click();
-  check(doc.querySelector('.main').classList.contains('fill') && !doc.querySelector('[data-input="task-group"]'), 'Board fills the window; Group by is List-only');
+  check(doc.querySelector('.main').classList.contains('fill') && !doc.querySelector('[data-list-tool="tasks"]'), 'Board fills the window; Group by is List-only');
   sortBy('name');
   const homeCards = [...doc.querySelectorAll('[data-bucket-col="b1"] .task-card .title')].map((x) => x.textContent.trim().split(/\s/)[0]);
   check(homeCards.join(',') === 'alpha,Delta', 'board cards follow the sort too');

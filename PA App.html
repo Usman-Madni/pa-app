@@ -3225,27 +3225,37 @@ function sortTasks(list, mode = 'due') {
     || cmp(a, b) || prio[a.priority] - prio[b.priority]);
 }
 
-// List view headings: by due date (Overdue / Today / Tomorrow / Next 7 days / Later / No date / Done) or by bucket.
-function groupTasks(list, mode) {
-  if (mode === 'bucket') {
-    const groups = [{ label: 'No bucket', items: list.filter((t) => !bucketOf(t)) },
-      ...sortedBuckets().map((b) => ({ label: b.name, items: list.filter((t) => t.bucket === b.id) }))];
-    return groups.filter((g) => g.items.length);
-  }
+
+// The Tasks list's groups (up to three levels, folding, through listTools): by when it's due, bucket, label, priority
+// and person. A task with several labels goes under its first. The list comes sorted by the page's own Sort.
+const DUE_GROUPS = ['Overdue', 'Today', 'Tomorrow', 'Next 7 days', 'Later', 'No date', 'Done'];
+function dueGroup(t) {
+  if (t.done) return 'Done';
+  if (!t.due) return 'No date';
+  if (isOverdue(t)) return 'Overdue';
+  const d = taskDate(t);
   const today = todayISO();
-  const tomorrow = toISO(addDays(parseISO(today), 1));
-  const week = toISO(addDays(parseISO(today), 7));
-  const which = (t) => {
-    if (t.done) return 'Done';
-    if (!t.due) return 'No date';
-    if (isOverdue(t)) return 'Overdue';
-    const d = taskDate(t);
-    return d === today ? 'Today' : d === tomorrow ? 'Tomorrow' : d <= week ? 'Next 7 days' : 'Later';
-  };
-  return ['Overdue', 'Today', 'Tomorrow', 'Next 7 days', 'Later', 'No date', 'Done']
-    .map((label) => ({ label, items: list.filter((t) => which(t) === label) }))
-    .filter((g) => g.items.length);
+  return d === today ? 'Today' : d === toISO(addDays(parseISO(today), 1)) ? 'Tomorrow' : d <= toISO(addDays(parseISO(today), 7)) ? 'Next 7 days' : 'Later';
 }
+const TASK_GROUPS = {
+  group: { none: 'No grouping', due: 'Due date', bucket: 'Bucket', label: 'Label', priority: 'Priority', person: 'Person' },
+  sort: {},
+  key: {
+    due: dueGroup,
+    bucket: (t) => bucketOf(t)?.name || 'No bucket',
+    label: (t) => DB.labels.find((l) => l.id === t.labels[0])?.name || 'No label',
+    priority: (t) => ({ high: 'High', med: 'Medium', low: 'Low' }[t.priority] || 'Low'),
+    person: (t) => People.of(t).map((id) => People.name(id)).join(' and '),
+  },
+  order: {
+    due: DUE_GROUPS,
+    priority: ['High', 'Medium', 'Low'],
+    get bucket() { return ['No bucket', ...sortedBuckets().map((b) => b.name)]; },
+  },
+  cmp: { keep: () => 0 },
+  row: taskItem,
+  one: 'task', many: 'tasks', empty: 'No tasks here',
+};
 
 // Colour on the calendar: done (green), overdue (red), today (accent), upcoming (blue).
 const taskStatus = (t) => (t.done ? 'done' : isOverdue(t) ? 'overdue' : taskDate(t) === todayISO() ? 'today' : 'upcoming');
@@ -4096,13 +4106,11 @@ function renderTasks() {
   if (state.taskBucket && state.taskBucket !== '-' && !DB.buckets.some((b) => b.id === state.taskBucket)) state.taskBucket = '';
   if (state.taskLabel && !DB.labels.some((l) => l.id === state.taskLabel)) state.taskLabel = '';
   const layout = taskLayout();
+  if (!device.get('list-tasks', null) && device.get('taskGroup', 'none') !== 'none') device.set('list-tasks', { groups: [device.get('taskGroup')] }); // the grouping chosen before, kept
   const sortBy = SORTS[device.get('taskSort', 'due')] ? device.get('taskSort', 'due') : 'due';
-  const groupBy = device.get('taskGroup', 'none');
   const list = sortTasks(DB.tasks.filter((t) => TASK_TABS[f].test(t) && matchesFilters(t) && !hiddenTask(t)), sortBy);
   const tab = (key, label) => `<button class="tab ${f === key ? 'active' : ''}" data-filter="${key}">${label}</button>`;
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
-  const listHtml = (items) => items.map(taskItem).join('');
-  const groups = groupBy === 'none' ? null : groupTasks(list, groupBy);
   return `
     <div class="sticky-top">
     <div class="page-head">
@@ -4121,25 +4129,19 @@ function renderTasks() {
       <select class="input" data-input="task-sort" aria-label="Sort by" title="Sort by">
         ${Object.entries(SORTS).map(([k, label]) => opt(k, label, sortBy)).join('')}
       </select>
-      ${layout === 'list' ? `<select class="input" data-input="task-group" aria-label="Group by" title="Group by">
-        ${opt('none', 'No groups', groupBy)}${opt('due', 'Group by due date', groupBy)}${opt('bucket', 'Group by bucket', groupBy)}
-      </select>` : ''}
       <select class="input" data-input="task-bucket" aria-label="Filter by bucket">
         ${opt('', 'All buckets', state.taskBucket)}${opt('-', 'No bucket', state.taskBucket)}${sortedBuckets().map((b) => opt(b.id, b.name, state.taskBucket)).join('')}
       </select>
       ${DB.labels.length ? `<select class="input" data-input="task-label" aria-label="Filter by label">
         ${opt('', 'All labels', state.taskLabel)}${DB.labels.map((l) => opt(l.id, l.name, state.taskLabel)).join('')}
       </select>` : ''}
-      <span class="list-count">${plural(list.length, 'task')}</span>
+      ${layout === 'board' ? `<span class="list-count">${plural(list.length, 'task')}</span>` : ''}
     </div>
     ${Selection.on() ? selectBar(list) : ''}
     </div>
     ${Selection.on() ? '' : quickAddBar('tasks')}
-    ${layout === 'board' ? renderBoard(list) : `<div class="card">
-      ${groups ? groups.map((g) => `<h3 class="group-h">${esc(g.label)} <span>${g.items.length}</span></h3><ul class="list">${listHtml(g.items)}</ul>`).join('') || '<p class="empty">No tasks here</p>'
-        : `<ul class="list">${listHtml(list) || '<li class="empty">No tasks here</li>'}</ul>`}
-      ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}
-    </div>`}`;
+    ${layout === 'board' ? renderBoard(list) : `${listTools('tasks', list, TASK_GROUPS)}
+      ${f === 'done' && list.length ? '<div class="row edit-only" style="justify-content:flex-end;margin-top:8px"><button class="btn small danger" data-action="clear-done">Clear completed</button></div>' : ''}`}`;
 }
 
 // The bar shown while selecting: how many, and what to do with them.
@@ -5865,7 +5867,10 @@ function listTools(id, rows, o) {
     if (level >= groups.length) return rs.map(o.row).join('');
     const byKey = new Map();
     for (const r of rs) { const k = o.key[groups[level]](r) || '–'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); }
-    return [...byKey.entries()].map(([k, sub]) => {
+    const order = o.order?.[groups[level]];
+    const keys = [...byKey.entries()];
+    if (order) keys.sort((x, y) => (order.indexOf(x[0]) + 1 || 999) - (order.indexOf(y[0]) + 1 || 999));
+    return keys.map(([k, sub]) => {
       const p = `${path}${path ? ' › ' : ''}${k}`;
       const shut = folded.has(p);
       return `<li class="list-group lv${level}" data-list-fold="${esc(id)}" data-path="${esc(p)}" role="button" tabindex="0" aria-expanded="${!shut}"><span class="lg-name">${ic(shut ? 'chevron-right' : 'chevron-down', 'sm')}<b>${esc(k)}</b></span><span class="meta">${sub.length}${o.total ? `, ${rupees(sum(sub))}` : ''}</span></li>${shut ? '' : nest(sub, level + 1, p)}`;
