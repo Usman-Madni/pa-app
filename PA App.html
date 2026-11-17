@@ -1537,7 +1537,7 @@ const Zakat = {
   // zakat" due a week before the next zakat day once a record is done (ticked when nothing is left). Their ids come
   // from the person and the year, so the laptop and the phone never make two, and one the user deleted (its 30-day
   // marker) isn't made again. Returns true if any task changed (the caller saves).
-  TASK_AHEAD_DAYS: 60,
+  TASK_AHEAD_DAYS: 400, // next year's is there as soon as this year's is done, like any repeating task
   ensureTasks(now = new Date()) {
     if (state.readOnly) return false;
     const today = toISO(now);
@@ -1548,7 +1548,7 @@ const Zakat = {
       if (gone.has(id) || PendingDelete.has(id)) return null;
       let t = DB.tasks.find((x) => x.id === id);
       if (!t) {
-        t = normalizeTask({ id, title, due: `${due}T${ALL_DAY}`, people: [person], notes: note, created: Date.now() });
+        t = normalizeTask({ id, title, due: `${due}T${ALL_DAY}`, people: [person], notes: note, created: Date.now(), bucket: ButlerTasks.bucket() });
         DB.tasks.push(t);
         changedAny = true;
       }
@@ -1643,7 +1643,7 @@ const Vault = {
       const people = People.of(d);
       if (!t) {
         DB.tasks.push(normalizeTask({
-          id: want, title, due: `${this.renewOn(d)}T${ALL_DAY}`, people, created: Date.now(),
+          id: want, title, due: `${this.renewOn(d)}T${ALL_DAY}`, people, created: Date.now(), bucket: ButlerTasks.bucket(),
           notes: `${d.type ? `${d.type}. ` : ''}Expires ${fmtDate(d.expires)}. Once renewed, open it in Butler's Vault and type the new expiry date.`,
           reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }],
         }));
@@ -1660,6 +1660,43 @@ const Vault = {
   openTasks(d) { return DB.tasks.filter((x) => x.id.startsWith(`doc-renew-${d.id}-`) && !x.done); },
 };
 function vaultTasks() { if (Vault.ensureTasks()) changed('tasks'); }
+
+// ===================== Butler's own tasks =====================
+// The tasks Butler makes (zakat, Vault renewals, upkeep jobs) go in one bucket: the one marked for them (`butler: true`
+// on a bucket, set in Settings › Buckets), else one called "Repeating tasks". They repeat as Butler keeps them (the
+// next comes as soon as one is ticked), so they show the repeat sign with how often, not the repeat editor.
+const ButlerTasks = {
+  is(t) { return /^(zk-(make|update|pay)-|doc-renew-|up-)/.test(t?.id || ''); },
+  bucket() {
+    const marked = DB.buckets.find((b) => b.butler);
+    if (marked) return marked.id;
+    return DB.buckets.find((b) => sameName(b.name, 'Repeating tasks'))?.id || '';
+  },
+  // How often it comes back, in words.
+  every(t) {
+    const zk = t.id.match(/^zk-(make|update|pay)-(.+)-\d{4}$/);
+    if (zk) { const z = People.get(zk[2])?.zakat; return z ? `Every year, ${ordinal(z.day)} ${HIJRI_MONTHS[z.month - 1]}` : 'Every year'; }
+    if (t.id.startsWith('doc-renew-')) return 'Each time the document is renewed';
+    const job = Upkeep.jobOfTask(t);
+    return job ? `Every ${Upkeep.every(job.p)}` : 'Repeats with Butler';
+  },
+  // Choose the bucket: open Butler tasks in the old one (or none) move to it.
+  setBucket(id) {
+    const old = this.bucket();
+    DB.buckets.forEach((b) => { if (b.id === id) b.butler = true; else delete b.butler; });
+    for (const t of DB.tasks) if (this.is(t) && !t.done && (t.bucket === old || !t.bucket)) t.bucket = id;
+    changed('buckets', 'tasks');
+  },
+  // Once per device: open Butler tasks made before there was a bucket for them go in it.
+  placeOld() {
+    if (state.readOnly || device.get('butlerPlaced', false) || !this.bucket()) return false;
+    let n = 0;
+    for (const t of DB.tasks) if (this.is(t) && !t.done && !t.bucket) { t.bucket = this.bucket(); n++; }
+    device.set('butlerPlaced', true);
+    if (n) changed('tasks');
+    return n > 0;
+  },
+};
 
 // ===================== Upkeep =====================
 // What an asset costs to keep: a log (`upkeep`: {id, asset, date, type, item, cost, vendor, km, notes, attachments,
@@ -1819,7 +1856,7 @@ const Upkeep = {
         const notes = `Every ${this.every(p)}. Last done ${fmtDate(n.last.date)}${n.last.km ? ` at ${fmtKm(n.last.km)}` : ''}.${n.km ? ` Due at ${fmtKm(n.km)}${n.estimated ? ` (about ${fmtDate(n.date)}, from the readings)` : ''}.` : ''} Tick it to log it in Butler.`;
         let t = DB.tasks.find((x) => x.id === want);
         if (!t) {
-          t = normalizeTask({ id: want, title, due: `${n.date}T${ALL_DAY}`, people: owners, notes, created: Date.now(), reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+          t = normalizeTask({ id: want, title, due: `${n.date}T${ALL_DAY}`, people: owners, notes, created: Date.now(), bucket: ButlerTasks.bucket(), reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
           DB.tasks.push(t);
           changedAny = true;
         } else if (!t.done) {
@@ -2341,7 +2378,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // tasks:   see TASK_DEFAULTS below
 // notes:   {id, title, body, updated}
 // events:  {id, title, date:'YYYY-MM-DD', time:'HH:mm'|''}
-// buckets: {id, name, order}
+// buckets: {id, name, order, butler?: true on the one Butler's own tasks go in}
 // labels:  {id, name, color:'#rrggbb'}
 // Changing these shapes means old data files must still load — see PA_APP_CONTEXT.md.
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
@@ -3577,6 +3614,7 @@ function taskSummary(t, { noDue = false } = {}) {
   if (t.start && t.start > todayISO() && !t.done) meta.push(`<span>Starts ${esc(fmtDay(t.start))}</span>`);
   if (t.reminders.length && !t.done) meta.push(`<span title="Reminder">${ic('bell', 'sm')}${esc(Reminders.text(t, t.reminders[0]))}${t.reminders.length > 1 ? ` +${t.reminders.length - 1}` : ''}</span>`);
   if (t.repeat) meta.push(`<span title="Repeats">${ic('repeat', 'sm')}${esc(repeatText(t.repeat))}</span>`);
+  else if (ButlerTasks.is(t)) meta.push(`<span title="Repeats (Butler keeps it)">${ic('repeat', 'sm')}${esc(ButlerTasks.every(t))}</span>`);
   if (t.progress === 'doing' && !t.done) meta.push('<span class="pill doing">In progress</span>');
   if (inMyDay(t)) meta.push(`<span>${ic('sun', 'sm')}My Day</span>`);
   if (t.checklist.length) meta.push(`<span title="Checklist">${ic('checklist', 'sm')}${t.checklist.filter((s) => s.done).length}/${t.checklist.length}</span>`);
@@ -4099,7 +4137,7 @@ const colorSelect = (cur, attrs = 'name="color"') =>
   `<select class="input" ${attrs} aria-label="Colour">${LABEL_COLORS.map((c) => `<option value="${c.hex}" ${c.hex === cur ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
 
 // A name already used by another (ignoring capitals and extra spaces): 'Home', 'home' and ' Home ' are one name.
-const sameName = (a, b) => String(a || '').trim().replace(/s+/g, ' ').toLowerCase() === String(b || '').trim().replace(/s+/g, ' ').toLowerCase();
+const sameName = (a, b) => String(a || '').trim().replace(/\s+/g, ' ').toLowerCase() === String(b || '').trim().replace(/\s+/g, ' ').toLowerCase();
 const nameTaken = (list, name, exceptId) => list.find((x) => x.id !== exceptId && sameName(x.name, name));
 function addBucket(name) {
   if (nameTaken(DB.buckets, name)) { toast(`There's already a bucket called ${nameTaken(DB.buckets, name).name}`); return false; }
@@ -4274,6 +4312,7 @@ function manageCard() {
         <div class="manage-row"><span class="name">${esc(b.name)} <span class="meta">${plural(count((t) => t.bucket === b.id), 'task')}</span></span>
           <span class="edit-only"><button class="icon-btn" data-action="rename-bucket" data-id="${esc(b.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button><button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></span>
         </div>`).join('') || '<p class="sub">No buckets yet.</p>'}
+      ${DB.buckets.length ? `<label class="field" style="margin-top:10px">Butler's own tasks go in <span class="meta">(zakat, Vault renewals, upkeep jobs)</span><select class="input" data-butler-bucket ${state.readOnly ? 'disabled' : ''}><option value="">No bucket</option>${sortedBuckets().map((b) => `<option value="${esc(b.id)}" ${b.id === ButlerTasks.bucket() ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>` : ''}
       <form class="row edit-only" data-form="add-bucket" style="margin-top:8px"><input class="input grow" name="title" placeholder="New bucket, e.g. Home, Work, Bills" autocomplete="off" maxlength="40"><button class="btn small primary">Add</button></form>
       <h2 style="margin-top:18px">Labels</h2>
       ${DB.labels.map((l) => `
@@ -4545,6 +4584,7 @@ function finishDonePrompt(data) {
   // A document's renew task: open the document for its new expiry date (the next reminder follows from it).
   const renewed = t.id.match(/^doc-renew-(.+)-\d{4}-\d{2}-\d{2}$/);
   if (renewed && DB.docs.some((d) => d.id === renewed[1])) { closeTaskDrawer(); openAssetForm('doc', { id: renewed[1], renewed: true }); }
+  if (ButlerTasks.is(t)) { zakatTasks(); vaultTasks(); upkeepTasks(); render(); } // the next one comes at once, like any repeating task
   // An upkeep job's task: Add entry, filled in, so the next round counts from it.
   const job = Upkeep.jobOfTask(t);
   if (job) { closeTaskDrawer(); openAssetForm('upkeep', { asset: job.a.id, item: job.p.item, typeId: 'service', vendor: Upkeep.lastVendor(job.a, job.p), fromTask: t.id }); }
@@ -4912,6 +4952,9 @@ const endModeOf = (r) => r.endMode || (r.until ? 'date' : 'never');
 // The repeat section of the drawer. The quick list sets the common ones; "Custom…" (and the box under
 // the list) sets every N days/weeks/months/years, weekdays, monthly by date or weekday, and how it ends.
 function repeatBlock(t) {
+  if (ButlerTasks.is(t)) { // Butler keeps these going itself
+    return `<div class="p-row"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg></span><span class="p-text">${esc(ButlerTasks.every(t))}. Butler makes the next one as soon as this is ticked.</span></div>`;
+  }
   const r = t.repeat;
   const f = r ? r.freq : '';
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(label)}</option>`;
@@ -8177,6 +8220,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-upkeep-filter]') && state.assetForm) { state.upkeepFilter = e.target.value; renderAssetForm(); return; }
+  if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
@@ -8220,6 +8264,7 @@ else {
   zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   vaultTasks(); // a renew task for each document that expires
   upkeepTasks(); // a task for each repeating upkeep job
+  ButlerTasks.placeOld(); // tasks made before they had a bucket go in it
   render();
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
