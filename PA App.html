@@ -233,6 +233,7 @@ button:disabled { cursor: not-allowed; }
 .owner-grid .input { padding: 5px 8px; text-align: right; }
 .value-history { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
 .upkeep { gap: 8px; }
+.banner.unlogged { margin-bottom: 10px; }
 .upkeep-h { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
 .upkeep-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .upkeep-sum > div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: var(--r-md); background: var(--panel-2); }
@@ -1953,6 +1954,36 @@ const Upkeep = {
   },
   // Open tasks of jobs no longer on an asset's plan (the caller deletes them, with Undo).
   orphanTasks(a) { return DB.tasks.filter((x) => x.id.startsWith(`up-${a.id}-`) && !x.done && !(a.plan || []).some((p) => x.id.startsWith(this.taskPrefix(a, p)))); },
+  // ----- Ticked but not logged -----
+  // Add entry for a job's task: the job filled in, dated the day the task was done (as chosen in "Done on").
+  logFor(t) {
+    const job = this.jobOfTask(t);
+    if (!job) return null;
+    return { asset: job.a.id, item: job.p.item, typeId: 'service', vendor: this.lastVendor(job.a, job.p), fromTask: t.id, date: t.completedAt ? toISO(new Date(t.completedAt)) : todayISO() };
+  },
+  // Jobs whose task was ticked (here, or in To Do) in the last year with nothing logged for that round: no entry for
+  // the item since the round began. Skip (\`skipped\` on the job: the task ids let go) stops asking.
+  unlogged(assets = DB.assets, now = Date.now()) {
+    const out = [];
+    for (const a of assets) {
+      for (const p of a.plan || []) {
+        const prefix = this.taskPrefix(a, p);
+        for (const t of DB.tasks) {
+          if (!t.done || !t.completedAt || !t.id.startsWith(prefix) || now - t.completedAt > 365 * 864e5 || (p.skipped || []).includes(t.id)) continue;
+          const from = t.id.slice(prefix.length);
+          if (this.entriesFor(a, p).some((e) => (e.date || '') > from)) continue; // logged
+          out.push({ a, p, t, date: toISO(new Date(t.completedAt)) });
+        }
+      }
+    }
+    return out.sort((x, y) => y.date.localeCompare(x.date));
+  },
+  skip(t) {
+    const job = this.jobOfTask(t);
+    if (!job) return false;
+    job.p.skipped = [...(job.p.skipped || []), t.id];
+    return true;
+  },
 };
 
 // ===================== Bringing in an Airtable zakat base =====================
@@ -4103,6 +4134,7 @@ function renderToday() {
       <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, <button type="button" class="link-btn hijri-today" data-action="hijri-today" title="Moon sighted on a different day here? Correct this month">${esc(Hijri.textOf(toISO(now)))}</button>. ${summary}${lateNote}.</p></div>
       <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
     </div>
+    ${unloggedBanners(Upkeep.unlogged(Assets.list(People.viewing())))}
     <div class="grid grid-main today">
       <div class="card tl-card">
         ${quickAddBar('today')}
@@ -4711,7 +4743,7 @@ function finishDonePrompt(data) {
   if (ButlerTasks.is(t)) { zakatTasks(); vaultTasks(); upkeepTasks(); render(); } // the next one comes at once, like any repeating task
   // An upkeep job's task: Add entry, filled in, so the next round counts from it.
   const job = Upkeep.jobOfTask(t);
-  if (job) { closeTaskDrawer(); openAssetForm('upkeep', { asset: job.a.id, item: job.p.item, typeId: 'service', vendor: Upkeep.lastVendor(job.a, job.p), fromTask: t.id }); }
+  if (job) { closeTaskDrawer(); openAssetForm('upkeep', Upkeep.logFor(t)); } // dated the day it was done, as chosen in "Done on"
 }
 
 
@@ -5802,7 +5834,7 @@ function vehicleOverview(shown, car, picker) {
   for (const a of shown) for (const y of Upkeep.costs(a).years) years.set(y.year, (years.get(y.year) || 0) + y.cost);
   const ys = [...years.entries()].sort((x, y) => x[0].localeCompare(y[0]));
   const max = Math.max(1, ...ys.map(([, v]) => v));
-  return `${picker ? `<div class="list-tools">${picker}</div>` : ''}<div class="grid vehicle-grid">${cards}</div>
+  return `${picker ? `<div class="list-tools">${picker}</div>` : ''}${unloggedBanners(Upkeep.unlogged(shown), shown.length > 1)}<div class="grid vehicle-grid">${cards}</div>
     ${ys.length ? `<div class="card"><h2>Upkeep by year</h2><div class="kind-bars">${ys.map(([y, v]) => `<div class="kind-bar" title="${esc(y)}: ${esc(rupees(v))}"><span class="kb-name">${esc(y)}</span><span class="kb-track"><span class="kb-fill" style="width:${barPct(v, max)}%"></span></span><span class="kb-val">${rupees(v)}</span></div>`).join('')}</div></div>` : ''}`;
 }
 // Every entry of the cars shown, newest first (the list tools group and sort it).
@@ -6145,6 +6177,11 @@ const readCar = (data) => ({ make: (data['car-make'] || '').trim(), model: (data
 const carName = (c) => [c.make, c.model, c.plate].filter(Boolean).join(' ');
 const fmtKm = (n) => `${Math.round(n).toLocaleString('en-IN')} km`;
 
+// Jobs ticked with nothing logged: "Engine oil (Corolla), ticked on Wed 12 Nov 2026: add what it cost?" with Log it
+// (Add entry for that day) and Skip. On the car, the Vehicles overview and My Day.
+function unloggedBanners(list, withCar = true) {
+  return list.map(({ a, p, t, date }) => `<div class="banner warn unlogged"><span>${ic('tool')}<span>${esc(p.item)}${withCar ? ` (${esc(a.name)})` : ''}, ticked on ${esc(fmtDate(date))}: add what it cost?</span></span><span class="row edit-only"><button class="btn small primary" data-action="upkeep-log-ticked" data-id="${esc(t.id)}">Log it</button><button class="btn small" data-action="upkeep-skip" data-id="${esc(t.id)}">Skip</button></span></div>`).join('');
+}
 // An asset's upkeep, in its pop-up: what it's cost, its plan of repeating jobs, and the log (by type).
 function upkeepBlock(a) {
   const log = Upkeep.log(a.id);
@@ -6156,6 +6193,7 @@ function upkeepBlock(a) {
   const maxYear = Math.max(1, ...c.years.map((y) => y.cost));
   return `
     <div class="value-history upkeep"><div class="meta upkeep-h">${ic('tool', 'sm')} Upkeep</div>
+      ${unloggedBanners(Upkeep.unlogged([a]), false)}
       ${log.length ? `
         <div class="upkeep-sum">
           <div><span class="meta">This year</span><b>${rupees(c.thisYear)}</b></div>
@@ -6262,7 +6300,7 @@ function renderAssetForm() {
     if (!a) return closeAssetForm();
     const inStore = a === STORE;
     const homes = [STORE, ...DB.assets.filter((x) => !x.closed || x.id === a.id).sort((x, y) => (x.kind === 'vehicle' ? 0 : 1) - (y.kind === 'vehicle' ? 0 : 1) || x.name.localeCompare(y.name))];
-    const v = e || { date: todayISO(), type: f.typeId || 'service', item: f.item || '', cost: '', vendor: f.vendor || '', km: '', notes: '' };
+    const v = e || { date: f.date || todayISO(), type: f.typeId || 'service', item: f.item || '', cost: '', vendor: f.vendor || '', km: '', notes: '' };
     const list = (id, vals) => `<datalist id="${id}">${vals.slice(0, 60).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`;
     const items = [...new Set([...(a.plan || []).map((p) => p.item), ...Upkeep.used('item', a.id), ...(Upkeep.vehicle(a) ? CAR_PLAN.map((p) => p.item) : [])])];
     $('#modal').innerHTML = box(e ? `${a.name}: ${e.item}` : inStore ? 'Add to store' : `${a.name}: add to upkeep`, `
@@ -7880,7 +7918,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
   'delete-doc', 'unlink-doc', 'rec-file-remove',
 ]);
 
@@ -8212,6 +8250,8 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset, choose: !!btn.dataset.choose }); break;
+    case 'upkeep-log-ticked': { const t = DB.tasks.find((x) => x.id === id); const o = t && Upkeep.logFor(t); if (o) openAssetForm('upkeep', o); break; }
+    case 'upkeep-skip': { const t = DB.tasks.find((x) => x.id === id); if (t && Upkeep.skip(t)) { changed('assets'); toast('Not logged: it won\'t ask again'); render(); if (state.assetForm) renderAssetForm(); } break; }
     case 'not-a-car': { // a 'car' that was a place for supplies: its entries go to the store, it goes to the Trash
       const a = DB.assets.find((x) => x.id === id);
       if (!a) break;

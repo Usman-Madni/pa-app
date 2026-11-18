@@ -98,6 +98,27 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
   win.eval('upkeepTasks')();
   const t3 = PA.DB.tasks.find((t) => t.id.startsWith(prefix) && !t.done);
   check(t3 && t3 !== t2, 'not logged: the next round still starts from the tick');
+  // Ticked but not logged: a reminder, Log it (dated as done) or Skip
+  const un = U.unlogged([car]);
+  check(un.length === 1 && un[0].t === t2, 'a job ticked with nothing logged is remembered');
+  doc.querySelector('[data-view="today"]').click();
+  check(/Engine oil and oil filter \(Toyota Corolla ABC-123\), ticked on/.test(doc.querySelector('#main').textContent), 'My Day says so, with Log it and Skip');
+  check(U.logFor({ id: `${prefix}2000-01-01`, done: true, completedAt: new Date(ago(5)).getTime() }).date === ago(5), 'Add entry is dated the day it was done (as picked in "Done on"), not today');
+  doc.querySelector(`#main [data-action="upkeep-log-ticked"][data-id="${t2.id}"]`).click();
+  check(modal().dataset.form === 'asset-upkeep' && modal().elements.date.value === today && modal().elements.what.value === 'Engine oil and oil filter', 'Log it opens Add entry for that job, on that day');
+  submitForm(win, 'asset-upkeep', { cost: '9,800', km: '20,500' });
+  check(!U.unlogged([car]).length && !doc.querySelector('#main .unlogged'), 'once logged, the reminder goes');
+  check(PA.DB.upkeep.some((e) => e.date === today && e.cost === 9800), 'and the entry has that date');
+  // Skip
+  const t4 = PA.DB.tasks.find((t) => t.id.startsWith(prefix) && !t.done);
+  win.eval('Series').tick(t4, new Date(), true);
+  win.eval('changed')('tasks');
+  doc.querySelector('[data-view="vehicles"]').click();
+  doc.querySelector('[data-vehicle-tab="overview"]').click();
+  check(doc.querySelector('#main .unlogged'), 'the Vehicles overview shows it too');
+  doc.querySelector('#main [data-action="upkeep-skip"]').click();
+  check(!U.unlogged([car]).length && oil.skipped.includes(t4.id), 'Skip stops asking (kept on the job, for both devices)');
+  win.eval('upkeepTasks')();
   // Taking a job off the plan takes its task (with Undo)
   win.eval('PendingDelete').UNDO_MS = 30;
   win.eval('openAssetForm')('plan', { asset: car.id, id: air.id });
