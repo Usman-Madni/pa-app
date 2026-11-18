@@ -50,14 +50,15 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
   filter.dispatchEvent(new win.Event('change', { bubbles: true }));
   check(box().querySelectorAll('.upkeep-log [data-action="upkeep-entry"]').length === 1, 'the log can show one type');
   win.eval('state').upkeepFilter = '';
-  // Add an entry: it stays open for a photo; Back returns to the car
+  // Add an entry from the car: photos picked with it; Save returns to the car, saying so
   box().querySelector('[data-action="upkeep-entry"][data-asset]').click();
   check(/add to upkeep/.test(modal().querySelector('h3').textContent) && modal().elements.km, 'Add entry asks the reading for a vehicle');
+  check(doc.querySelector('#modal [data-pending-files]') && doc.querySelector('#modal [data-action="open-asset"]'), 'photos and the bill can be picked with it, and Back leads to the car');
   submitForm(win, 'asset-upkeep', { what: 'Wiper blades', type: 'added', cost: '1,500', km: '19,000' });
   const wip = PA.DB.upkeep.find((e) => e.item === 'Wiper blades');
-  check(wip && wip.cost === 1500 && wip.km === 19000 && modal() && /Photos and files/.test(doc.querySelector('#modal').textContent), 'saved, and it stays open to add a photo or the bill');
-  doc.querySelector('#modal [data-action="open-asset"]').click();
-  check(/Toyota Corolla/.test(modal().querySelector('h3').textContent), 'Back returns to the car');
+  check(wip && wip.cost === 1500 && wip.km === 19000, 'saved');
+  check(/Toyota Corolla/.test(modal().querySelector('h3').textContent) && /Saved Wiper blades, Rs 1,500, on Toyota Corolla/.test(doc.querySelector('#toasts').textContent), 'Save goes back to the car it was added from, and says it\'s saved');
+  check(/Save car details/.test(doc.querySelector('#modal').textContent), 'the car\'s own Save says it\'s for its details');
   // Update reading
   box().querySelector('[data-form-type="reading"]').click();
   submitForm(win, 'asset-reading', { km: '20,000' });

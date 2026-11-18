@@ -6197,9 +6197,20 @@ function planBlock(a) {
 }
 function upkeepTasks() { if (Upkeep.ensureTasks()) changed('tasks'); }
 
+// The upkeep pop-ups (an entry, a job, a reading, using a store item) remember whether they were opened from a car's
+// pop-up (`back`: Save and Cancel return to it) or from a page (they just close).
+const UPKEEP_FORMS = ['upkeep', 'plan', 'reading', 'store-use'];
 function openAssetForm(type, opts = {}) {
+  const cur = state.assetForm;
+  if (UPKEEP_FORMS.includes(type) && opts.back === undefined) opts.back = cur?.type === 'asset' ? cur.id : cur && UPKEEP_FORMS.includes(cur.type) ? cur.back || '' : '';
   state.assetForm = { type, ...opts };
   renderAssetForm();
+}
+// After saving an upkeep pop-up: back to the car's pop-up it came from, or closed (the page shows the change).
+function upkeepReturn(f) {
+  if (f?.back && DB.assets.some((a) => a.id === f.back)) openAssetForm('asset', { id: f.back });
+  else closeAssetForm();
+  render();
 }
 function closeAssetForm() { state.assetForm = null; $('#modal').innerHTML = ''; }
 function renderAssetForm() {
@@ -6270,9 +6281,10 @@ function renderAssetForm() {
       </div>
       <label class="field">Vendor<input class="input" name="vendor" list="up-vendors" value="${esc(v.vendor)}" maxlength="60">${list('up-vendors', Upkeep.used('vendor'))}</label>
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>
-      ${e ? `<label class="field">Belongs to <span class="meta">(move it to another car, or to the store)</span><select class="input" name="asset">${homes.map((x) => `<option value="${esc(x.id)}" ${x.id === a.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}`,
-    `${inStore ? (e && Number(e.qty) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(e.id)}" style="margin-right:auto">Use on a car</button>` : '<span style="margin-right:auto"></span>') : `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>`}${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
-    e ? filesBlock(e, 'upkeep') : '<p class="meta" style="margin:0">Save it, then add photos or the bill.</p>');
+      ${e ? `<label class="field">Belongs to <span class="meta">(move it to another car, or to the store)</span><select class="input" name="asset">${homes.map((x) => `<option value="${esc(x.id)}" ${x.id === a.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
+      ${e ? '' : `<label class="field">Photos and bill <span class="meta">(optional; saved with it)</span><input class="input" type="file" multiple accept="image/*,application/pdf" data-pending-files></label>`}`,
+    `${inStore ? (e && Number(e.qty) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(e.id)}" style="margin-right:auto">Use on a car</button>` : '<span style="margin-right:auto"></span>') : f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(f.back)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
+    e ? filesBlock(e, 'upkeep') : '');
     $('#modal [name="what"]')?.focus();
     return;
   }
@@ -6305,7 +6317,7 @@ function renderAssetForm() {
       </div>
       <p class="meta" style="margin:0">${car ? 'Whichever comes first. ' : ''}Its task is due when the time${car ? ' or the distance' : ''} runs out; logging "${esc(p ? p.item : 'the job')}" in the upkeep (or ticking the task) starts the next round. A log entry counts when its item has the same name.</p>
       ${p ? '' : `<label class="field">Last done (optional)<input class="input" type="date" name="since" value=""></label>`}`,
-    `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>${p ? '<button type="button" class="btn danger edit-only" data-action="plan-delete">Take off the plan</button>' : ''}`);
+    `${f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}${p ? '<button type="button" class="btn danger edit-only" data-action="plan-delete">Take off the plan</button>' : ''}`);
     $('#modal [name="what"]')?.focus();
     return;
   }
@@ -6317,7 +6329,7 @@ function renderAssetForm() {
       <div class="row">
         <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
         <label class="field">Km<input class="input" ${amountAttrs('')} name="km" required></label>
-      </div>`, `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>`);
+      </div>`, `${f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}`);
     $('#modal [name="km"]')?.focus();
     return;
   }
@@ -6392,7 +6404,7 @@ function renderAssetForm() {
       <label class="check-line"><input type="checkbox" name="zakat" ${zakatable ? 'checked' : ''}> Zakatable <span class="meta">(counts towards zakat; ${ZAKAT_SKIP.includes(kind) ? 'things for personal use usually don\'t' : 'savings, gold, silver and money owed usually do'})</span></label>
       ${ownerInputs(owners, a && (a.owners || []).length > 1 ?'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
-      a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', 'Save', ro,
+      a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', a && a.kind === 'vehicle' ? 'Save car details' : 'Save', ro,
       a ? upkeepBlock(a) + assetDocsBlock(a) + filesBlock(a, 'assets') : '');
   } else if (f.type === 'transfer') {
     const list = Assets.list().filter((a) => !a.closed);
@@ -6693,11 +6705,11 @@ function submitAssetForm(type, data) {
     if (e) Object.assign(e, fields); else { e = Upkeep.add(fields); if (a === STORE) e.qty = fields.qty; }
     changed('upkeep');
     upkeepTasks();
-    toast(moved ? `Moved "${e.item}" to ${a.name}` : `Saved "${e.item}"${e.cost ? `, ${rupees(e.cost)}` : ''}`);
-    if (a === STORE) { if (f.id) { closeAssetForm(); render(); return; } state.assetForm = { type: 'upkeep', id: e.id }; renderAssetForm(); render(); return; }
-    if (!f.id) { state.assetForm = { type: 'upkeep', id: e.id }; renderAssetForm(); render(); return; } // stays open, to add a photo or the bill
-    openAssetForm('asset', { id: a.id });
-    render();
+    if (moved) toast(`Moved "${e.item}" to ${a.name}`); else if (a === STORE) toast(`Saved "${e.item}" in the store`);
+    const pics = [...($('#modal [data-pending-files]')?.files || [])]; // photos or the bill, picked with the rest
+    if (pics.length) AT.add(e, pics, 'upkeep', true).then(() => { toast(`Added ${plural(pics.length, 'file')} to "${e.item}"`); render(); });
+    if (e.asset !== STORE.id && !moved) toast(`Saved ${e.item}${e.cost ? `, ${rupees(e.cost)}` : ''}, on ${a.name}`);
+    upkeepReturn(f);
     return;
   } else if (type === 'store-use') {
     const it = DB.upkeep.find((x) => x.id === f.id && x.asset === STORE.id);
@@ -6708,6 +6720,8 @@ function submitAssetForm(type, data) {
     changed('upkeep');
     upkeepTasks();
     toast(`${e.item} logged on ${car.name}${e.cost ? `, ${rupees(e.cost)}` : ''}`);
+    upkeepReturn(f);
+    return;
   } else if (type === 'plan') {
     const a = DB.assets.find((x) => x.id === f.asset);
     if (!a) return closeAssetForm();
@@ -6724,8 +6738,7 @@ function submitAssetForm(type, data) {
     if (orphans.length) PendingDelete.start(orphans);
     upkeepTasks();
     toast(`${data.what.trim()}: every ${Upkeep.every({ km, months })}`);
-    openAssetForm('asset', { id: a.id });
-    render();
+    upkeepReturn(f);
     return;
   } else if (type === 'reading') {
     const a = DB.assets.find((x) => x.id === f.asset);
@@ -6733,9 +6746,8 @@ function submitAssetForm(type, data) {
     Upkeep.addReading(a, data.date || todayISO(), data.km);
     changed('assets');
     upkeepTasks();
-    toast(`Reading saved: ${fmtKm(Number(data.km))}`);
-    openAssetForm('asset', { id: a.id });
-    render();
+    toast(`Reading saved: ${fmtKm(Number(data.km))}, on ${a.name}`);
+    upkeepReturn(f);
     return;
   } else if (type === 'import') {
     const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
@@ -8224,17 +8236,17 @@ document.addEventListener('click', (e) => {
       const orphans = Upkeep.orphanTasks(a);
       if (orphans.length) PendingDelete.start(orphans); // its open task goes too (with Undo)
       toast(`${p.item} is off the plan`);
-      openAssetForm('asset', { id: a.id });
-      render();
+      upkeepReturn(f);
       break;
     }
     case 'upkeep-delete': {
-      const e = state.assetForm && DB.upkeep.find((x) => x.id === state.assetForm.id);
+      const f = state.assetForm;
+      const e = f && DB.upkeep.find((x) => x.id === f.id);
       if (!e) break;
-      openAssetForm('asset', { id: e.asset });
+      upkeepReturn(f);
       Trash.discard([['upkeep', e]], `"${e.item}"`);
       upkeepTasks();
-      renderAssetForm();
+      if (state.assetForm) renderAssetForm();
       break;
     }
     case 'zakat-adopt': { // the zakat day Butler found: from when the wealth went above the nisab

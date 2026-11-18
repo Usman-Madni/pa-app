@@ -85,7 +85,7 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   submitForm(win, 'asset-upkeep', { what: 'Oil filter', qty: '4', cost: '4,000', vendor: 'Parts shop' });
   const filt = PA.DB.upkeep.find((e) => e.item === 'Oil filter');
   check(filt && filt.asset === 'store' && filt.qty === 4 && filt.cost === 4000, 'it\'s in the store with how many and what they cost');
-  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+  check(!doc.querySelector('#modal form'), 'Save from the page closes it (back to the page)');
   doc.querySelector('[data-vehicle-tab="store"]').click();
   check(/1 item in store, worth Rs 4,000/.test(main()), 'the Store tab lists it and what it\'s worth');
   doc.querySelector('#main [data-form-type="store-use"]').click();
