@@ -289,6 +289,7 @@ button:disabled { cursor: not-allowed; }
 .vault-actions { margin-bottom: 10px; flex-wrap: wrap; }
 .vault-pick { width: auto; max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .vault-mark { display: inline-flex; align-items: center; margin-right: 4px; }
+.file-to select { width: auto; max-width: 100%; margin-left: 6px; }
 .asset-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-md); object-fit: cover; background: var(--panel-2); }
 .thumb-btn { flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--panel-2); cursor: zoom-in; }
 .thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1777,6 +1778,47 @@ const Vault = {
     changed('folders');
     return full;
   },
+  // ----- A task's files kept in the Vault ("Files go to") -----
+  // A task (every copy of a repeating one) can send its files to a Vault folder (t.fileTo, a path in its person's Vault):
+  // each file it gets is stored there and shows there as a plain file (the same file; fromTask: the series), while it
+  // stays on the task, marked as from the Vault. Finishing or deleting the task leaves them in the Vault.
+  fileTask(t, att) {
+    if (!t.fileTo || !att || DB.docs.some((d) => (d.attachments || []).some((a) => a.file === att.file))) return null;
+    const dot = att.name.lastIndexOf('.');
+    const d = this.add({ cat: 'file', name: dot > 0 ? att.name.slice(0, dot) : att.name, people: People.of(t), renewMonths: 0 });
+    Object.assign(d, { plain: true, folder: t.fileTo, fromTask: Files.seriesOf(t) || t.id });
+    d.attachments.push({ id: uid(), name: att.name, file: att.file, original: att.original || att.name, size: att.size || 0, type: att.type || '', added: att.added || Date.now(), keep: false });
+    att.vault = true;
+    this.keepFolder(this.topOf(d), t.fileTo);
+    changed('docs');
+    return d;
+  },
+  // The copies a "Files go to" setting covers: the whole series.
+  copiesOf(t) { const k = Files.seriesOf(t); return k ? DB.tasks.filter((x) => x === t || Files.seriesOf(x) === k) : [t]; },
+  // The task's files not yet in the Vault, and those it put in another Vault folder: what a new setting offers to move.
+  toMove(t, path) {
+    const key = Files.seriesOf(t) || t.id;
+    const files = new Set(this.copiesOf(t).flatMap((x) => x.attachments.map((a) => a.file)));
+    const loose = [...files].filter((f) => !DB.docs.some((d) => (d.attachments || []).some((a) => a.file === f)));
+    const placed = DB.docs.filter((d) => d.fromTask === key && d.folder !== path && (d.attachments || []).some((a) => files.has(a.file)));
+    return { loose, placed };
+  },
+  setFileTo(t, path) {
+    for (const x of this.copiesOf(t)) Series.quietly(x, 'fileTo', path || ''); // not a change to a copy (unticking can still tidy it)
+    changed('tasks');
+  },
+  // Move them: files not yet in the Vault become plain files there; ones it put elsewhere in the Vault move over.
+  moveTaskFiles(t, path) {
+    const { loose, placed } = this.toMove(t, path);
+    for (const f of loose) {
+      const x = this.copiesOf(t).find((c) => c.attachments.some((a) => a.file === f));
+      this.fileTask(x, x.attachments.find((a) => a.file === f));
+    }
+    for (const d of placed) d.folder = path;
+    for (const x of this.copiesOf(t)) for (const a of x.attachments) if (DB.docs.some((d) => (d.attachments || []).some((b) => b.file === a.file))) a.vault = true;
+    changed('docs', 'tasks');
+    return loose.length + placed.length;
+  },
   // A folder something was put in stays after it's emptied.
   keepFolder(top, path) {
     if (!path || DB.folders.some((f) => f.area === 'vault' && f.top === top && f.path === path)) return;
@@ -3212,6 +3254,12 @@ const Files = {
     if (key === 'tasks' && this.seriesOf(rec)) return this.join(top, this.seriesDir(rec, this.personDir(this.people(rec, key))));
     return top;
   },
+  // Where a new file for this record is saved: its folder, or for a task whose files go to the Vault, that Vault folder
+  // (the file then shows there as a plain file, which is what keeps it there: see Vault.fileTask).
+  saveFolder(rec, key) {
+    if (key === 'tasks' && rec.fileTo) return this.join(this.personDir(this.people(rec, key)), 'Vault', ...String(rec.fileTo).split('/').filter(Boolean).map((p) => this.dirName(p)));
+    return this.folderOf(rec, key);
+  },
   // A repeating task's copies share a folder under Tasks, named after it (renaming the series renames every copy, so
   // the files follow). A later series with the same name in the same place gets "(2)" and on.
   seriesOf(t) { return t.seriesId || (t.repeat ? t.id : ''); },
@@ -3323,12 +3371,13 @@ const AT = {
     let added = 0;
     for (const f of files) {
       try {
-        const stored = await this.freePath(Files.folderOf(task, key), safeFileName(this.suggestName(task, f.name))); // never overwrite an existing file
+        const stored = await this.freePath(Files.saveFolder(task, key), safeFileName(this.suggestName(task, f.name))); // never overwrite an existing file
         const w = await (await this.handle(stored, true)).createWritable();
         await w.write(f);
         await w.close();
         // New attachments belong to this copy only; 📌 makes one carry over to every repeat.
         task.attachments.push({ id: uid(), name: Files.base(stored), file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        if (key === 'tasks') Vault.fileTask(task, task.attachments[task.attachments.length - 1]);
         added++;
       } catch (e) {
         toast(`Could not attach ${f.name}: ${e.message}`);
@@ -4978,7 +5027,26 @@ function attachBlock(t) {
     ${state.phone && t.attachments.length && !OD.canRead() ? '<p class="p-sub meta">Sign in to OneDrive to open these.</p>' : ''}
     ${state.phone && !t.attachments.length ? '<div class="p-row"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-paperclip"/></svg></span><span class="p-text muted">No files</span></div>' : ''}
     ${action}
-    ${vaultPick(t, 'tasks') ? `<div class="p-row"><span class="p-ico">${ic('id')}</span>${vaultPick(t, 'tasks')}</div>` : ''}`;
+    ${vaultPick(t, 'tasks') ? `<div class="p-row"><span class="p-ico">${ic('id')}</span>${vaultPick(t, 'tasks')}</div>` : ''}
+    ${fileToRow(t)}`;
+}
+// Where this task's files go: its Tasks folder, or a Vault folder (they then show in the Vault too).
+function fileToRow(t) {
+  if (state.readOnly) return t.fileTo ? `<p class="p-sub meta">Files go to Vault › ${esc(t.fileTo.split('/').join(' › '))}</p>` : '';
+  const paths = [...new Set([...Vault.paths(Vault.topOf(t)), ...(t.fileTo ? [t.fileTo] : [])])].sort((a, b) => a.localeCompare(b));
+  return `<div class="p-row edit-only file-to"><span class="p-ico">${ic('folder')}</span><label class="p-text">Files go to <select class="input" data-file-to aria-label="Where this task's files go"><option value="">Tasks</option>${paths.map((p) => `<option value="${esc(p)}" ${p === t.fileTo ? 'selected' : ''}>Vault › ${esc(p.split('/').join(' › '))}</option>`).join('')}${paths.length ? '' : '<option value="" disabled>(make a folder in the Vault to choose it)</option>'}</select></label></div>`;
+}
+async function taskFileTo(t, path) {
+  if (!t || state.readOnly || (t.fileTo || '') === path) return;
+  const was = t.fileTo || '';
+  Vault.setFileTo(t, path);
+  if (!path) { toast(`New files go to Tasks. The ones already in Vault › ${was.split('/').join(' › ')} stay there`); renderDrawer(); return; }
+  const { loose, placed } = Vault.toMove(t, path);
+  const n = loose.length + placed.length;
+  if (n && (await ask(`Move the ${plural(n, 'file')} already on this task into Vault › ${path.split('/').join(' › ')}?`, { yes: 'Move them' }))) Vault.moveTaskFiles(t, path);
+  toast(`New files on this task go to Vault › ${path.split('/').join(' › ')}`);
+  render();
+  renderDrawer();
 }
 
 // Every other copy of a repeating task, newest first: when it was due and done, its notes and its own files
@@ -8235,13 +8303,14 @@ const OD = Object.assign(Object.create(TD), {
     let added = 0;
     for (const f of files) {
       try {
-        const folder = Files.folderOf(task, key);
+        const folder = Files.saveFolder(task, key);
         const wanted = safeFileName(AT.suggestName(task, f.name));
         if (!quiet) toast(`Uploading ${f.name}…`);
         // OneDrive makes the folders on the way when they aren't there yet.
         const saved = await this.graph('PUT', `${this.filePath(Files.join(folder, wanted))}/content?@microsoft.graph.conflictBehavior=rename`, f);
         const stored = (saved && saved.name) || wanted;
         task.attachments.push({ id: uid(), name: stored, file: Files.join(folder, stored), original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        if (key === 'tasks') Vault.fileTask(task, task.attachments[task.attachments.length - 1]);
         added++;
       } catch (e) {
         toast(e && e.name === 'TypeError' ? `Could not attach ${f.name}: no connection` : `Could not attach ${f.name}: ${e.message}`);
@@ -9358,6 +9427,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-doc-track]')) { $('#modal').querySelectorAll('.doc-full').forEach((x) => { x.style.display = e.target.checked ? '' : 'none'; }); return; }
+  if (e.target.matches?.('[data-file-to]') && !state.readOnly) { taskFileTo(currentTask(), e.target.value); return; }
   if (e.target.matches?.('[data-vault-link]') && !state.readOnly) {
     const [docId, attId] = e.target.value.split(':');
     const key = e.target.dataset.key;
