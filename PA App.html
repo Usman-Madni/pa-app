@@ -3209,7 +3209,25 @@ const Files = {
     if (key === 'assets') return this.join(top, this.dirName(Assets.kind(rec.kind).name), rec.kind === 'vehicle' ? this.dirName(rec.name) : '');
     if (key === 'upkeep') { const a = DB.assets.find((x) => x.id === rec.asset); return this.join(top, a ? this.dirName(a.name) : 'Store'); }
     if (key === 'docs') return this.join(top, ...String(rec.folder || '').split('/').filter(Boolean).map((p) => this.dirName(p)));
+    if (key === 'tasks' && this.seriesOf(rec)) return this.join(top, this.seriesDir(rec, this.personDir(this.people(rec, key))));
     return top;
+  },
+  // A repeating task's copies share a folder under Tasks, named after it (renaming the series renames every copy, so
+  // the files follow). A later series with the same name in the same place gets "(2)" and on.
+  seriesOf(t) { return t.seriesId || (t.repeat ? t.id : ''); },
+  seriesDir(t, person) {
+    const key = this.seriesOf(t);
+    const name = this.dirName(t.title);
+    const first = new Map();
+    for (const x of DB.tasks) {
+      const k = this.seriesOf(x);
+      if (!k || this.dirName(x.title) !== name || this.personDir(this.people(x, 'tasks')) !== person) continue;
+      first.set(k, Math.min(first.has(k) ? first.get(k) : Infinity, x.created || 0));
+    }
+    if (!first.has(key)) first.set(key, t.created || 0);
+    const order = [...first].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([k]) => k);
+    const i = order.indexOf(key);
+    return i > 0 ? `${name} (${i + 1})` : name;
   },
   // Where a file belongs: with the first record (in KEYS order) that uses it. Null when nothing does.
   home(path) {

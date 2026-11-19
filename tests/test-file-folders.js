@@ -60,6 +60,27 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(rt.attachments[0].file.startsWith('Robin Hood/Tasks/') && doc1.attachments[0].file === 'Robin Hood/Vault/Passport 2026.pdf' && !folder.dirs.Robin, 'renaming a person renames their folder (the files move, the old folder goes)');
   check(doc1.attachments[0].name === 'Passport 2026.pdf', 'the name shown is the file\'s own name');
 
+  // --- Repeating tasks: a folder each, under Tasks ---
+  const TaskEdit = PA.TaskEdit;
+  const rep = PA.addTask({ title: 'Elec bill', due: '2026-11-05T23:59' });
+  TaskEdit.setRepeat(rep, { freq: 'monthly', interval: 1 });
+  changed('tasks');
+  await PA.AT.add(rep, [file('e.pdf')]);
+  check(rep.attachments[0].file === 'Me/Tasks/Elec bill/Elec bill 2026.pdf', 'a repeating task\'s files go in its own folder under Tasks');
+  rep.attachments[0].keep = true;
+  const next = PA.Series.tick(rep).next;
+  await PA.AT.add(next, [file('f.pdf')]);
+  check(next.attachments.every((a) => a.file.startsWith('Me/Tasks/Elec bill/')), 'the next copy uses the same folder');
+  const other = PA.addTask({ title: 'Elec bill', due: '2026-11-07T23:59' });
+  TaskEdit.setRepeat(other, { freq: 'monthly', interval: 1 });
+  await PA.AT.add(other, [file('g.pdf')]);
+  check(other.attachments[0].file.startsWith('Me/Tasks/Elec bill (2)/'), 'a second repeating task with the same name: "Elec bill (2)"');
+  TaskEdit.rename(next, 'Electricity');
+  changed('tasks');
+  await tick(40);
+  check(rep.attachments[0].file === 'Me/Tasks/Electricity/Elec bill 2026.pdf' && next.attachments.every((a) => a.file.startsWith('Me/Tasks/Electricity/')) && folder.at(rep.attachments[0].file) && folder.paths().filter((p) => p.startsWith('Me/Tasks/Elec bill/')).length === 1, 'renaming the series renames its folder (the files move)');
+  check(other.attachments[0].file.startsWith('Me/Tasks/Elec bill/') && !folder.dirs.Me.dirs.Tasks.dirs['Elec bill (2)'], 'and the other one, now the only "Elec bill", drops its "(2)" (that folder goes)');
+
   // --- Files from before folders: only the button moves them, after asking ---
   await folder.getFileHandle('old bill.pdf', { create: true });
   await folder.getFileHandle('licence.pdf', { create: true });

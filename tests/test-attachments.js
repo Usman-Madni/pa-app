@@ -8,6 +8,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   const app = loadApp({ pickFolder: folder, pickFile: dataFile, storage: { dev_taskLayout: '"list"' } });
   const { win, doc, PA } = app;
   await PA.DF.createNew();
+  PA.AT.SETTLE_MS = 600000; // files following their task to its folder: test-file-folders (not mid-way through this one)
   const opened = [];
   win.open = (url) => { opened.push(url); };
   win.URL.createObjectURL = (f) => { opened.push(f); return 'blob:fake'; };
