@@ -1515,6 +1515,7 @@ const Zakat = {
     const r = Assets.ratesOn(date);
     const back = (n) => toISO(addDays(parseISO(date), -n));
     if (!r) out.push('No rates on or before this day');
+    else if (r.auto) out.push(`The rates of ${fmtDate(r.date)} are automatic world prices, not the sarafa rate`);
     else if (r.date < back(3)) out.push(`The latest rates are from ${fmtDate(r.date)}`);
     for (const a of DB.assets) {
       if (Assets.metal(a) || !Assets.zakatable(a) || !Assets.held(a, date) || !(Assets.shareOf(a, person, date) > 0)) continue;
@@ -1722,6 +1723,48 @@ const Vault = {
   openTasks(d) { return DB.tasks.filter((x) => x.id.startsWith(`doc-renew-${d.id}-`) && !x.done); },
 };
 function vaultTasks() { if (Vault.ensureTasks()) changed('tasks'); }
+
+// ===================== Automatic rates =====================
+// Once a day, on a device that can edit, a day with no rates gets the world prices as a fill-in (`auto: true`): gold
+// and silver in dollars an ounce (gold-api.com) and the dollar in rupees (open.er-api.com), turned into rupees a tola
+// (11.7 g; 22K, 21K and 18K by their share of gold) and a rupee rate for each currency in use. Only prices are asked
+// for: nothing about you is sent. They fill the days between the sarafa rates you type, for the charts; a rate typed
+// for that day replaces the fill-in, and a zakat record warns when its day has only a fill-in. Off in Settings.
+const AutoRates = {
+  GOLD: 'https://api.gold-api.com/price/XAU',
+  SILVER: 'https://api.gold-api.com/price/XAG',
+  FX: 'https://open.er-api.com/v6/latest/USD',
+  OZ_G: 31.1034768,
+  on() { return device.get('autoRates', true); },
+  // From the three answers, a day's rates (null if anything needed is missing).
+  rates(goldUsd, silverUsd, fx) {
+    const pkr = Number(fx?.rates?.PKR);
+    if (!(goldUsd > 0) || !(silverUsd > 0) || !(pkr > 0)) return null;
+    const tola = (perOz) => Math.round((perOz / this.OZ_G) * TOLA_G * pkr);
+    const gold = Object.fromEntries(KARATS.map((k) => [k, Math.round(tola(goldUsd) * (Number(k) / 24))]));
+    const out = {};
+    for (const c of new Set(['USD', ...Assets.foreign()])) if (c !== 'PKR' && Number(fx.rates[c]) > 0) out[c] = Math.round((pkr / Number(fx.rates[c])) * 100) / 100;
+    return { gold, silver: tola(silverUsd), fx: out };
+  },
+  async fill(now = new Date()) {
+    const day = toISO(now);
+    if (state.readOnly || !this.on() || typeof fetch !== 'function' || device.get('autoRatesDay', '') === day) return false;
+    if (DB.rates.some((r) => r.date === day)) { device.set('autoRatesDay', day); return false; } // typed (or filled) already
+    let r;
+    try {
+      const [g, sv, fx] = await Promise.all([this.GOLD, this.SILVER, this.FX].map((u) => fetch(u).then((x) => (x.ok ? x.json() : null))));
+      r = this.rates(Number(g?.price), Number(sv?.price), fx);
+    } catch { return false; } // no connection: next time
+    if (!r || state.readOnly || DB.rates.some((x) => x.date === day)) return false;
+    const e = Assets.setRates({ date: day, ...r });
+    e.id = `auto-${day}`; // the same on both devices, so a merge keeps one
+    e.auto = true;
+    changed('rates');
+    device.set('autoRatesDay', day);
+    return true;
+  },
+};
+function autoRates() { AutoRates.fill().then((done) => { if (done) render(); }); }
 
 // ===================== Butler's own tasks =====================
 // The tasks Butler makes (zakat, Vault renewals, upkeep jobs) go in one bucket: the one marked for them (`butler: true`
@@ -5553,7 +5596,7 @@ function ratesTab() {
   const rows = list.map((r) => `
     <li class="item">
       <span class="tl-mark">${ic('coins')}</span>
-      <div class="body clickable" data-action="asset-form" data-form-type="rates" data-id="${esc(r.id)}" title="Change these rates"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDate(r.date))})</span></div><div class="meta rate-line">
+      <div class="body clickable" data-action="asset-form" data-form-type="rates" data-id="${esc(r.id)}" title="Change these rates"><div class="title">${esc(Hijri.textOf(r.date))} <span class="meta">(${esc(fmtDate(r.date))})</span>${r.auto ? ' <span class="pill" title="World prices, filled in by Butler">Automatic</span>' : ''}</div><div class="meta rate-line">
         ${KARATS.filter((k) => Number(r.gold?.[k])).map((k) => `<span>${k}K ${rupees(r.gold[k])}</span>`).join('')}
         ${Number(r.silver) ? `<span>Silver ${rupees(r.silver)}</span>` : ''}
         ${fx(r).map((s) => `<span>${s}</span>`).join('')}
@@ -5561,6 +5604,7 @@ function ratesTab() {
       <button class="icon-btn edit-only" data-action="delete-rates" data-id="${esc(r.id)}" title="Delete these rates" aria-label="Delete the rates of ${esc(fmtDate(r.date))}">${ic('x')}</button>
     </li>`).join('');
   return `<p class="sub">Gold and silver in rupees per tola (11.7 g); other currencies in rupees for one. Each value uses the latest rates on or before its day.</p>
+    <label class="check-line" style="margin-bottom:10px"><input type="checkbox" data-auto-rates ${AutoRates.on() ? 'checked' : ''}> Fill in each day's rates automatically <span class="meta">(world prices, marked Automatic; a rate you type for a day replaces it; this device)</span></label>
     <div class="card"><ul class="list">${rows || '<li class="empty">No rates yet</li>'}</ul></div>`;
 }
 
@@ -8911,6 +8955,7 @@ document.addEventListener('change', (e) => {
     } else device.set(`list-${id}`, { ...pref, sort: e.target.value });
     return render();
   }
+  if (e.target.matches?.('[data-auto-rates]')) { device.set('autoRates', e.target.checked); if (e.target.checked) { device.remove('autoRatesDay'); autoRates(); } return; }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
   if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
@@ -8956,6 +9001,7 @@ else {
   zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   vaultTasks(); // a renew task for each document that expires
   upkeepTasks(); // a task for each repeating upkeep job
+  autoRates(); // today's world prices, if no rate is typed yet
   ButlerTasks.placeOld(); // tasks made before they had a bucket go in it
   render();
   if (state.phone) {
@@ -8973,7 +9019,7 @@ else {
   AT.init();
   checkReminders();
   setInterval(checkReminders, 20000);
-  setInterval(() => { zakatTasks(); vaultTasks(); upkeepTasks(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
+  setInterval(() => { zakatTasks(); vaultTasks(); upkeepTasks(); autoRates(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
   setInterval(() => TD.sync(), TD.SYNC_MS);

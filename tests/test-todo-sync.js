@@ -18,6 +18,7 @@ function fakeMicrosoft() {
       g.n++;
       return reply(200, { access_token: `tok${g.n}`, expires_in: 3600, refresh_token: `ref${g.n}` });
     }
+    if (!url.startsWith('https://graph.microsoft.com/')) return reply(503, {}); // not Microsoft (e.g. the day's world prices): no answer here
     const body = opts.body ? JSON.parse(opts.body) : null;
     g.calls.push({ method, url, body, auth: (opts.headers || {}).Authorization });
     const path = url.replace('https://graph.microsoft.com/v1.0', '').split('?')[0];
