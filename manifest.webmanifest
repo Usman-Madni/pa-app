@@ -1,0 +1,14 @@
+{
+  "name": "Butler",
+  "short_name": "Butler",
+  "description": "Tasks, reminders, notes, a calendar, assets, zakat, vehicles and writing, in one place.",
+  "start_url": "PA%20App.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f3ec",
+  "theme_color": "#0f5c57",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

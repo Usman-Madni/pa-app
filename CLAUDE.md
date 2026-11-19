@@ -7,7 +7,7 @@ Background, data model and past decisions: **read `PA_APP_CONTEXT.md` before cha
 Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This repo is public**: nothing personal goes in tracked files or commit messages.
 
 ## Building
-- Keep the app one self-contained file. **Ask first** before renaming it, splitting it, adding a build step or a runtime dependency, or changing the shape of stored data (`pa_*` keys or the data file).
+- Keep the app one self-contained file. Beside it sit only the files that make it installable and open offline (`manifest.webmanifest`, `sw.js`, `icon.svg`, `icon-maskable.svg`; agreed 19 Nov); a new file in `sw.js`'s list must exist. **Ask first** before renaming it, splitting it further, adding a build step or a runtime dependency, or changing the shape of stored data (`pa_*` keys or the data file).
 - **Dates:** use `toISO(date)` (local `YYYY-MM-DD`). Never slice `.toISOString()` into a date, because it's UTC and shifts the day in any timezone ahead of or behind UTC. `toISOString()` is only for exact instants such as `savedAt`.
 - **Two kinds of storage.** Shared data (`pa_tasks`, `pa_notes`, `pa_events`, `pa_buckets`, `pa_labels`, `pa_notices`, `pa_trash`, `pa_people`, `pa_assets`, `pa_rates`, `pa_zakat`, `pa_zakatPay`, `pa_docs`, `pa_hijriFix`, `pa_upkeep`, `pa_musings`) goes in the data file.
 - **Deleting tasks and notes goes through `PendingDelete`** (Undo, then the record moves to the `Trash` for 30 days). Don't filter `DB.tasks` or `DB.notes` directly to delete. Assets, documents, rates, zakat records and payments go through `Trash.discard` (into the Trash at once, with Undo; no question). Per-device settings (`dev_*`: theme, view, device name, save bookkeeping) never do.

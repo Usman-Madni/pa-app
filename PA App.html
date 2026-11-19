@@ -8,6 +8,9 @@
 <meta name="theme-color" content="#f7f3ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1b1a17" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%230f5c57'/><text x='16' y='23' text-anchor='middle' font-family='Georgia,serif' font-size='20' fill='%23fbf8f2'>B</text></svg>">
+<!-- Installable as an app that opens offline: its description and icons, and sw.js (the offline copy) beside this file -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
 <style>
 /* Fonts, built in so the app stays one file and works offline (both SIL Open Font License 1.1, from Google Fonts):
    Instrument Sans (text, variable 400-700) and Newsreader (page titles, 500). Latin only. */
@@ -9003,6 +9006,8 @@ else {
   upkeepTasks(); // a task for each repeating upkeep job
   autoRates(); // today's world prices, if no rate is typed yet
   ButlerTasks.placeOld(); // tasks made before they had a bucket go in it
+  // The offline copy (sw.js), where the browser allows one: the live site, or this computer's test server.
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { /* opens online only */ });
   render();
   if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
