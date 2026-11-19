@@ -287,6 +287,8 @@ button:disabled { cursor: not-allowed; }
 .check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
 .vault-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .vault-actions { margin-bottom: 10px; flex-wrap: wrap; }
+.vault-pick { width: auto; max-width: 100%; min-width: 0; flex: 1 1 160px; }
+.vault-mark { display: inline-flex; align-items: center; margin-right: 4px; }
 .asset-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-md); object-fit: cover; background: var(--panel-2); }
 .thumb-btn { flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--panel-2); cursor: zoom-in; }
 .thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -3332,6 +3334,17 @@ const AT = {
     return `${task.period || /\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
   },
 
+  // A file from the Vault on another record: the same file, pointed to (nothing copied). `vault: true` marks it.
+  link(r, key, att) {
+    if (state.readOnly || !r || !att) return false;
+    if (!Array.isArray(r.attachments)) r.attachments = [];
+    if (r.attachments.some((a) => a.file === att.file)) { toast(`"${att.name}" is already here`); return false; }
+    r.attachments.push({ id: uid(), name: att.name, file: att.file, original: att.original || att.name, size: att.size || 0, type: att.type || '', added: Date.now(), keep: false, vault: true });
+    changed(key);
+    toast(`Attached "${att.name}" from the Vault`);
+    return true;
+  },
+
   // Rename an attachment and its real file. A 📌 kept file is shared by every repeat, so they all
   // follow; a this-one-only file changes for this task alone (if an older copy still shares it,
   // this task gets its own renamed copy and the other keeps the old name).
@@ -3486,7 +3499,8 @@ const AT = {
   async remove(task, attId, key = 'tasks') {
     const att = task && (task.attachments || []).find((a) => a.id === attId);
     if (!att || state.readOnly) return;
-    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset', upkeep: 'entry', musings: 'piece' }[key]}?`, { yes: 'Remove', danger: true }))) return;
+    const inVault = key !== 'docs' && DB.docs.some((d) => (d.attachments || []).some((a) => a.file === att.file));
+    if (!(await ask(`Remove "${att.name}" from this ${{ tasks: 'task', docs: 'document', assets: 'asset', upkeep: 'entry', musings: 'piece' }[key]}?${inVault ? ' It stays in the Vault.' : ''}`, { yes: 'Remove', danger: true }))) return;
     task.attachments = task.attachments.filter((a) => a !== att);
     changed(key);
     if (state.assetForm) renderAssetForm();
@@ -4899,13 +4913,33 @@ function reminderBlock(t) {
     ${custom}`;
 }
 
+// "From Vault": a file already in the Vault, attached by pointing to it (the same file; nothing is copied), so renaming
+// it anywhere renames it everywhere and removing it here leaves it in the Vault. Grouped by person and folder; files
+// this record already has are left out. Empty when there's nothing to pick.
+function vaultPick(r, key) {
+  if (!r || state.readOnly || key === 'docs') return '';
+  const have = new Set((r.attachments || []).map((a) => a.file));
+  const groups = new Map();
+  for (const d of DB.docs.filter((x) => People.shows(x))) {
+    for (const a of d.attachments || []) {
+      if (have.has(a.file)) continue;
+      const top = Vault.topOf(d);
+      const g = [People.several() || top === 'shared' ? Vault.topName(top) : '', ...String(d.folder || '').split('/')].filter(Boolean).join(' › ') || 'Vault';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(`<option value="${esc(d.id)}:${esc(a.id)}">${esc(d.plain ? a.name : `${d.name}: ${a.name}`)}</option>`);
+    }
+  }
+  if (!groups.size) return '';
+  return `<select class="input vault-pick edit-only" data-vault-link data-key="${key}" data-rec="${esc(r.id)}" aria-label="Attach a file from the Vault"><option value="">From Vault…</option>${[...groups].sort(([x], [y]) => x.localeCompare(y)).map(([g, opts]) => `<optgroup label="${esc(g)}">${opts.join('')}</optgroup>`).join('')}</select>`;
+}
+const fromVaultMark = (a) => (a.vault ? `<span class="meta vault-mark" title="From the Vault">${ic('id', 'sm')}</span>` : '');
 function attachBlock(t) {
   const repeating = !!(t.repeat || t.seriesId);
   const list = t.attachments.map((a) => `
     <div class="p-row">
       <span class="p-ico">${fileIcon(a)}</span>
       <a href="#" role="button" class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</a><!-- a link still works when read-only disables the panel -->
-      <span class="meta">${fmtSize(a.size)}</span>
+      ${fromVaultMark(a)}<span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
         title="${a.keep ? 'Kept on every repeat: click to keep it with this one only' : 'This one only: click to keep it on every repeat'}" aria-pressed="${!!a.keep}" aria-label="Keep on every repeat">${ic('pin')}</button>` : ''}
       <button class="icon-btn edit-only" data-action="rename-attach" data-att="${esc(a.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
@@ -4925,7 +4959,8 @@ function attachBlock(t) {
     ${repeating && t.attachments.length ? '<p class="p-sub meta"><svg class="i sm" aria-hidden="true"><use href="#i-pin"/></svg> = kept on every repeat (e.g. account details). Others stay with this one only (e.g. this month\'s bill).</p>' : ''}
     ${state.phone && t.attachments.length && !OD.canRead() ? '<p class="p-sub meta">Sign in to OneDrive to open these.</p>' : ''}
     ${state.phone && !t.attachments.length ? '<div class="p-row"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-paperclip"/></svg></span><span class="p-text muted">No files</span></div>' : ''}
-    ${action}`;
+    ${action}
+    ${vaultPick(t, 'tasks') ? `<div class="p-row"><span class="p-ico">${ic('id')}</span>${vaultPick(t, 'tasks')}</div>` : ''}`;
 }
 
 // Every other copy of a repeating task, newest first: when it was due and done, its notes and its own files
@@ -6522,10 +6557,10 @@ function filesBlock(r, key) {
   const where = state.phone ? 'OneDrive' : AT.status === 'ok' ? 'the attachments folder' : '';
   return `
     <div class="value-history"><div class="meta">${key === 'docs' ? 'Scans and files' : 'Photos and files'}</div>
-      ${files.map((a) => `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="${key}" data-att="${esc(a.id)}">${fileIcon(a)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><button type="button" class="icon-btn edit-only" data-action="rec-file-remove" data-key="${key}" data-att="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">${ic('x', 'sm')}</button></div>`).join('')}
+      ${files.map((a) => `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="${key}" data-att="${esc(a.id)}">${fileIcon(a)} ${esc(a.name)}</button><span class="meta">${fromVaultMark(a)}${fmtSize(a.size)}</span><button type="button" class="icon-btn edit-only" data-action="rec-file-remove" data-key="${key}" data-att="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">${ic('x', 'sm')}</button></div>`).join('')}
       ${!r ? '<p class="meta" style="margin:0">Save it first, then add files.</p>'
         : !where && !state.phone ? '<p class="meta" style="margin:0">Choose the attachments folder in Settings to add files.</p>'
-          : `<div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add file<input type="file" multiple data-input="rec-attach" data-key="${key}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="rec-attach" data-key="${key}" hidden></label>` : ''}</div>`}
+          : `<div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add file<input type="file" multiple data-input="rec-attach" data-key="${key}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="rec-attach" data-key="${key}" hidden></label>` : ''}${vaultPick(r, key)}</div>`}
     </div>`;
 }
 
@@ -9305,6 +9340,15 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-doc-track]')) { $('#modal').querySelectorAll('.doc-full').forEach((x) => { x.style.display = e.target.checked ? '' : 'none'; }); return; }
+  if (e.target.matches?.('[data-vault-link]') && !state.readOnly) {
+    const [docId, attId] = e.target.value.split(':');
+    const key = e.target.dataset.key;
+    const r = DB[key] && DB[key].find((x) => x.id === e.target.dataset.rec);
+    const d = DB.docs.find((x) => x.id === docId);
+    if (r && d && AT.link(r, key, (d.attachments || []).find((a) => a.id === attId))) { render(); renderDrawer(); if (state.assetForm) renderAssetForm(); }
+    else e.target.value = '';
+    return;
+  }
   if (e.target.dataset?.input === 'vault-files' && !state.readOnly) {
     const files = [...(e.target.files || [])];
     const { top, path } = e.target.dataset;
