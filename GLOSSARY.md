@@ -121,6 +121,13 @@ _Avoid_: post, entry, note (a note is quick, a piece is written)
 A paper kept in the vault (an ID card, a passport, a deed, an insurance policy), with its number, dates and scans. It can belong to assets.
 _Avoid_: file (a file is a scan attached to it), record
 
+**Plain file**:
+A file kept in the vault on its own (a bill, an agreement), under its own name, with no dates. It can become a document later.
+_Avoid_: attachment (that's a file on a record)
+
+**Folder**:
+Where a document or plain file sits in its person's vault (Shared when it's on more than one person); the same folders are in the attachments folder.
+
 **Renew task**:
 The task a document that expires gets, a chosen time before its expiry. Typing the new expiry date ticks it and makes the next.
 
