@@ -77,6 +77,22 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   check([...doc.querySelectorAll('#main .list-group b')].map((b) => b.textContent).sort().join() === 'Letters,Poems', 'grouped by collection');
   check(win.eval('Search').run('storm').musings.length === 1, 'search finds a piece by its words');
 
+  // Picture names: an untitled piece's, then renamed to the title on Done
+  doc.querySelector('#main [data-action="musing-new"]').click();
+  const u = M.get(PA.state.musing);
+  const pin = doc.querySelector('[data-input="musing-pics"]');
+  Object.defineProperty(pin, 'files', { value: [new win.File(['p'], 'IMG_1.jpg', { type: 'image/jpeg' })], configurable: true });
+  pin.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick(20);
+  const pic = u.attachments[0];
+  check(pic && /^Untitled piece \d{4}\.jpg$/.test(pic.file), 'a picture added before there\'s a title is named "Untitled piece"');
+  const old = pic.file;
+  type(doc.querySelector('[data-musing-field="title"]'), 'Morning walk');
+  doc.querySelector('#main [data-action="musing-done"]').click();
+  await tick(30);
+  check(/^Morning walk \d{4}\.jpg$/.test(pic.file) && folder.files[pic.file] && !folder.files[old], 'on Done its pictures take the title, and the file is renamed too');
+  doc.querySelector('#main [data-action="musing-close"]').click();
+
   // Delete
   win.eval('PendingDelete').UNDO_MS = 30;
   doc.querySelector('#main [data-action="musing-open"]').click();

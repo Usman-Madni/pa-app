@@ -3114,8 +3114,9 @@ const AT = {
   suggestName(task, original) {
     const dot = original.lastIndexOf('.');
     const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
-    const year = (task.due ? task.due.slice(0, 4) : String(new Date().getFullYear()));
-    const base = `${shortName(task.title || task.name || task.item || 'Attachment', 85) || 'Attachment'}${task.period ? ` ${task.period}` : ''}`;
+    const year = (task.due ? task.due.slice(0, 4) : task.written ? task.written.slice(0, 4) : String(new Date().getFullYear()));
+    const none = 'cover' in task ? 'Untitled piece' : 'Attachment'; // a piece in Musings with no title yet
+    const base = `${shortName(task.title || task.name || task.item || none, 85) || none}${task.period ? ` ${task.period}` : ''}`;
     return `${task.period || /\b(19|20)\d{2}\b/.test(base) ? base : `${base} ${year}`}${ext}`;
   },
 
@@ -5966,6 +5967,29 @@ const Musings = {
   cover(m) { return (m.attachments || []).find((a) => a.id === m.cover) || null; },
   gallery(m) { return (m.attachments || []).filter((a) => a.id !== m.cover && isImage(a)); },
   collections() { return [...new Set(DB.musings.flatMap((m) => m.collections || []))].sort((x, y) => x.localeCompare(y)); },
+  // A piece's pictures named after its title ("Rain on the roof 2026.jpg"), the real files renamed too (in the
+  // attachments folder, or OneDrive on the phone). Pictures already named so are left alone. Returns how many.
+  async renamePictures(m) {
+    if (state.readOnly || !m.title.trim()) return 0;
+    const want = safeFileName(AT.suggestName(m, 'x.jpg')).replace(/\.jpg$/, '');
+    let n = 0;
+    for (const a of m.attachments || []) {
+      if (a.file.startsWith(want)) continue;
+      const dot = a.file.lastIndexOf('.');
+      const ext = dot > 0 ? a.file.slice(dot) : '';
+      let target = null;
+      try {
+        if (state.phone) target = await OD.renameFile(a.file, want, ext);
+        else if (AT.status === 'ok') { target = await AT.uniqueName(`${want}${ext}`); await AT.moveFile(a.file, target); }
+      } catch { target = null; }
+      if (!target) continue;
+      a.file = target;
+      a.name = target;
+      n++;
+    }
+    if (n) changed('musings');
+    return n;
+  },
 };
 // The text's few kinds of formatting, as typed: "# " a heading, "## " a smaller one, "> " a quote, "- " a list, a
 // blank line between paragraphs, **bold** and *italics*. Everything else is shown as it is.
@@ -8236,7 +8260,15 @@ document.addEventListener('click', (e) => {
     case 'musing-open': state.musing = id; state.musingEdit = false; setView('musings'); break;
     case 'musing-close': state.musing = null; state.musingEdit = false; render(); break;
     case 'musing-edit': state.musingEdit = true; render(); break;
-    case 'musing-done': musingSave(); state.musingEdit = false; render(); try { window.scrollTo(0, 0); } catch { /* tests */ } break;
+    case 'musing-done': {
+      musingSave();
+      state.musingEdit = false;
+      render();
+      try { window.scrollTo(0, 0); } catch { /* tests */ }
+      const m = Musings.get(state.musing);
+      if (m) Musings.renamePictures(m).then((n) => { if (n) { toast(`Renamed ${plural(n, 'picture')} to "${m.title}"`); render(); } });
+      break;
+    }
     case 'musing-print': window.print(); break;
     case 'musing-view': { const m = Musings.get(id); if (!m) break; const pics = [Musings.cover(m), ...Musings.gallery(m)].filter(Boolean); Viewer.open(pics, Math.max(0, pics.findIndex((a) => a.id === btn.dataset.att))); break; }
     case 'musing-cover-off': { const m = Musings.get(state.musing); if (m) { m.cover = ''; changed('musings'); render(); } break; }
