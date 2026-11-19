@@ -39,7 +39,7 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   Object.defineProperty(coverIn, 'files', { value: [new win.File(['c'], 'cover.jpg', { type: 'image/jpeg' })], configurable: true });
   coverIn.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(20);
-  check(m.cover && M.cover(m).original === 'cover.jpg' && folder.files[M.cover(m).file], 'a cover picture is kept in the attachments folder');
+  check(m.cover && M.cover(m).original === 'cover.jpg' && folder.at(M.cover(m).file) && M.cover(m).file.startsWith('Me/Musings/'), 'a cover picture is kept in the attachments folder (your Musings folder)');
   const picsIn = doc.querySelector('[data-input="musing-pics"]');
   Object.defineProperty(picsIn, 'files', { value: [new win.File(['1'], 'a.jpg', { type: 'image/jpeg' }), new win.File(['2'], 'b.jpg', { type: 'image/jpeg' })], configurable: true });
   picsIn.dispatchEvent(new win.Event('change', { bubbles: true }));
@@ -85,12 +85,12 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   pin.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(20);
   const pic = u.attachments[0];
-  check(pic && /^Untitled piece \d{4}\.jpg$/.test(pic.file), 'a picture added before there\'s a title is named "Untitled piece"');
+  check(pic && /^Me\/Musings\/Untitled piece \d{4}\.jpg$/.test(pic.file), 'a picture added before there\'s a title is named "Untitled piece"');
   const old = pic.file;
   type(doc.querySelector('[data-musing-field="title"]'), 'Morning walk');
   doc.querySelector('#main [data-action="musing-done"]').click();
   await tick(30);
-  check(/^Morning walk \d{4}\.jpg$/.test(pic.file) && folder.files[pic.file] && !folder.files[old], 'on Done its pictures take the title, and the file is renamed too');
+  check(/^Me\/Musings\/Morning walk \d{4}\.jpg$/.test(pic.file) && pic.name === pic.file.split('/').pop() && folder.at(pic.file) && !folder.at(old), 'on Done its pictures take the title, and the file is renamed too');
   doc.querySelector('#main [data-action="musing-close"]').click();
 
   // Delete

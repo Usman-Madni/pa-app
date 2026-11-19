@@ -23,15 +23,16 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await tick(10);
   check(PA.AT.status === 'ok' && drawer().querySelector('[data-input="attach"]'), 'after choosing a folder, "Attach files" appears');
 
-  // Smart names, never overwriting
-  await folder.getFileHandle('Aug elec bill 2026.pdf', { create: true }); // already there
+  // Smart names, never overwriting; in your Tasks folder (test-file-folders has the rest)
+  const T = () => folder.dirs.Me.dirs.Tasks;
+  await (await (await folder.getDirectoryHandle('Me', { create: true })).getDirectoryHandle('Tasks', { create: true })).getFileHandle('Aug elec bill 2026.pdf', { create: true }); // already there
   const pdf = new win.File(['%PDF-1.4 fake'], 'scan0003.PDF', { type: 'application/pdf' });
   const photo = new win.File(['jpgdata'], 'IMG_2041.jpg', { type: 'image/jpeg' });
   await PA.AT.add(t, [pdf, photo]);
   const [a1, a2] = t.attachments;
-  check(a1.name === 'Aug elec bill 2026 (2).pdf' && a1.file === a1.name, 'named from the task (+ year), and never overwrites a file already there');
+  check(a1.name === 'Aug elec bill 2026 (2).pdf' && a1.file === `Me/Tasks/${a1.name}`, 'named from the task (+ year), and never overwrites a file already there');
   check(a2.name === 'Aug elec bill 2026.jpg' && a2.original === 'IMG_2041.jpg', 'photo named too; the original name is remembered');
-  check(folder.files[a1.file] && folder.files[a1.file].parts[0] === pdf, 'the file itself is copied into the folder');
+  check(folder.at(a1.file) && folder.at(a1.file).parts[0] === pdf, 'the file itself is copied into the folder');
   check(a1.keep === false && a2.keep === false, 'new attachments belong to this one only');
   check(doc.querySelector('#main [title="Attachments"] use[href="#i-paperclip"]') && doc.querySelector('#main [title="Attachments"]').textContent.trim() === '2', 'list shows a paperclip and 2');
 
@@ -52,14 +53,14 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   click(`#drawer [data-action="open-attach"][data-att="${a1.id}"]`);
   await tick(10);
   check(!doc.querySelector('#viewer') && opened.filter((x) => x === 'blob:fake').length === 2, 'other files open as before');
-  const keepCopy = folder.files[a2.file];
-  delete folder.files[a2.file];
+  const keepCopy = T().files[a2.name];
+  delete T().files[a2.name];
   win.eval('Viewer').open([a2]);
   click('#viewer [data-action="viewer-open"]');
   await tick(10);
   check(doc.querySelector('#toasts').textContent.includes('not in the attachments folder'), 'a missing file gives a clear message');
   win.eval('Viewer').close();
-  folder.files[a2.file] = keepCopy;
+  T().files[a2.name] = keepCopy;
 
   // Make it repeat; 📌 shows; keep the photo (say, the meter location) on every repeat
   t.repeat = { freq: 'monthly', interval: 1, days: [], monthMode: 'date', unit: 'days', until: '', anchorDay: 5 };
@@ -81,7 +82,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await answer(win, true, 'Meter photo');
   await tick(20);
   check(next.attachments[0].name === 'Meter photo.jpg' && t.attachments[1].name === 'Meter photo.jpg', 'renaming a 📌 file renames it in every copy');
-  check(folder.files['Meter photo.jpg'] && !folder.files['Aug elec bill 2026.jpg'], 'and renames the real file');
+  check(T().files['Meter photo.jpg'] && !T().files['Aug elec bill 2026.jpg'] && next.attachments[0].file === 'Me/Tasks/Meter photo.jpg', 'and renames the real file, in its folder');
 
   // Rename a this-one-only file → just this task, and the real file
   PA.state.openTask = t.id;
@@ -89,8 +90,8 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   click(`#drawer [data-action="rename-attach"][data-att="${a1.id}"]`);
   await answer(win, true, 'August electricity bill');
   await tick(20);
-  check(a1.name === 'August electricity bill.pdf' && folder.files['August electricity bill.pdf'] && !folder.files['Aug elec bill 2026 (2).pdf'], 'renaming a this-one-only file renames it and its real file');
-  check(folder.files['Aug elec bill 2026.pdf'], "someone else's file in the folder is untouched");
+  check(a1.name === 'August electricity bill.pdf' && T().files['August electricity bill.pdf'] && !T().files['Aug elec bill 2026 (2).pdf'], 'renaming a this-one-only file renames it and its real file');
+  check(T().files['Aug elec bill 2026.pdf'], "someone else's file in the folder is untouched");
 
   // An older shared (not 📌) file: renaming gives this task its own copy, the other keeps the old one
   const legacyA = PA.addTask({ title: 'Old A' });
@@ -105,11 +106,11 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   let removing = PA.AT.remove(next, next.attachments[0].id);
   check(/Remove "Meter photo\.jpg" from this task\?/.test(await answer(win, true)), 'removing asks first');
   await removing;
-  check(folder.files['Meter photo.jpg'], 'removing from one copy keeps the file while another copy uses it');
+  check(T().files['Meter photo.jpg'], 'removing from one copy keeps the file while another copy uses it');
   removing = PA.AT.remove(t, t.attachments[1].id);
   await answer(win, true);
   await removing;
-  check(!folder.files['Meter photo.jpg'], 'removing it from the last task deletes the file');
+  check(!T().files['Meter photo.jpg'], 'removing it from the last task deletes the file');
   removing = PA.AT.remove(t, t.attachments[0].id);
   await answer(win, false);
   await removing;

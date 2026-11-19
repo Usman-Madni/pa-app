@@ -42,22 +42,48 @@ function fakeFile(name = 'pa-app-data.json', text = '') {
 }
 
 // A fake folder handle for daily backups.
+// Folders inside (dirs) work like the real thing: removeEntry refuses one with anything in it. at('a/b/c.pdf') finds
+// a file by its path; paths() lists every file's path.
 function fakeFolder(name = 'backups') {
   const files = {};
+  const dirs = {};
+  const notFound = () => { const e = new Error('not found'); e.name = 'NotFoundError'; return e; };
   return {
     kind: 'directory',
     name,
     files,
+    dirs,
     async getFileHandle(fname, opts = {}) {
       if (!files[fname]) {
-        if (!opts.create) { const e = new Error('not found'); e.name = 'NotFoundError'; throw e; }
+        if (!opts.create) throw notFound();
         files[fname] = fakeFile(fname);
       }
       return files[fname];
     },
+    async getDirectoryHandle(dname, opts = {}) {
+      if (!dirs[dname]) {
+        if (!opts.create) throw notFound();
+        dirs[dname] = fakeFolder(dname);
+      }
+      return dirs[dname];
+    },
     async removeEntry(fname) {
-      if (!files[fname]) { const e = new Error('not found'); e.name = 'NotFoundError'; throw e; }
-      delete files[fname];
+      if (files[fname]) { delete files[fname]; return; }
+      if (dirs[fname]) {
+        if (Object.keys(dirs[fname].files).length || Object.keys(dirs[fname].dirs).length) { const e = new Error('not empty'); e.name = 'InvalidModificationError'; throw e; }
+        delete dirs[fname];
+        return;
+      }
+      throw notFound();
+    },
+    at(p) {
+      const parts = p.split('/');
+      let d = this;
+      for (const part of parts.slice(0, -1)) { d = d.dirs[part]; if (!d) return undefined; }
+      return d.files[parts[parts.length - 1]];
+    },
+    paths(prefix = '') {
+      return [...Object.keys(files).map((f) => prefix + f), ...Object.entries(dirs).flatMap(([n, d]) => d.paths(`${prefix}${n}/`))];
     },
     permission: 'granted',
     async queryPermission() { return this.permission; },

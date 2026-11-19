@@ -113,12 +113,12 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   Object.defineProperty(input, 'files', { value: [new win.File(['%PDF'], 'scan.pdf', { type: 'application/pdf' })], configurable: true });
   input.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(20);
-  check(pass.attachments.length === 1 && folder.files[pass.attachments[0].file] && /^Passport \d{4}\.pdf$/.test(pass.attachments[0].file), 'a scan is copied into the attachments folder, named after the document');
+  check(pass.attachments.length === 1 && folder.at(pass.attachments[0].file) && /^Me\/Vault\/Passport \d{4}\.pdf$/.test(pass.attachments[0].file), 'a scan is copied into the attachments folder, named after the document');
   check(doc.querySelector('#modal [data-action="rec-file-open"]') && JSON.parse(win.localStorage.getItem('pa_docs')).find((d) => d.id === pass.id).attachments.length === 1, 'listed and saved');
   doc.querySelector('#modal [data-action="rec-file-remove"]').click();
   await answer(win, true);
   await tick(10);
-  check(!pass.attachments.length && !Object.keys(folder.files).length, 'removing it deletes the file (nothing else uses it)');
+  check(!pass.attachments.length && !folder.paths().length && !Object.keys(folder.dirs).length, 'removing it deletes the file (nothing else uses it), and the folders it leaves empty');
 
   // --- Ticking a renew task opens the document for its new date ---
   const rt = PA.DB.tasks.find((x) => x.id === `doc-renew-${idc.id}-${idc.expires}`);

@@ -2697,7 +2697,9 @@ function changed(...keys) {
   keys.forEach((k) => DB.persist(k));
   if (state.phone) OD.markDirty(); else DF.markDirty();
   if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
+  if (keys.some((k) => FILE_KEYS.has(k))) AT.later(); // a person, owner or name changed: files follow to their folder
 }
+const FILE_KEYS = new Set(['tasks', 'docs', 'assets', 'upkeep', 'musings', 'people']);
 
 // ===================== Notifications =====================
 // Every message PA App shows is kept with its time for 30 days, so one that came and went unseen can be read later
@@ -3085,6 +3087,63 @@ function safeFileName(n) {
   const base = shortName(m ? s.slice(0, -ext.length) : s, FILE_NAME_MAX - ext.length).replace(/[. ]+$/, '');
   return `${base || 'file'}${ext}`;
 }
+// ===================== Where files live =====================
+// Every attached file sits in the attachments folder under its person and area: "Me/Tasks/Phone bill Oct 26.pdf",
+// "Me/Assets/Vehicles/Civic/…", "Shared/Vault/…" (a record on more than one person goes in Shared). `att.file` is
+// that path (forward slashes); files from before folders sit loose at the top until "Put files in folders" moves
+// them. A file several records share goes with the first in KEYS order, so a file linked from the Vault stays there.
+// Nothing here touches a file: AT (the laptop) and OD (the phone) do the moving.
+const Files = {
+  AREAS: { tasks: 'Tasks', docs: 'Vault', assets: 'Assets', upkeep: 'Upkeep', musings: 'Musings' },
+  KEYS: ['docs', 'assets', 'upkeep', 'musings', 'tasks'],
+  dirName(s) { return shortName(s, 60).replace(/[. ]+$/, '') || 'Unnamed'; },
+  base(p) { return String(p).split('/').pop(); },
+  dir(p) { const i = String(p).lastIndexOf('/'); return i < 0 ? '' : String(p).slice(0, i); },
+  join(...parts) { return parts.filter(Boolean).join('/'); },
+  loose(p) { return !String(p).includes('/'); },
+  people(rec, key) {
+    if (key === 'assets') return Assets.ownersOn(rec).map((o) => o.id);
+    if (key === 'upkeep') { const a = DB.assets.find((x) => x.id === rec.asset); return a ? Assets.ownersOn(a).map((o) => o.id) : People.of(rec); }
+    return People.of(rec);
+  },
+  personDir(ids) { const u = [...new Set(ids)]; return u.length > 1 ? 'Shared' : this.dirName(People.name(u[0])); },
+  folderOf(rec, key) {
+    const top = this.join(this.personDir(this.people(rec, key)), this.AREAS[key] || 'Other');
+    if (key === 'assets') return this.join(top, this.dirName(Assets.kind(rec.kind).name), rec.kind === 'vehicle' ? this.dirName(rec.name) : '');
+    if (key === 'upkeep') { const a = DB.assets.find((x) => x.id === rec.asset); return this.join(top, a ? this.dirName(a.name) : 'Store'); }
+    return top;
+  },
+  // Where a file belongs: with the first record (in KEYS order) that uses it. Null when nothing does.
+  home(path) {
+    for (const key of this.KEYS) {
+      const rec = (DB[key] || []).find((r) => (r.attachments || []).some((a) => a.file === path));
+      if (rec) return this.folderOf(rec, key);
+    }
+    return null;
+  },
+  // Files not where they belong: [{ from, folder }]. Loose files (from before folders) only when asked.
+  misplaced(withLoose = false) {
+    const seen = new Set();
+    const out = [];
+    for (const key of this.KEYS) for (const r of DB[key] || []) for (const a of r.attachments || []) {
+      if (!a.file || seen.has(a.file)) continue;
+      seen.add(a.file);
+      if (this.loose(a.file) && !withLoose) continue;
+      const folder = this.home(a.file);
+      if (folder != null && this.dir(a.file) !== folder) out.push({ from: a.file, folder });
+    }
+    return out;
+  },
+  looseCount() { return new Set(this.KEYS.flatMap((k) => (DB[k] || []).flatMap((r) => (r.attachments || []).map((a) => a.file).filter((f) => f && this.loose(f))))).size; },
+  // A file moved or renamed: every record that used the old path (ones in the Trash too) uses the new one. Gives the
+  // data keys changed.
+  repoint(from, to) {
+    const keys = new Set();
+    for (const key of this.KEYS) for (const r of DB[key] || []) for (const a of r.attachments || []) if (a.file === from) { a.file = to; a.name = this.base(to); keys.add(key); }
+    for (const e of DB.trash || []) for (const a of (e.item && e.item.attachments) || []) if (a.file === from) { a.file = to; a.name = this.base(to); keys.add('trash'); }
+    return [...keys];
+  },
+};
 const AT = {
   dir: null,
   status: 'none', // none | reconnect | ok
@@ -3093,6 +3152,7 @@ const AT = {
     if (state.phone) return; // files stay on the laptop for now (stage D)
     this.dir = (await idb.get('attachments')) || this.dir || null;
     if (this.dir) this.status = (await this.dir.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ok' : 'reconnect';
+    if (this.status === 'ok') this.later(); // an owner change dated today, say: its files follow
     renderDrawer();
   },
 
@@ -3118,15 +3178,24 @@ const AT = {
     renderDrawer();
   },
 
-  async uniqueName(name) {
+  // A folder inside the attachments folder ("Me/Tasks"), made when asked; '' is the attachments folder itself.
+  async folder(path, create = false) {
+    let d = this.dir;
+    for (const part of String(path).split('/').filter(Boolean)) d = await d.getDirectoryHandle(part, { create });
+    return d;
+  },
+  async handle(path, create = false) { return (await this.folder(Files.dir(path), create)).getFileHandle(Files.base(path), { create }); },
+  async exists(path) { try { await this.handle(path); return true; } catch { return false; } },
+  // A free path for this name in a folder: "name (2).pdf" and on when taken.
+  async freePath(folder, name) {
     const dot = name.lastIndexOf('.');
     const base = dot > 0 ? name.slice(0, dot) : name;
     const ext = dot > 0 ? name.slice(dot) : '';
     for (let i = 1; i < 500; i++) {
-      const candidate = i === 1 ? name : `${base} (${i})${ext}`;
-      try { await this.dir.getFileHandle(candidate); } catch { return candidate; } // not there yet = free
+      const candidate = Files.join(folder, i === 1 ? name : `${base} (${i})${ext}`);
+      if (!(await this.exists(candidate))) return candidate; // not there yet = free
     }
-    return `${base} ${uid()}${ext}`;
+    return Files.join(folder, `${base} ${uid()}${ext}`);
   },
 
   // Files for a task, or (key) a vault document or an asset: any record with a title or name and `attachments`.
@@ -3138,12 +3207,12 @@ const AT = {
     let added = 0;
     for (const f of files) {
       try {
-        const stored = await this.uniqueName(safeFileName(this.suggestName(task, f.name))); // never overwrite an existing file
-        const w = await (await this.dir.getFileHandle(stored, { create: true })).createWritable();
+        const stored = await this.freePath(Files.folderOf(task, key), safeFileName(this.suggestName(task, f.name))); // never overwrite an existing file
+        const w = await (await this.handle(stored, true)).createWritable();
         await w.write(f);
         await w.close();
         // New attachments belong to this copy only; 📌 makes one carry over to every repeat.
-        task.attachments.push({ id: uid(), name: stored, file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        task.attachments.push({ id: uid(), name: Files.base(stored), file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
         added++;
       } catch (e) {
         toast(`Could not attach ${f.name}: ${e.message}`);
@@ -3173,52 +3242,106 @@ const AT = {
     const att = task && task.attachments.find((a) => a.id === attId);
     if (!att || state.readOnly) return;
     if (!state.phone && this.status !== 'ok') return toast('Reconnect the attachments folder first');
-    const dot = att.file.lastIndexOf('.');
-    const ext = dot > 0 ? att.file.slice(dot) : '';
+    const name = Files.base(att.file);
+    const dot = name.lastIndexOf('.');
+    const ext = dot > 0 ? name.slice(dot) : '';
     const base = (newBase || '').trim().replace(new RegExp(`${ext.replace('.', '\\.')}$`, 'i'), '');
-    if (!base || `${safeFileName(base)}${ext}` === att.file) return;
+    if (!base || `${safeFileName(base)}${ext}` === name) return;
     const users = DB.tasks.filter((t) => t.attachments.some((a) => a.file === att.file));
+    let keys = ['tasks'];
     if (state.phone) {
-      // In OneDrive the file is renamed for every task that uses it (an old file shared by two copies included).
+      // In OneDrive the file is renamed for everything that uses it (an old file shared by two copies included).
       const target = await OD.renameFile(att.file, safeFileName(base), ext);
       if (!target) return;
-      for (const t of users) for (const a of t.attachments) if (a.file === att.file) { a.file = target; a.name = target; }
-      changed('tasks');
-      toast(`Renamed to "${target}"`);
+      keys = Files.repoint(att.file, target);
+      changed(...keys);
+      toast(`Renamed to "${Files.base(target)}"`);
       render();
       renderDrawer();
       return;
     }
-    const target = await this.uniqueName(`${safeFileName(base)}${ext}`);
+    const target = await this.freePath(Files.dir(att.file), `${safeFileName(base)}${ext}`);
     try {
       if (att.keep || users.length <= 1) {
         await this.moveFile(att.file, target);
-        for (const t of users) for (const a of t.attachments) if (a.file === att.file) { a.file = target; a.name = target; }
+        keys = Files.repoint(att.file, target);
       } else {
         await this.copyFile(att.file, target);
         att.file = target;
-        att.name = target;
+        att.name = Files.base(target);
       }
     } catch (e) {
       return toast(`Could not rename: ${e.message}`);
     }
-    changed('tasks');
-    toast(`Renamed to "${target}"`);
+    changed(...keys);
+    toast(`Renamed to "${Files.base(target)}"`);
     render();
     renderDrawer();
   },
 
   async copyFile(from, to) {
-    const file = await (await this.dir.getFileHandle(from)).getFile();
-    const w = await (await this.dir.getFileHandle(to, { create: true })).createWritable();
+    const file = await (await this.handle(from)).getFile();
+    const w = await (await this.handle(to, true)).createWritable();
     await w.write(file);
     await w.close();
   },
   async moveFile(from, to) {
-    const h = await this.dir.getFileHandle(from);
-    if (typeof h.move === 'function') { await h.move(to); return; } // Chrome/Edge can rename in place
+    if (from === to) return;
+    const h = await this.handle(from);
+    if (typeof h.move === 'function') { // Chrome/Edge move and rename in place
+      try { await h.move(await this.folder(Files.dir(to), true), Files.base(to)); return; } catch { /* not here: copy instead */ }
+    }
     await this.copyFile(from, to);
-    await this.dir.removeEntry(from);
+    await (await this.folder(Files.dir(from))).removeEntry(Files.base(from));
+  },
+  // Move a file into a folder (a free name there). A file already gone but found in that folder under its name was
+  // moved by the other device: that's where it is. Gives the new path, or null.
+  async moveTo(from, folder) {
+    if (!(await this.exists(from))) { const there = Files.join(folder, Files.base(from)); return (await this.exists(there)) ? there : null; }
+    const to = await this.freePath(folder, Files.base(from));
+    await this.moveFile(from, to);
+    await this.dropEmpty(Files.dir(from));
+    return to;
+  },
+  // A folder left empty by a move goes, and its parents if they're empty too (removeEntry refuses a folder with
+  // anything in it, so nothing else can go).
+  async dropEmpty(path) {
+    for (let p = path; p; p = Files.dir(p)) {
+      try { await (await this.folder(Files.dir(p))).removeEntry(Files.base(p)); } catch { return; }
+    }
+  },
+  // Move files that aren't where they belong (a person, owner or name changed). Quiet: a file that can't move now
+  // is tried next time. withLoose: the one-time "Put files in folders". Gives how many moved.
+  async settle(withLoose = false) {
+    if (state.readOnly || this.settling) return 0;
+    if (state.phone ? !OD.canRead() : this.status !== 'ok') return 0;
+    this.settling = true;
+    const keys = new Set();
+    let n = 0;
+    try {
+      for (const { from, folder } of Files.misplaced(withLoose)) {
+        let to = null;
+        try { to = state.phone ? await OD.moveTo(from, folder) : await this.moveTo(from, folder); } catch { to = null; }
+        if (!to) continue;
+        Files.repoint(from, to).forEach((k) => keys.add(k));
+        n++;
+      }
+    } finally { this.settling = false; }
+    if (keys.size) { changed(...keys); render(); renderDrawer(); if (state.assetForm) renderAssetForm(); }
+    return n;
+  },
+  later() { if (this.settling) return; clearTimeout(this.settleTimer); this.settleTimer = setTimeout(() => this.settle(), this.SETTLE_MS); },
+  SETTLE_MS: 1500,
+  async putInFolders() {
+    const n = Files.looseCount();
+    if (!n) return toast('Every file is already in its folder');
+    if (state.phone ? !OD.canRead() : this.status !== 'ok') return toast(state.phone ? 'Sign in to OneDrive first' : 'Choose or reconnect the attachments folder first');
+    if (!(await ask(`Move ${plural(n, 'file')} into folders by person and area (Me › Tasks, Me › Vault, Shared…)? Every attachment keeps working; nothing is deleted.`, { yes: 'Move files' }))) return;
+    toast('Moving files…');
+    const moved = await this.settle(true);
+    const left = Files.looseCount();
+    toast(left ? `Moved ${plural(moved, 'file')}. ${plural(left, 'file')} couldn't be found or moved; they stay where they are` : `Moved ${plural(moved, 'file')} into folders`);
+    render();
   },
 
   async open(att) {
@@ -3228,7 +3351,7 @@ const AT = {
     }
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     let file;
-    try { file = await (await this.dir.getFileHandle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
+    try { file = await (await this.handle(att.file)).getFile(); } catch { return toast(`"${att.name}" is not in the attachments folder any more`); }
     const type = mimeOf(att);
     const url = URL.createObjectURL(file.type || !type ? file : new Blob([file], { type })); // a file saved without its type gets it from its name
     if (/^(image\/|application\/pdf|text\/)/.test(type)) window.open(url, '_blank'); // the browser can show these
@@ -3241,7 +3364,7 @@ const AT = {
     if (state.phone) return this.open(att); // OneDrive's own page has its download button
     if (this.status !== 'ok') return toast('Reconnect the attachments folder first');
     try {
-      const url = URL.createObjectURL(await (await this.dir.getFileHandle(att.file)).getFile());
+      const url = URL.createObjectURL(await (await this.handle(att.file)).getFile());
       this.download(url, att.name);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch { toast(`"${att.name}" is not in the attachments folder any more`); }
@@ -3257,7 +3380,7 @@ const AT = {
       if (state.phone) {
         if (!OD.canRead()) return null;
         url = (await OD.graph('GET', OD.filePath(att.file)))?.['@microsoft.graph.downloadUrl'] || null;
-      } else if (this.status === 'ok') url = URL.createObjectURL(await (await this.dir.getFileHandle(att.file)).getFile());
+      } else if (this.status === 'ok') url = URL.createObjectURL(await (await this.handle(att.file)).getFile());
     } catch { url = null; }
     if (url) this.thumbs.set(att.file, url);
     return url;
@@ -3273,7 +3396,7 @@ const AT = {
     // Delete the file only when nothing else (another copy of a repeating task, a document, an asset) still uses it.
     const stillUsed = ['tasks', 'docs', 'assets', 'upkeep', 'musings'].some((k) => DB[k].some((t) => (t.attachments || []).some((a) => a.file === att.file)));
     if (!stillUsed && state.phone) { try { await OD.graph('DELETE', OD.filePath(att.file)); } catch { /* already gone, or no signal: the file stays */ } } // to the OneDrive recycle bin
-    else if (!stillUsed && this.status === 'ok') { try { await this.dir.removeEntry(att.file); } catch { /* already gone */ } }
+    else if (!stillUsed && this.status === 'ok') { try { await (await this.folder(Files.dir(att.file))).removeEntry(Files.base(att.file)); await this.dropEmpty(Files.dir(att.file)); } catch { /* already gone */ } }
     render();
     renderDrawer();
   },
@@ -3291,6 +3414,17 @@ function attachCard() {
         ${AT.status === 'reconnect' ? '<button class="btn primary" data-action="at-reconnect">Reconnect</button>' : ''}
         <button class="btn" data-action="at-folder">${AT.dir ? 'Change folder' : 'Choose folder'}</button>
       </div>
+    </div>`;
+}
+// Files from before folders: one button puts them in their person's and area's folder (either device).
+function tidyFilesCard() {
+  const n = Files.looseCount();
+  if (!n) return '';
+  return `
+    <div class="card edit-only">
+      <h2>Put files in folders</h2>
+      <p class="sub">${plural(n, 'attached file')} ${n === 1 ? 'sits' : 'sit'} loose in the Attachments folder. Butler can move ${n === 1 ? 'it' : 'them'} into folders by person and area (Me › Tasks, Me › Vault, Me › Assets › Gold, Shared for things on more than one person), the same on the laptop and in OneDrive. New files already go there.</p>
+      <div class="row"><button class="btn primary" data-action="at-tidy">Move files into folders</button></div>
     </div>`;
 }
 
@@ -6021,17 +6155,17 @@ const Musings = {
     const want = safeFileName(AT.suggestName(m, 'x.jpg')).replace(/\.jpg$/, '');
     let n = 0;
     for (const a of m.attachments || []) {
-      if (a.file.startsWith(want)) continue;
-      const dot = a.file.lastIndexOf('.');
-      const ext = dot > 0 ? a.file.slice(dot) : '';
+      const name = Files.base(a.file);
+      if (name.startsWith(want)) continue;
+      const dot = name.lastIndexOf('.');
+      const ext = dot > 0 ? name.slice(dot) : '';
       let target = null;
       try {
         if (state.phone) target = await OD.renameFile(a.file, want, ext);
-        else if (AT.status === 'ok') { target = await AT.uniqueName(`${want}${ext}`); await AT.moveFile(a.file, target); }
+        else if (AT.status === 'ok') { target = await AT.freePath(Files.dir(a.file), `${want}${ext}`); await AT.moveFile(a.file, target); }
       } catch { target = null; }
       if (!target) continue;
-      a.file = target;
-      a.name = target;
+      Files.repoint(a.file, target);
       n++;
     }
     if (n) changed('musings');
@@ -7098,6 +7232,7 @@ function renderSettings() {
           <div class="row"><label class="btn">${ic('upload', 'sm')}Choose CSV files<input type="file" accept=".csv,text/csv" multiple data-input="airtable" hidden></label></div>
         </div>
         ${state.phone ? '' : attachCard()}
+        ${tidyFilesCard()}
         ${manageCard()}
       </div>
     </section>`;
@@ -7788,7 +7923,57 @@ const OD = Object.assign(Object.create(TD), {
   },
   // Attached files (stage D): the laptop's attachments folder, moved into the app's own folder in OneDrive.
   FILES: 'Attachments',
-  filePath(name) { return `/me/drive/special/approot:/${this.FILES}/${encodeURIComponent(name)}:`; },
+  filePath(path) { return `/me/drive/special/approot:/${this.FILES}/${String(path).split('/').map(encodeURIComponent).join('/')}:`; },
+  // A folder's id inside Attachments ("Me/Tasks"), made part by part when it isn't there yet.
+  folderIds: new Map(),
+  async folderId(path) {
+    if (this.folderIds.has(path)) return this.folderIds.get(path);
+    let id;
+    try {
+      id = (await this.graph('GET', this.filePath(path))).id;
+    } catch (e) {
+      if (!e || e.status !== 404) throw e;
+      const parent = Files.dir(path);
+      const url = parent ? `/me/drive/items/${await this.folderId(parent)}/children` : `/me/drive/special/approot:/${this.FILES}:/children`;
+      try { id = (await this.graph('POST', url, { name: Files.base(path), folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })).id; } catch (e2) {
+        if (!e2 || e2.status !== 409) throw e2;
+        id = (await this.graph('GET', this.filePath(path))).id; // made meanwhile
+      }
+    }
+    this.folderIds.set(path, id);
+    return id;
+  },
+  // Move a file into a folder, never over another ("name (2)" when taken). A file already gone but found in that
+  // folder under its name was moved by the other device. Gives the new path, or null; throws on no connection.
+  async moveTo(from, folder) {
+    const name = Files.base(from);
+    const dot = name.lastIndexOf('.');
+    const parent = { id: await this.folderId(folder) };
+    for (let i = 1; i < 50; i++) {
+      const want = i === 1 ? name : `${name.slice(0, dot > 0 ? dot : name.length)} (${i})${dot > 0 ? name.slice(dot) : ''}`;
+      try {
+        const item = await this.graph('PATCH', this.filePath(from), { name: want, parentReference: parent, '@microsoft.graph.conflictBehavior': 'fail' });
+        await this.dropEmpty(Files.dir(from));
+        return Files.join(folder, (item && item.name) || want);
+      } catch (e) {
+        if (e && e.status === 409) continue;
+        if (e && e.status === 404) { try { await this.graph('GET', this.filePath(Files.join(folder, name))); return Files.join(folder, name); } catch { return null; } }
+        throw e;
+      }
+    }
+    return null;
+  },
+  // A folder a move left empty goes (to the recycle bin), and its parents if empty too.
+  async dropEmpty(path) {
+    for (let p = path; p; p = Files.dir(p)) {
+      try {
+        const kids = await this.graph('GET', `${this.filePath(p)}/children?$top=1`);
+        if (kids && kids.value && kids.value.length) return;
+        await this.graph('DELETE', this.filePath(p));
+        this.folderIds.delete(p);
+      } catch { return; }
+    }
+  },
   canRead() { return state.phone && this.connected() && !this.needsSignIn() && !this.offline; },
   // w: a tab opened at the tap (a phone blocks one opened after waiting for OneDrive).
   async openFile(att, w) {
@@ -7810,11 +7995,13 @@ const OD = Object.assign(Object.create(TD), {
     let added = 0;
     for (const f of files) {
       try {
+        const folder = Files.folderOf(task, key);
         const wanted = safeFileName(AT.suggestName(task, f.name));
         if (!quiet) toast(`Uploading ${f.name}…`);
-        const saved = await this.graph('PUT', `${this.filePath(wanted)}/content?@microsoft.graph.conflictBehavior=rename`, f);
+        // OneDrive makes the folders on the way when they aren't there yet.
+        const saved = await this.graph('PUT', `${this.filePath(Files.join(folder, wanted))}/content?@microsoft.graph.conflictBehavior=rename`, f);
         const stored = (saved && saved.name) || wanted;
-        task.attachments.push({ id: uid(), name: stored, file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        task.attachments.push({ id: uid(), name: stored, file: Files.join(folder, stored), original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
         added++;
       } catch (e) {
         toast(e && e.name === 'TypeError' ? `Could not attach ${f.name}: no connection` : `Could not attach ${f.name}: ${e.message}`);
@@ -7825,13 +8012,14 @@ const OD = Object.assign(Object.create(TD), {
     renderDrawer();
     if (state.assetForm) renderAssetForm();
   },
-  // Rename in OneDrive, never over another file: "name (2).pdf" and so on when taken. Gives the new name, or null.
+  // Rename in OneDrive (in its folder), never over another file: "name (2).pdf" and so on when taken. Gives the new
+  // path, or null.
   async renameFile(from, base, ext) {
     for (let i = 1; i < 50; i++) {
       const name = i === 1 ? `${base}${ext}` : `${base} (${i})${ext}`;
       try {
         const item = await this.graph('PATCH', this.filePath(from), { name, '@microsoft.graph.conflictBehavior': 'fail' });
-        return (item && item.name) || name;
+        return Files.join(Files.dir(from), (item && item.name) || name);
       } catch (e) {
         if (e && e.status === 409) continue; // taken: try the next
         if (e && e.status === 404) toast(`"${from}" is not in OneDrive › Apps › PA App › ${this.FILES}`);
@@ -7986,7 +8174,7 @@ const EDIT_ACTIONS = new Set([
   'toggle-task', 'delete-task', 'undo-delete', 'select-mode', 'select-cancel', 'select-task', 'select-all', 'bulk-done', 'bulk-delete', 'trash-restore', 'trash-forget', 'trash-empty', 'clear-done', 'delete-event', 'new-note', 'delete-note',
   'toggle-myday', 'toggle-step', 'delete-step', 'promote-step',
   'toggle-label', 'rename-bucket', 'delete-bucket', 'bucket-left', 'bucket-right', 'rename-label', 'delete-label',
-  'repeat-day', 'at-folder', 'at-reconnect', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
+  'repeat-day', 'at-folder', 'at-reconnect', 'at-tidy', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
   'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
@@ -8188,6 +8376,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'at-folder': AT.pickFolder(); break;
+    case 'at-tidy': AT.putInFolders(); break;
     case 'at-reconnect': AT.reconnect(); break;
     case 'open-attach': {
       e.preventDefault(); // it's a link

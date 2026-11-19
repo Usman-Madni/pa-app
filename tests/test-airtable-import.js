@@ -139,7 +139,7 @@ const FILES = [
   check(out1.photos.length === 1 && out1.photos[0].name === 'coin.jpg', 'the import knows which photos to fetch');
   const got = await I3.fetchPhotos(out1.photos);
   const guinea = ph.PA.DB.assets.find((a) => a.name === '1gm guinea');
-  check(got.added === 1 && guinea.attachments.length === 1 && guinea.attachments[0].original === 'coin.jpg' && folder.files[guinea.attachments[0].file], 'each is saved in the attachments folder, on its item, named after it');
+  check(got.added === 1 && guinea.attachments.length === 1 && guinea.attachments[0].original === 'coin.jpg' && folder.at(guinea.attachments[0].file), 'each is saved in the attachments folder, on its item, named after it');
   const fresh = [file('Gold-Grid view.csv', 'Name,Karat,Weight (g),Weight (tola),Equivalent Tola Weight,Date Acquired,Comments,Picture,Totals\n'
     + '1gm guinea,18,1,,0.09,31/12/2025,,"coin.jpg (https://example.invalid/y),back.jpg (https://example.invalid/bad)",\n'
     + 'Bangles,22,,1.5,1.5,1/5/2025,"From the wedding, two",bangles.jpg (https://example.invalid/z),Alex\n')];

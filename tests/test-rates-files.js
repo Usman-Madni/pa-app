@@ -80,7 +80,7 @@ const { loadApp, fakeFolder, check, done, submitForm, answer, tick } = require('
   PA.AT.status = 'ok';
   const gold = A.add({ kind: 'gold', name: long.replace(' 2026.jpg', ''), karat: '22', grams: 10 });
   await win.eval('AT').add(gold, [new win.File(['x'], 'cam-1767194449213.jpg', { type: 'image/jpeg' })], 'assets');
-  check(gold.attachments.length === 1 && folder.files[gold.attachments[0].file], 'a photo for an item with a long name is saved');
+  check(gold.attachments.length === 1 && folder.at(gold.attachments[0].file), 'a photo for an item with a long name is saved');
 
   // --- Icons ---
   check(doc.querySelector('#i-gold-bar') && doc.querySelector('#i-silver-coin') && /--metal-gold/.test(doc.querySelector('#i-gold-bar').innerHTML), 'gold is a bar and silver a coin, in their own colours');

@@ -37,15 +37,15 @@ function fakeOneDrive() {
           name = `${name.slice(0, dot)} 1${name.slice(dot)}`; // what OneDrive does: a free name next to it
         }
         g.files[name] = { size: opts.body.size, type: headers['Content-Type'], blob: opts.body };
-        return reply(201, { id: 'A-' + name, name, size: opts.body.size });
+        return reply(201, { id: 'A-' + name, name: name.split('/').pop(), size: opts.body.size }); // OneDrive gives the name, not the path
       }
       if (method === 'PATCH' && !m[2]) { // rename
-        const to = JSON.parse(opts.body).name;
+        const to = name.slice(0, name.lastIndexOf('/') + 1) + JSON.parse(opts.body).name; // in its folder
         if (!g.files[name]) return reply(404, { error: { message: 'Item not found' } });
         if (g.files[to]) return reply(409, { error: { message: 'Name already exists' } });
         g.files[to] = g.files[name];
         delete g.files[name];
-        return reply(200, { id: 'A-' + to, name: to });
+        return reply(200, { id: 'A-' + to, name: to.split('/').pop() });
       }
       if (method === 'DELETE' && !m[2]) {
         if (!g.files[name]) return reply(404, { error: { message: 'Item not found' } });
@@ -99,34 +99,34 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   const put = g.calls.filter((c) => c.method === 'PUT' && /Attachments/.test(c.url));
   check(put.length === 1 && /conflictBehavior=rename/.test(decodeURIComponent(put[0].url)), 'uploaded to OneDrive, asking for a free name if taken');
   check(put[0].body === f1 && put[0].headers['Content-Type'] === 'application/pdf', 'the file itself is sent, with its type');
-  check(g.files['Phone bill Nov 26.pdf'] && PA.DB.tasks[0].attachments.some((a) => a.file === 'Phone bill Nov 26.pdf' && a.original === 'IMG_2031.pdf' && a.size === f1.size && !a.keep), 'named like on the laptop (title and moving part) and listed on the task');
+  check(g.files['Me/Tasks/Phone bill Nov 26.pdf'] && PA.DB.tasks[0].attachments.some((a) => a.file === 'Me/Tasks/Phone bill Nov 26.pdf' && a.name === 'Phone bill Nov 26.pdf' && a.original === 'IMG_2031.pdf' && a.size === f1.size && !a.keep), 'named like on the laptop (title and moving part), in your Tasks folder, and listed on the task');
   const f2 = new win.File(['%PDF again'], 'scan.pdf', { type: 'application/pdf' });
   await PA.AT.add(PA.DB.tasks[0], [f2]);
   await tick(50);
-  check(PA.DB.tasks[0].attachments.some((a) => a.file === 'Phone bill Nov 26 1.pdf'), 'same name again: kept with the free name OneDrive gave it');
+  check(PA.DB.tasks[0].attachments.some((a) => a.file === 'Me/Tasks/Phone bill Nov 26 1.pdf'), 'same name again: kept with the free name OneDrive gave it');
   await tick(100);
   check(g.file.content.data.tasks[0].attachments.length === 4, 'the data file in OneDrive lists the new files');
   check(g.calls.every((c) => !/\/me\/drive\/root|\/me\/drive\/items\/(?!F1)/.test(c.url)), 'only the app\'s own folder is used');
 
   // --- Renaming and removing on the phone, like on the laptop ---
   PA.renderDrawer();
-  const att = (file) => PA.DB.tasks[0].attachments.find((a) => a.file === file);
+  const att = (name) => PA.DB.tasks[0].attachments.find((a) => a.name === name);
   check(doc.querySelector(`#drawer [data-action="rename-attach"][data-att="${att('Phone bill Nov 26.pdf').id}"]`) && doc.querySelector('#drawer [data-action="remove-attach"]'), 'the phone shows ✎ rename and ✕ remove');
   check(!/on the laptop/.test(doc.querySelector('#drawer').textContent), 'no "on the laptop" note');
   await PA.AT.rename(PA.DB.tasks[0], att('Phone bill Nov 26.pdf').id, 'November bill');
-  check(g.files['November bill.pdf'] && !g.files['Phone bill Nov 26.pdf'] && att('November bill.pdf')?.name === 'November bill.pdf', 'rename: the file in OneDrive and the task both change');
+  check(g.files['Me/Tasks/November bill.pdf'] && !g.files['Me/Tasks/Phone bill Nov 26.pdf'] && att('November bill.pdf')?.file === 'Me/Tasks/November bill.pdf', 'rename: the file in OneDrive and the task both change');
   await PA.AT.rename(PA.DB.tasks[0], att('Phone bill Nov 26 1.pdf').id, 'November bill.pdf');
-  check(g.files['November bill (2).pdf'] && att('November bill (2).pdf'), 'renaming to a name already taken: never over it, "(2)" is added');
+  check(g.files['Me/Tasks/November bill (2).pdf'] && att('November bill (2).pdf'), 'renaming to a name already taken: never over it, "(2)" is added');
   const delId = att('November bill (2).pdf').id;
   const removing = PA.AT.remove(PA.DB.tasks[0], delId);
   const q = await answer(win, true);
   await removing;
-  check(/Remove "November bill \(2\)\.pdf"/.test(q) && !att('November bill (2).pdf') && !g.files['November bill (2).pdf'], 'remove asks first, then takes it off the task and deletes the file (to the OneDrive recycle bin)');
+  check(/Remove "November bill \(2\)\.pdf"/.test(q) && !att('November bill (2).pdf') && !g.files['Me/Tasks/November bill (2).pdf'], 'remove asks first, then takes it off the task and deletes the file (to the OneDrive recycle bin)');
   PA.DB.tasks.push(PA.normalizeTask({ id: 'b', title: 'Another copy', attachments: [{ ...att('November bill.pdf'), id: 'shared' }] }));
   const removing2 = PA.AT.remove(PA.DB.tasks[0], att('November bill.pdf').id);
   await answer(win, true);
   await removing2;
-  check(g.files['November bill.pdf'], 'a file another task still uses is kept');
+  check(g.files['Me/Tasks/November bill.pdf'], 'a file another task still uses is kept');
   await tick(100);
 
   // --- A file that can't be uploaded: says so, adds nothing ---
