@@ -142,6 +142,23 @@ A connection's monthly task to pay its bill; ticking it asks what the bill came 
 **Bill**:
 What one bill came to, and when it was paid.
 
+## Rentals
+
+**Rental agreement**:
+One or more properties rented to a tenant, term by term.
+
+**Term**:
+A stretch of the agreement (often 11 months) at one rent; renewing starts the next.
+
+**Ledger**:
+The agreement's months: due, received, when, written off, balance.
+
+**Owed**:
+The sum of the ledger's balances.
+
+**Write off**:
+Clearing what's still owed for a month, marked as written off.
+
 ## Storage and devices
 
 **Data file**:

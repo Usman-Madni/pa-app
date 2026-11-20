@@ -1,0 +1,106 @@
+// Rentals, on Assets › Property: an agreement rents out one or more properties (shown as Rented out) to a tenant, term by
+// term. Its ledger runs month by month: due, received, when, written off, balance, and what's owed. Recording rent
+// suggests what was paid last time; a part payment leaves the rest owed; Write off (unticked by default) clears a
+// month's rest. Collect rent is a monthly task (ticking asks what came in); Renew agreement comes before the term ends
+// (ticking asks the new term: +10% suggested, unrounded) and the next follows. Files go to Vault › Rentals › <name>.
+const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, done } = require('./helpers');
+
+(async () => {
+  const folder = fakeFolder('Attachments');
+  const app = loadApp({ pickFolder: folder, pickFile: fakeFile(), storage: { dev_taskLayout: '"list"' } });
+  const { win, doc, PA } = app;
+  await PA.DF.createNew();
+  const R = win.eval('Rentals');
+  const Assets = win.eval('Assets');
+  const open = win.eval('openAssetForm');
+  PA.AT.SETTLE_MS = 5;
+  doc.querySelector('[data-view="settings"]').click();
+  doc.querySelector('[data-action="at-folder"]').click();
+  await tick(10);
+  const iso = (d) => PA.toISO(d);
+  const now = new Date();
+  const monthsAgo = (n) => iso(new Date(now.getFullYear(), now.getMonth() - n, 1));
+  const ym = (n) => monthsAgo(n).slice(0, 7);
+  const modal = () => doc.querySelector('#modal form');
+
+  const shop = Assets.add({ kind: 'property', name: 'Plaza shop', amount: '1000' });
+  const flat = Assets.add({ kind: 'property', name: 'Flat', amount: '1000' });
+  win.eval('changed')('assets');
+  doc.querySelector('[data-view="assets"]').click();
+  doc.querySelector('[data-asset-tab="property"]')?.click();
+  PA.device.set('assetTab', 'property');
+  PA.render();
+  const main = () => doc.querySelector('#main');
+  check(/Rented out/.test(main().textContent) && main().querySelector('[data-form-type="rental"]'), 'the Property tab has a Rented out part, with Add rental agreement');
+
+  // --- An agreement over two properties ---
+  main().querySelector('[data-form-type="rental"]').click();
+  modal().elements[`rp-${shop.id}`].checked = true;
+  modal().elements[`rp-${flat.id}`].checked = true;
+  submitForm(win, 'asset-rental', { name: 'Plaza lease', tenant: 'A tenant', phone: '0300', dueDay: '18', start: monthsAgo(13), months: '11', rent: '100000', deposit: '200000' });
+  const r = PA.DB.rentals[0];
+  check(r && r.properties.length === 2 && r.tenant === 'A tenant' && r.terms[0].rent === 100000 && r.terms[0].months === 11 && r.deposit === 200000, 'saved: two properties, the tenant, the first term and its rent');
+  check(modal() && modal().dataset.form === 'asset-rental' && modal().querySelector('.ledger'), 'it stays open, with its ledger');
+  const collect = PA.DB.tasks.find((t) => t.rental === r.id && t.rentKind === 'collect');
+  check(collect && collect.repeat?.freq === 'monthly' && Number(collect.due.slice(8, 10)) === 18 && collect.fileTo === 'Rentals/Plaza lease' && PA.DB.buckets.find((b) => b.id === collect.bucket)?.name === 'Rentals', 'a monthly Collect rent task on the 18th, in a Rentals bucket, its files to Vault › Rentals › Plaza lease');
+  const renewTask = PA.DB.tasks.find((t) => t.id === `rent-renew-${r.id}-${monthsAgo(13)}`);
+  check(renewTask && renewTask.due.slice(0, 10) === monthsAgo(3), 'a Renew task, a month before the term ends');
+
+  const rows = R.ledger(r);
+  check(rows.length === 14 && rows[0].note === 'Start of agreement' && rows.every((x) => x.due === 100000) && R.owed(r) === 1400000, 'the ledger: a row a month from the start, all due and owed');
+
+  // --- Recording rent ---
+  open('rent-pay', { id: r.id, month: ym(13) });
+  check(modal().elements.amount.value.replace(/,/g, '') === '100000' && !modal().elements.writeOff.checked, 'nothing paid yet: it suggests the rent; Write off unticked');
+  submitForm(win, 'asset-rent-pay', { amount: '100000', date: monthsAgo(13).slice(0, 8) + '18' });
+  open('rent-pay', { id: r.id, month: ym(12) });
+  submitForm(win, 'asset-rent-pay', { amount: '99,000' });
+  open('rent-pay', { id: r.id, month: ym(11) });
+  check(modal().elements.amount.value.replace(/,/g, '') === '99000', 'next time it suggests what was paid last');
+  modal().elements.writeOff.checked = true;
+  submitForm(win, 'asset-rent-pay', { amount: '99000' });
+  const L = R.ledger(r);
+  check(L[0].balance === 0 && L[1].received === 99000 && L[1].balance === 1000 && L[2].balance === 0 && L[2].written === 1000 && /written off/.test(L[2].note), 'paid in full: 0; part paid: 1,000 owed; written off: cleared, and said');
+  check(modal().dataset.form === 'asset-rental', 'saving goes back to the agreement');
+
+  // --- Renewing (a term that's already ended, to see it in the ledger) ---
+  open('rent-renew', { id: r.id });
+  check(modal().elements.rent.value.replace(/,/g, '') === '110000' && modal().elements.start.value === monthsAgo(2), 'Renew: the new term from when this one ends, 10% more suggested');
+  submitForm(win, 'asset-rent-renew', { rent: '1,10,050' });
+  const L2 = R.ledger(r);
+  const at = L2.find((x) => x.month === ym(2));
+  check(R.rentNow(r) === 110050 && at.due === 110050 && /^Renewed, 10.1% increase/.test(at.note) && L2.find((x) => x.month === ym(3)).due === 100000, 'the typed rent from that month, marked "Renewed, 10.1% increase"');
+  check(renewTask.done && PA.DB.tasks.some((t) => t.id === `rent-renew-${r.id}-${monthsAgo(2)}` && !t.done), 'the old Renew task is ticked, the next is made');
+
+  // --- Ticking Collect rent asks what came in ---
+  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+  doc.querySelector('[data-view="tasks"]').click();
+  doc.querySelector(`#main [data-action="toggle-task"][data-id="${collect.id}"]`).click();
+  confirmDone(win);
+  await tick(10);
+  check(modal()?.dataset.form === 'asset-rent-pay' && modal().elements.month.value === collect.due.slice(0, 7), 'ticking Collect rent asks what came in, for its month');
+  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+
+  // --- The properties show it ---
+  doc.querySelector('[data-view="assets"]').click();
+  PA.render();
+  check([...main().querySelectorAll('.asset-row')].filter((x) => /Rented out/.test(x.textContent)).length === 2, 'both properties show as Rented out');
+  open('asset', { id: shop.id });
+  check(doc.querySelector('#modal').textContent.includes('Plaza lease'), 'a property\'s pop-up lists its agreement');
+
+  // --- Files ---
+  open('rental', { id: r.id });
+  const input = doc.querySelector('#modal input[data-input="rental-files"]');
+  Object.defineProperty(input, 'files', { value: [new win.File(['%PDF'], 'Agreement 2026.pdf', { type: 'application/pdf' })], configurable: true });
+  input.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick(40);
+  const d = PA.DB.docs.find((x) => x.rental === r.id);
+  check(d && d.folder === 'Rentals/Plaza lease' && d.attachments[0].file === 'Me/Vault/Rentals/Plaza lease/Agreement 2026.pdf' && doc.querySelector('#modal').textContent.includes('Agreement 2026.pdf'), 'Add files: into Vault › Rentals › Plaza lease, listed on the agreement');
+
+  // --- Delete ---
+  doc.querySelector('#modal [data-action="rental-delete"]').click();
+  check(!PA.DB.rentals.length && PA.DB.trash.some((e) => e.kind === 'rentals') && !PA.DB.tasks.some((t) => t.rental === r.id && !t.done), 'deleting sends it and its open tasks to the Trash');
+  check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
+  app.close();
+  done();
+})();
