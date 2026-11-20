@@ -97,9 +97,45 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const d = PA.DB.docs.find((x) => x.rental === r.id);
   check(d && d.folder === 'Rentals/Plaza lease' && d.attachments[0].file === 'Me/Vault/Rentals/Plaza lease/Agreement 2026.pdf' && doc.querySelector('#modal').textContent.includes('Agreement 2026.pdf'), 'Add files: into Vault › Rentals › Plaza lease, listed on the agreement');
 
+  // --- Paste history from a sheet ---
+  doc.querySelector('#modal [data-action="asset-cancel"]')?.click();
+  open('rental', {});
+  submitForm(win, 'asset-rental', { name: 'Old shop', dueDay: '18', start: '2024-05-01', months: '11', rent: '55000' });
+  const o = PA.DB.rentals.find((x) => x.name === 'Old shop');
+  open('rent-paste', { id: o.id });
+  const sheet = [
+    'Month\tDue\t Received \tPayment Date\t Balance \tComments',
+    'Jan-24\tRs50,000\tRs50,000\t\t -   \tStart of Contract',
+    'Feb-24\tRs50,000\tRs49,500\t\t 500 \t',
+    'Mar-24\tRs55,000\tRs50,000\t18/03/2024\t 5,000 \tContract Renewal 10% Increase',
+    'Apr-24\tRs55,000\tRs55,000\t19/04/2024\t -   \tpaid by cheque',
+    'Sept-24\tRs55,000\t-\t\t 55,000 \t',
+    'hello there',
+    'Total\tRs2,65,000\tRs2,04,500\t\tRs60,500',
+  ].join('\n');
+  const ta = doc.querySelector('#modal textarea[name="sheet"]');
+  ta.value = sheet;
+  ta.dispatchEvent(new win.Event('input', { bubbles: true }));
+  const pv = doc.querySelector('#modal .rent-paste-preview').textContent;
+  check(/5 months, Jan 2024 to Sept? 2024; 1 rent change; due Rs 2,65,000, received Rs 2,04,500, short Rs 60,500/.test(pv) && /1 line not understood/.test(pv), `the preview says what it found, and what it left out (got: ${pv})`);
+  submitForm(win, 'asset-rent-paste', {});
+  const ot = R.terms(o);
+  check(ot.length === 2 && ot[0].start === '2024-01-18' && ot[0].rent === 50000 && ot[0].months === 2 && ot[1].start === '2024-03-18' && ot[1].rent === 55000 && ot[1].months === 11, 'a term from each month the rent changed (the form\'s term in those months replaced)');
+  const OL = R.ledger(o);
+  const row = (m) => OL.find((x) => x.month === m);
+  check(row('2024-02').balance === 500 && row('2024-03').balance === 5000 && /^Renewed, 10% increase$/.test(row('2024-03').note) && row('2024-03').dates[0] === '2024-03-18', 'the months come in: balances, the renewal marked by the ledger itself, dates');
+  check(row('2024-04').note === 'paid by cheque' && row('2024-01').note === 'Start of agreement' && row('2024-05').received === 0 && row('2024-09').received === 0, 'its own comments kept; months missing from the sheet are simply unpaid');
+  ta.value = '';
+  open('rent-paste', { id: o.id });
+  doc.querySelector('#modal textarea[name="sheet"]').value = sheet;
+  submitForm(win, 'asset-rent-paste', {});
+  check(o.payments.length === 4 && R.terms(o).length === 2, 'pasting again replaces those months: nothing doubled');
+  doc.querySelector('#modal [data-action="asset-cancel"]')?.click();
+  open('rental', { id: r.id });
+
   // --- Delete ---
   doc.querySelector('#modal [data-action="rental-delete"]').click();
-  check(!PA.DB.rentals.length && PA.DB.trash.some((e) => e.kind === 'rentals') && !PA.DB.tasks.some((t) => t.rental === r.id && !t.done), 'deleting sends it and its open tasks to the Trash');
+  check(!PA.DB.rentals.includes(r) && PA.DB.trash.some((e) => e.kind === 'rentals') && !PA.DB.tasks.some((t) => t.rental === r.id && !t.done), 'deleting sends it and its open tasks to the Trash');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
   done();

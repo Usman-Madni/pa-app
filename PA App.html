@@ -6650,6 +6650,52 @@ const Rentals = {
       if (row && row.balance > 0) r.payments.push({ id: uid(), month, amount: row.balance, date: date || todayISO(), note: '', writeOff: true });
     }
   },
+  // ----- Bringing in a rent sheet, pasted from Excel -----
+  // Columns: Month, Due, Received, Payment date, (Balance), Comments. "Sept-21" or "Sep 2021"; "Rs1,30,000", "-" for
+  // nothing; dates day first (18/12/2023). A header, a Total row and blank lines are passed over.
+  parseSheet(text) {
+    const rows = [];
+    const skipped = [];
+    const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const amount = (v) => { const t = String(v || '').replace(/rs\.?/i, '').replace(/[,\s]/g, ''); return !t || /^-+$/.test(t) ? 0 : Number(t); };
+    for (const line of String(text || '').split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const c = (line.includes('\t') ? line.split('\t') : line.trim().split(/\s{2,}/)).map((x) => x.trim());
+      const m = c[0].match(/^([A-Za-z]{3,9})[\s\-'’/.]*(\d{2}|\d{4})$/);
+      const mi = m ? MON.indexOf(m[1].slice(0, 3).toLowerCase()) : -1;
+      if (mi < 0) { if (!/^(month|total)/i.test(c[0])) skipped.push(line.trim()); continue; }
+      const year = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
+      const due = amount(c[1]);
+      const received = amount(c[2]);
+      if (Number.isNaN(due) || Number.isNaN(received)) { skipped.push(line.trim()); continue; }
+      const dm = String(c[3] || '').match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
+      const date = dm ? toISO(new Date(dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3]), Number(dm[2]) - 1, Number(dm[1]))) : '';
+      rows.push({ month: `${year}-${String(mi + 1).padStart(2, '0')}`, due, received, date, note: c[5] || '' });
+    }
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return { rows, skipped };
+  },
+  // The pasted months become its history: a term from each month the rent changes, a payment for what came in each
+  // month (with its date and note). Terms and payments of those months it had are replaced; later ones stay.
+  importRows(r, rows) {
+    if (!rows.length) return;
+    const first = rows[0].month;
+    const last = rows[rows.length - 1].month;
+    const day = String(Math.min(28, r.dueDay || 1)).padStart(2, '0');
+    const later = this.terms(r).filter((t) => ymOf(t.start) > last);
+    const terms = [];
+    rows.forEach((x, i) => { if (!i || x.due !== rows[i - 1].due) terms.push({ id: uid(), start: `${x.month}-${day}`, months: 0, rent: x.due, note: '' }); });
+    terms.forEach((t, i) => {
+      const next = terms[i + 1] || later[0];
+      const [y1, m1] = t.start.split('-').map(Number);
+      const [y2, m2] = next ? next.start.split('-').map(Number) : [];
+      t.months = next ? (y2 - y1) * 12 + (m2 - m1) : (this.current(r)?.months || 11);
+    });
+    r.terms = [...terms, ...later];
+    const routine = /^(start of (the )?(contract|agreement)|contract renewal.*|renewal.*)$/i; // the ledger says these itself
+    r.payments = [...(r.payments || []).filter((p) => p.month < first || p.month > last),
+      ...rows.filter((x) => x.received).map((x) => ({ id: uid(), month: x.month, amount: x.received, date: x.date, note: routine.test(x.note) ? '' : x.note }))];
+  },
   renew(r, { start, months, rent, note }) { r.terms.push({ id: uid(), start, months: Number(months) || 11, rent: Number(rent) || 0, note: note || '' }); },
   folder(r) { return Files.join('Rentals', Files.dirName(r.name)); },
   tasksOf(r) { return DB.tasks.filter((t) => t.rental === r.id); },
@@ -7309,6 +7355,16 @@ function renderAssetForm() {
     if (!r) $('#modal input[name="name"]')?.focus();
     return;
   }
+  if (f.type === 'rent-paste') {
+    const r = DB.rentals.find((x) => x.id === f.id);
+    if (!r) return closeAssetForm();
+    $('#modal').innerHTML = box(`${r.name}: bring in its history`, `
+      <p class="meta" style="margin:0">In Excel, select the rows (Month, Due, Received, Payment date, Balance, Comments), copy, and paste them here. The months you paste replace what's here for those months.</p>
+      <label class="field">Pasted rows<textarea class="input" name="sheet" rows="8" data-rent-paste placeholder="Dec-20&#9;Rs1,30,000&#9;Rs1,30,000&#9;&#9;-&#9;Start of Contract"></textarea></label>
+      <div class="meta rent-paste-preview" aria-live="polite">Nothing pasted yet.</div>`, '', 'Bring in');
+    $('#modal textarea')?.focus();
+    return;
+  }
   if (f.type === 'rent-pay') {
     const r = DB.rentals.find((x) => x.id === f.id);
     if (!r || !Rentals.terms(r).length) return closeAssetForm();
@@ -7871,6 +7927,19 @@ function submitAssetForm(type, data) {
     Rentals.pay(r, { month: data.month, amount: data.amount, date: data.date, note: (data.note || '').trim(), writeOff: data.writeOff === 'on' });
     changed('rentals');
     toast(`Recorded rent for ${ymLabel(data.month)}. Owed now ${rupees(Math.max(0, Rentals.owed(r)))}`);
+    state.assetForm = { type: 'rental', id: r.id };
+    renderAssetForm();
+    render();
+    return;
+  } else if (type === 'rent-paste') {
+    const r = DB.rentals.find((x) => x.id === f.id);
+    if (!r) return closeAssetForm();
+    const { rows } = Rentals.parseSheet(data.sheet);
+    if (!rows.length) return formError('No months found: paste the rows straight from Excel.');
+    Rentals.importRows(r, rows);
+    changed('rentals');
+    rentalTasks();
+    toast(`Brought in ${plural(rows.length, 'month')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}. Owed now ${rupees(Math.max(0, Rentals.owed(r)))}`);
     state.assetForm = { type: 'rental', id: r.id };
     renderAssetForm();
     render();
@@ -9770,6 +9839,19 @@ document.addEventListener('submit', (e) => {
 // copy as you type, so a save never has them disagree; leaving the box says how many (titleTyping = the old title).
 let taskTimer;
 let titleTyping = null;
+// The rent sheet being pasted: what it found, before bringing it in.
+document.addEventListener('input', (e) => {
+  if (e.target.matches?.('[data-rent-paste]')) {
+    const { rows, skipped } = Rentals.parseSheet(e.target.value);
+    const out = $('#modal .rent-paste-preview');
+    if (out) {
+      const changes = rows.filter((x, i) => i && x.due !== rows[i - 1].due).length;
+      const owed = rows.reduce((t, x) => t + x.due - x.received, 0);
+      out.textContent = rows.length ? `${plural(rows.length, 'month')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}; ${plural(changes, 'rent change')}; due ${rupees(rows.reduce((t, x) => t + x.due, 0))}, received ${rupees(rows.reduce((t, x) => t + x.received, 0))}, short ${rupees(owed)}.${skipped.length ? ` ${plural(skipped.length, 'line')} not understood, left out: "${skipped[0].slice(0, 40)}"${skipped.length > 1 ? '…' : ''}` : ''}` : 'No months found yet.';
+    }
+    return;
+  }
+});
 document.addEventListener('input', (e) => {
   const t = currentTask();
   if (!t || state.readOnly || !e.target.closest('#drawer')) return;
