@@ -286,6 +286,7 @@ button:disabled { cursor: not-allowed; }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
 .vault-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.vault-crumbs > *, .vault-crumbs > .link-btn { flex: 0 0 auto; width: auto; }
 .vault-actions { margin-bottom: 10px; flex-wrap: wrap; }
 .vault-pick { width: auto; max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .vault-mark { display: inline-flex; align-items: center; margin-right: 4px; }
@@ -1673,7 +1674,7 @@ const DOC_CATS = [
 const DOC_TYPES = ['National ID card', 'Passport', 'Driving licence', 'Visa', 'Birth certificate', 'Marriage certificate', 'Degree', 'Property deed', 'Vehicle registration', 'Insurance policy', 'Will'];
 const Vault = {
   cat(id) { return DOC_CATS.find((c) => c.id === id) || DOC_CATS[DOC_CATS.length - 1]; },
-  list() { return DB.docs.filter((d) => People.shows(d)); },
+  list() { return DB.docs.filter((d) => !d.place && People.shows(d)); }, // plain files kept outside the Vault are in Folders only
   forAsset(assetId) { return DB.docs.filter((d) => (d.assets || []).includes(assetId)); },
   renewOn(d) { return d.expires && d.renewMonths ? toISO(addMonthsClamped(parseISO(d.expires), -d.renewMonths)) : ''; },
   // 'expired', 'renew' (inside its renew window), 'ok', or '' (doesn't expire).
@@ -1749,7 +1750,7 @@ const Vault = {
     const shared = DB.docs.some((d) => this.topOf(d) === 'shared' && People.shows(d)) || DB.folders.some((f) => f.area === 'vault' && f.top === 'shared');
     return [...(v === 'all' ? People.list().map((p) => p.id) : [v]), ...(shared ? ['shared'] : [])];
   },
-  inTop(top) { return DB.docs.filter((d) => this.topOf(d) === top && People.shows(d)); },
+  inTop(top) { return DB.docs.filter((d) => !d.place && this.topOf(d) === top && People.shows(d)); },
   under(path) { return (p) => !path || p === path || p.startsWith(`${path}/`); },
   // Every folder path in a top, its parents included, sorted ('' not included).
   paths(top) {
@@ -1843,7 +1844,8 @@ const Vault = {
     changed('folders');
   },
   // Plain files dropped into a folder: each its own thing in the Vault, named after the file, kept with it.
-  async addFiles(top, path, files) {
+  // place: a folder outside the Vault ('Assets/Gold') to keep them in instead (Folders tab, "Just keep it here").
+  async addFiles(top, path, files, place = '') {
     if (state.readOnly) return [];
     const made = [];
     for (const f of files) {
@@ -1851,6 +1853,7 @@ const Vault = {
       const d = this.add({ cat: 'file', name: shortName(dot > 0 ? f.name.slice(0, dot) : f.name, 80) || 'File', people: this.peopleFor(top), renewMonths: 0 });
       d.plain = true;
       d.folder = path;
+      if (place) d.place = place;
       made.push(d);
     }
     changed('docs');
@@ -2629,7 +2632,9 @@ const Selection = {
 let asking = null; // {resolve, withText} while a question is open
 const ask = (question, opts) => openAsk(question, opts, false);
 const askText = (question, value = '', opts) => openAsk(question, opts, true, value);
-function openAsk(question, { yes = 'OK', no = 'Cancel', danger = false } = {}, withText = false, value = '') {
+// A choice from a list: [{value, label}]; answers the value chosen, or null.
+const askChoice = (question, choices, opts = {}) => openAsk(question, { ...opts, choices }, true, choices[0] ? choices[0].value : '');
+function openAsk(question, { yes = 'OK', no = 'Cancel', danger = false, choices = null } = {}, withText = false, value = '') {
   if (asking) answerAsk(false); // only one at a time
   return new Promise((resolve) => {
     asking = { resolve, withText };
@@ -2637,7 +2642,8 @@ function openAsk(question, { yes = 'OK', no = 'Cancel', danger = false } = {}, w
       <div class="modal-back" data-action="ask-no"></div>
       <form class="modal" data-form="ask" role="alertdialog" aria-label="${esc(question)}">
         <p class="ask-q">${esc(question)}</p>
-        ${withText ? `<input class="input" name="answer" value="${esc(value)}" autocomplete="off" aria-label="${esc(question)}">` : ''}
+        ${choices ? `<select class="input" name="answer" aria-label="${esc(question)}">${choices.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('')}</select>`
+          : withText ? `<input class="input" name="answer" value="${esc(value)}" autocomplete="off" aria-label="${esc(question)}">` : ''}
         <div class="row" style="justify-content:flex-end">
           <button type="button" class="btn" data-action="ask-no">${esc(no)}</button>
           <button class="btn ${danger ? 'danger' : 'primary'}" data-ask-yes>${esc(yes)}</button>
@@ -2645,7 +2651,7 @@ function openAsk(question, { yes = 'OK', no = 'Cancel', danger = false } = {}, w
       </form>`;
     const first = $(withText ? '#modal [name="answer"]' : '#modal [data-ask-yes]');
     first.focus();
-    if (withText) first.select();
+    if (withText && !choices) first.select();
   });
 }
 function answerAsk(yes) {
@@ -2838,6 +2844,8 @@ function changed(...keys) {
   if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
   if (keys.some((k) => FILE_KEYS.has(k))) AT.later(); // a person, owner or name changed: files follow to their folder
 }
+// A path in someone's Vault ('Me/Vault/…'): those files show in the Vault's own view.
+const inVaultPath = (p) => String(p).split('/')[1] === 'Vault';
 const FILE_KEYS = new Set(['tasks', 'docs', 'assets', 'upkeep', 'musings', 'people', 'folders']);
 
 // ===================== Notifications =====================
@@ -3250,9 +3258,67 @@ const Files = {
     const top = this.join(this.personDir(this.people(rec, key)), this.AREAS[key] || 'Other');
     if (key === 'assets') return this.join(top, this.dirName(Assets.kind(rec.kind).name), rec.kind === 'vehicle' ? this.dirName(rec.name) : '');
     if (key === 'upkeep') { const a = DB.assets.find((x) => x.id === rec.asset); return this.join(top, a ? this.dirName(a.name) : 'Store'); }
+    if (key === 'docs' && rec.place) return this.join(this.personDir(this.people(rec, key)), ...String(rec.place).split('/').filter(Boolean));
     if (key === 'docs') return this.join(top, ...String(rec.folder || '').split('/').filter(Boolean).map((p) => this.dirName(p)));
     if (key === 'tasks' && this.seriesOf(rec)) return this.join(top, this.seriesDir(rec, this.personDir(this.people(rec, key))));
     return top;
+  },
+  // ----- The Folders tab: what's under a person's folder (top: a person's id or 'shared'), as on disk -----
+  topDir(top) { return top === 'shared' ? 'Shared' : this.personDir([top]); },
+  // Every file there (each once, with the first thing that has it), in this folder or (deep) anywhere under it.
+  filesIn(top, path, deep = false) {
+    const base = this.join(this.topDir(top), path);
+    const seen = new Set();
+    const out = [];
+    for (const key of this.KEYS) for (const rec of DB[key] || []) {
+      if (key === 'docs' && !rec.place) continue; // the Vault has its own view
+      if (!People.shows(rec) && key !== 'assets' && key !== 'upkeep') continue;
+      for (const att of rec.attachments || []) {
+        if (!att.file || seen.has(att.file) || inVaultPath(att.file)) continue;
+        const dir = this.dir(att.file);
+        if (deep ? !(dir === base || dir.startsWith(`${base}/`)) : dir !== base) continue;
+        seen.add(att.file);
+        out.push({ att, rec, key });
+      }
+    }
+    return out.sort((a, b) => a.att.name.localeCompare(b.att.name));
+  },
+  // The folders the things themselves give (a car's, a repeating task's), so an empty one shows to add to.
+  recordDirs(top) {
+    const want = this.topDir(top);
+    const out = [];
+    for (const key of ['tasks', 'assets', 'upkeep', 'musings']) for (const rec of DB[key] || []) {
+      if (key === 'tasks' && (rec.done || !this.seriesOf(rec))) continue; // one-off and finished tasks add no folder of their own
+      const f = this.folderOf(rec, key);
+      if (f.startsWith(`${want}/`)) out.push(f.slice(want.length + 1));
+    }
+    return out;
+  },
+  // Every folder path under a person's folder, the Vault's included ('Vault', 'Vault/Car', 'Tasks/Elec bill').
+  areaPaths(top) {
+    const all = new Set(['Vault']);
+    const add = (p) => { const parts = p.split('/').filter(Boolean); parts.forEach((_, i) => all.add(parts.slice(0, i + 1).join('/'))); };
+    const want = this.topDir(top);
+    this.filesIn(top, '', true).forEach((x) => add(this.dir(x.att.file).slice(want.length + 1)));
+    this.recordDirs(top).forEach(add);
+    Vault.paths(top).forEach((p) => add(this.join('Vault', p)));
+    return [...all];
+  },
+  // The folders right inside one (outside the Vault's own), each with how many files are under it.
+  areaFolders(top, path) {
+    const order = ['Vault', 'Tasks', 'Assets', 'Upkeep', 'Musings'];
+    const kids = this.areaPaths(top).filter((p) => (path ? p.startsWith(`${path}/`) && !p.slice(path.length + 1).includes('/') : !p.includes('/')));
+    return kids.map((p) => ({ path: p, name: this.base(p), count: p === 'Vault' ? Vault.inTop(top).length : this.filesIn(top, p, true).length }))
+      .sort((a, b) => (path ? 0 : order.indexOf(a.name) - order.indexOf(b.name)) || a.name.localeCompare(b.name));
+  },
+  // The things whose own folder this is (a car, a repeating task's copies, a gold kind's items), to attach files to.
+  owners(top, path) {
+    const full = this.join(this.topDir(top), path);
+    const out = [];
+    for (const key of ['tasks', 'assets', 'upkeep', 'musings']) for (const rec of DB[key] || []) {
+      if (this.folderOf(rec, key) === full && (key === 'assets' || key === 'upkeep' || People.shows(rec))) out.push({ rec, key });
+    }
+    return out.sort((a, b) => (a.rec.done ? 1 : 0) - (b.rec.done ? 1 : 0) || String(b.rec.due || b.rec.date || '').localeCompare(String(a.rec.due || a.rec.date || '')));
   },
   // Where a new file for this record is saved: its folder, or for a task whose files go to the Vault, that Vault folder
   // (the file then shows there as a plain file, which is what keeps it there: see Vault.fileTask).
@@ -6514,15 +6580,17 @@ function docRow(d) {
       ${docState(d)}
     </li>`;
 }
-// The Folders tab: the Vault as folders, as they sit in the attachments folder. With everyone shown it opens on each
-// person's folder (and Shared); with one person shown, on theirs, with Shared as a folder at its top.
+// The Folders tab: the attachments folder as it is on disk, person by person (the person picker decides whose):
+// Me › Vault (your own folders: make, rename, delete), Tasks, Assets, Upkeep, Musings (their folders follow the things
+// in them). With everyone shown it opens on each person's folder (and Shared); with one person shown, on theirs, with
+// Shared as a folder at its top. vaultAt: { top, path } with path from the person's folder ('Vault/Car', 'Assets/Gold').
 function vaultFolderRow(f) {
   const mark = f.person ? (f.top === 'shared' ? ic('users') : avatar(f.top)) : ic('folder');
   return `
     <li class="item vault-folder">
       <span class="tl-mark">${mark}</span>
-      <div class="body clickable" data-vault-go="${esc(f.top)}" data-path="${esc(f.path)}"><div class="title">${esc(f.name)}</div><div class="meta"><span>${f.count ? plural(f.count, 'thing') : 'Empty'}</span></div></div>
-      ${f.person ? '' : `<span class="row edit-only"><button type="button" class="icon-btn" data-action="vault-folder-rename" data-top="${esc(f.top)}" data-path="${esc(f.path)}" aria-label="Rename ${esc(f.name)}" title="Rename">${ic('pencil', 'sm')}</button><button type="button" class="icon-btn" data-action="vault-folder-delete" data-top="${esc(f.top)}" data-path="${esc(f.path)}" aria-label="Delete ${esc(f.name)}" title="Delete">${ic('trash', 'sm')}</button></span>`}
+      <div class="body clickable" data-vault-go="${esc(f.top)}" data-path="${esc(f.path)}"><div class="title">${esc(f.name)}</div><div class="meta"><span>${f.count ? plural(f.count, f.unit || 'thing') : 'Empty'}</span></div></div>
+      ${f.vpath == null ? '' : `<span class="row edit-only"><button type="button" class="icon-btn" data-action="vault-folder-rename" data-top="${esc(f.top)}" data-path="${esc(f.vpath)}" aria-label="Rename ${esc(f.name)}" title="Rename">${ic('pencil', 'sm')}</button><button type="button" class="icon-btn" data-action="vault-folder-delete" data-top="${esc(f.top)}" data-path="${esc(f.vpath)}" aria-label="Delete ${esc(f.name)}" title="Delete">${ic('trash', 'sm')}</button></span>`}
     </li>`;
 }
 function vaultFileRow(d) {
@@ -6535,37 +6603,95 @@ function vaultFileRow(d) {
       <button type="button" class="icon-btn" data-action="open-doc" data-id="${esc(d.id)}" aria-label="Details of ${esc(d.name)}" title="Details">${ic('pencil', 'sm')}</button>
     </li>`;
 }
+// A file on a task, asset, upkeep entry or piece: opens with a tap; the arrow goes to what it's on.
+function areaFileRow({ att, rec, key }) {
+  const title = key === 'tasks' ? fullTitle(rec) : rec.title || rec.name || rec.item || 'Untitled';
+  return `
+    <li class="item">
+      <span class="tl-mark">${fileIcon(att)}</span>
+      <div class="body clickable" data-action="rec-file-open" data-key="${key}" data-rec="${esc(rec.id)}" data-att="${esc(att.id)}"><div class="title">${esc(att.name)}</div><div class="meta"><span>On ${esc(title)}</span><span>${fmtSize(att.size)}</span></div></div>
+      <button type="button" class="icon-btn" data-action="files-go" data-key="${key}" data-id="${esc(rec.id)}" aria-label="Open ${esc(title)}" title="Open what it's on">${ic('arrow-up-right', 'sm')}</button>
+    </li>`;
+}
 function vaultAt() {
   const tops = Vault.tops();
   const pick = People.viewing() === 'all' && tops.length > 1; // a level of people above the folders
   const at = device.get('vaultAt', null) || {};
   const top = tops.includes(at.top) ? at.top : pick ? null : tops[0];
   let path = top && at.top === top ? at.path || '' : '';
-  if (top && path && !Vault.paths(top).includes(path)) path = '';
+  if (top && path && !Files.areaPaths(top).includes(path)) path = '';
   return { tops, pick, top, path };
 }
+const inVaultArea = (path) => path === 'Vault' || path.startsWith('Vault/');
+const vaultSub = (path) => (path === 'Vault' ? '' : path.slice(6));
 function vaultFoldersView() {
   const { tops, pick, top, path } = vaultAt();
-  const crumbs = [`<button type="button" class="link-btn" data-vault-go="" data-path="">Vault</button>`];
+  const crumbs = [`<button type="button" class="link-btn" data-vault-go="" data-path="">Files</button>`];
   if (top && (pick || top !== tops[0])) crumbs.push(`<button type="button" class="link-btn" data-vault-go="${esc(top)}" data-path="">${esc(Vault.topName(top))}</button>`);
   path.split('/').filter(Boolean).forEach((seg, i, all) => crumbs.push(`<button type="button" class="link-btn" data-vault-go="${esc(top)}" data-path="${esc(all.slice(0, i + 1).join('/'))}">${esc(seg)}</button>`));
   let rows;
-  if (!top) rows = tops.map((t) => vaultFolderRow({ top: t, path: '', name: Vault.topName(t), count: Vault.inTop(t).length, person: true }));
-  else {
-    const c = Vault.contents(top, path);
-    const shared = !path && !pick && top === tops[0] && top !== 'shared' && tops.includes('shared') ? [vaultFolderRow({ top: 'shared', path: '', name: 'Shared', count: Vault.inTop('shared').length, person: true })] : [];
-    rows = [...shared, ...c.folders.map((f) => vaultFolderRow({ ...f, top })), ...c.items.map((d) => (d.plain ? vaultFileRow(d) : docRow(d)))];
-  }
-  const here = top ? `data-top="${esc(top)}" data-path="${esc(path)}"` : '';
-  return `
-    <nav class="vault-crumbs meta" aria-label="Where you are">${crumbs.join(`<span aria-hidden="true">›</span>`)}</nav>
-    ${top ? `<div class="row edit-only vault-actions">
+  let actions = '';
+  if (!top) rows = tops.map((t) => vaultFolderRow({ top: t, path: '', name: Vault.topName(t), count: Vault.inTop(t).length + Files.filesIn(t, '', true).length, person: true }));
+  else if (!path) { // the person's folder: its areas
+    const shared = !pick && top === tops[0] && top !== 'shared' && tops.includes('shared') ? [vaultFolderRow({ top: 'shared', path: '', name: 'Shared', count: Vault.inTop('shared').length + Files.filesIn('shared', '', true).length, person: true })] : [];
+    const areas = Files.areaFolders(top, '').map((f) => vaultFolderRow({ top, path: f.path, name: f.name, count: f.count, unit: f.name === 'Vault' ? 'thing' : 'file' }));
+    rows = [...shared, ...areas];
+  } else if (inVaultArea(path)) { // the Vault: your own folders, documents and plain files
+    const sub = vaultSub(path);
+    const c = Vault.contents(top, sub);
+    rows = [...c.folders.map((f) => vaultFolderRow({ ...f, top, path: Files.join('Vault', f.path), vpath: f.path })), ...c.items.map((d) => (d.plain ? vaultFileRow(d) : docRow(d)))];
+    const here = `data-top="${esc(top)}" data-path="${esc(sub)}"`;
+    actions = `
       <button type="button" class="btn small" data-action="vault-folder-new" ${here}>${ic('folder', 'sm')}New folder</button>
       <label class="btn small">${ic('upload', 'sm')}Add files<input type="file" multiple data-input="vault-files" ${here} hidden></label>
       ${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="vault-files" ${here} hidden></label>` : ''}
-      <button type="button" class="btn small" data-action="asset-form" data-form-type="doc" data-kind="other" data-folder="${esc(path)}" data-top="${esc(top)}">${ic('plus', 'sm')}Add document</button>
-    </div>` : ''}
-    <div class="card"><ul class="list">${rows.join('') || '<li class="empty">Nothing in this folder yet. Add files (bills, agreements) or a document (an ID card, with its dates).</li>'}</ul></div>`;
+      <button type="button" class="btn small" data-action="asset-form" data-form-type="doc" data-kind="other" data-folder="${esc(sub)}" data-top="${esc(top)}">${ic('plus', 'sm')}Add document</button>`;
+  } else { // Tasks, Assets, Upkeep, Musings: folders follow the things in them
+    const here = `data-top="${esc(top)}" data-path="${esc(path)}"`;
+    rows = [
+      ...Files.areaFolders(top, path).map((f) => vaultFolderRow({ top, path: f.path, name: f.name, count: f.count, unit: 'file' })),
+      ...Files.filesIn(top, path).map((x) => (x.key === 'docs' ? vaultFileRow(x.rec) : areaFileRow(x))),
+    ];
+    actions = `
+      <label class="btn small">${ic('upload', 'sm')}Add files<input type="file" multiple data-input="area-files" ${here} hidden></label>
+      ${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="area-files" ${here} hidden></label>` : ''}`;
+  }
+  return `
+    <nav class="vault-crumbs meta" aria-label="Where you are">${crumbs.join('<span aria-hidden="true">›</span>')}</nav>
+    ${actions ? `<div class="row edit-only vault-actions">${actions}</div>` : ''}
+    <div class="card"><ul class="list">${rows.join('') || `<li class="empty">${inVaultArea(path) ? 'Nothing in this folder yet. Add files (bills, agreements) or a document (an ID card, with its dates).' : 'Nothing in this folder yet.'}</li>`}</ul></div>`;
+}
+// Files added in a Tasks, Assets, Upkeep or Musings folder: a thing's own folder (a car, a repeating task) takes them;
+// a folder of many things asks which, or keeps them there as plain files.
+async function areaAddFiles(top, path, files) {
+  if (state.readOnly || !files.length) return;
+  const owners = Files.owners(top, path);
+  let pick = owners.length === 1 ? owners[0] : null;
+  if (owners.length > 1) {
+    const label = (o) => `${{ tasks: 'Task', assets: 'Asset', upkeep: 'Upkeep', musings: 'Piece' }[o.key]}: ${o.key === 'tasks' ? fullTitle(o.rec) : o.rec.title || o.rec.name || o.rec.item || 'Untitled'}${o.rec.done ? ' (done)' : ''}`;
+    const v = await askChoice(`Attach ${plural(files.length, 'file')} to which?`, [...owners.map((o, i) => ({ value: String(i), label: label(o) })), { value: 'keep', label: 'Just keep it here' }], { yes: 'Add' });
+    if (v == null) return;
+    pick = v === 'keep' ? null : owners[Number(v)];
+  }
+  if (pick) {
+    await AT.add(pick.rec, files, pick.key);
+    toast(`Added ${plural(files.length, 'file')} to ${pick.key === 'tasks' ? fullTitle(pick.rec) : pick.rec.title || pick.rec.name || pick.rec.item}`);
+  } else {
+    const made = await Vault.addFiles(top, '', files, path);
+    if (made.length) toast(`Kept ${plural(made.length, 'file')} in ${path.split('/').join(' › ')}`);
+  }
+  render();
+}
+// "Open what it's on" from the Folders tab.
+function filesGo(key, id) {
+  const r = DB[key] && DB[key].find((x) => x.id === id);
+  if (!r) return;
+  if (key === 'tasks') { state.openTask = id; renderDrawer(); return; }
+  if (key === 'musings') { state.musing = id; state.musingEdit = false; setView('musings'); return; }
+  if (key === 'upkeep') { openAssetForm('upkeep', { id }); return; }
+  if (key === 'assets' && r.kind === 'vehicle') { device.set('vehicleCar', id); device.set('vehicleTab', 'overview'); setView('vehicles'); return; }
+  if (key === 'assets') { openAssetForm('asset', { id }); return; }
+  openAssetForm('doc', { id });
 }
 // New folder, Rename and Delete on the Folders tab. Deleting a folder with things in it asks; they go to the Trash.
 async function vaultFolderAction(action, { top, path }) {
@@ -6580,7 +6706,8 @@ async function vaultFolderAction(action, { top, path }) {
     const to = Vault.renameFolder(top, path, name);
     if (!to) return;
     const at = device.get('vaultAt', null); // inside it: stay inside it
-    if (at && at.top === top && Vault.under(path)(at.path || '')) device.set('vaultAt', { top, path: to + (at.path || '').slice(path.length) });
+    const was = Files.join('Vault', path);
+    if (at && at.top === top && Vault.under(was)(at.path || '')) device.set('vaultAt', { top, path: Files.join('Vault', to) + (at.path || '').slice(was.length) });
     toast(`Renamed to ${Files.base(to)}`);
     render();
     return;
@@ -8780,6 +8907,7 @@ document.addEventListener('click', (e) => {
     case 'asset-form': openAssetForm(btn.dataset.formType, { kind: btn.dataset.kind, id: btn.dataset.id, person: btn.dataset.person, hyear: btn.dataset.hyear, record: btn.dataset.record, asset: btn.dataset.asset, folder: btn.dataset.folder, top: btn.dataset.top }); break;
     case 'vault-folder-new': case 'vault-folder-rename': case 'vault-folder-delete': vaultFolderAction(action, { ...btn.dataset }); break;
     case 'open-doc': openAssetForm('doc', { id }); break;
+    case 'files-go': filesGo(btn.dataset.key, id); break;
     case 'delete-doc': {
       const d = state.assetForm && DB.docs.find((x) => x.id === state.assetForm.id);
       if (!d) break;
@@ -9435,6 +9563,13 @@ document.addEventListener('change', (e) => {
     const d = DB.docs.find((x) => x.id === docId);
     if (r && d && AT.link(r, key, (d.attachments || []).find((a) => a.id === attId))) { render(); renderDrawer(); if (state.assetForm) renderAssetForm(); }
     else e.target.value = '';
+    return;
+  }
+  if (e.target.dataset?.input === 'area-files' && !state.readOnly) {
+    const files = [...(e.target.files || [])];
+    const { top, path } = e.target.dataset;
+    e.target.value = '';
+    areaAddFiles(top, path, files);
     return;
   }
   if (e.target.dataset?.input === 'vault-files' && !state.readOnly) {

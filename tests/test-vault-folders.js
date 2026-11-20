@@ -27,7 +27,9 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   // --- The Folders tab ---
   doc.querySelector('[data-view="vault"]').click();
   main().querySelector('[data-vault-tab="folders"]').click();
-  check(main().querySelector('[data-vault-tab="folders"].active') && /Nothing in this folder yet/.test(main().textContent), 'a Folders tab, empty to start (just you: no level of people)');
+  check(main().querySelector('[data-vault-tab="folders"].active') && [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent).join() === 'Vault', 'a Folders tab: your folder, as on disk (just you: no level of people), with its Vault');
+  go('Vault');
+  check(/Nothing in this folder yet/.test(main().textContent), 'the Vault is empty to start');
   main().querySelector('[data-action="vault-folder-new"]').click();
   await answer(win, true, 'Car');
   check(main().querySelector('.vault-folder') && /Car/.test(main().querySelector('.vault-folder').textContent) && /Empty/.test(main().querySelector('.vault-folder').textContent), 'New folder: "Car" is there, empty');
@@ -35,7 +37,7 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   main().querySelector('[data-action="vault-folder-new"]').click();
   await answer(win, true, 'Insurance');
   go('Insurance');
-  check(/Vault\s*›\s*Car\s*›\s*Insurance/.test(main().querySelector('.vault-crumbs').textContent), 'folders inside folders, with the way back');
+  check(/Files\s*›\s*Vault\s*›\s*Car\s*›\s*Insurance/.test(main().querySelector('.vault-crumbs').textContent), 'folders inside folders, with the way back');
 
   // --- Plain files ---
   await pick([new win.File(['%PDF'], 'Policy 2026.pdf', { type: 'application/pdf' }), new win.File(['x'], 'receipt.jpg', { type: 'image/jpeg' })]);
@@ -45,6 +47,7 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   check(main().querySelectorAll('[data-action="rec-file-open"]').length === 2 && /2 files/.test(main().querySelector('.page-head').textContent), 'listed in the folder; the page counts files apart from documents');
   check(!main().querySelector('[data-vault-tab="file"]'), 'plain files make no tab of their own');
   doc.querySelector('[data-vault-go=""]').click();
+  go('Vault');
   check(/2 things/.test(main().querySelector('.vault-folder').textContent), 'a folder says how many things are inside it, all the way down');
 
   // --- Details: move it, or make it a document ---
@@ -76,6 +79,7 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
 
   // --- Rename and delete a folder ---
   doc.querySelector('[data-vault-go=""]').click();
+  go('Vault');
   main().querySelector('[data-action="vault-folder-rename"]').click();
   await answer(win, true, 'Vehicle papers');
   await tick(40);
@@ -95,15 +99,21 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   d2.folder = 'House';
   win.eval('changed')('docs');
   PA.render();
+  doc.querySelector('[data-vault-go=""]').click(); // back to the top
   const tops = [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent);
   check(tops.join(',') === 'Me,Robin,Shared', `with everyone shown: a folder per person and Shared (got ${tops.join(',')})`);
   go('Robin');
-  check(main().textContent.includes('Robin ID') && /Vault\s*›\s*Robin/.test(main().querySelector('.vault-crumbs').textContent), 'a person\'s folder holds their things');
+  go('Vault');
+  check(main().textContent.includes('Robin ID') && /Files\s*›\s*Robin\s*›\s*Vault/.test(main().querySelector('.vault-crumbs').textContent), 'a person\'s folder holds their things');
   People.view(robin.id);
   doc.querySelector('[data-vault-go=""]').click();
   const rob = [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent);
-  check(main().textContent.includes('Robin ID') && rob.join(',') === 'Shared', 'Robin shown: the Vault opens on Robin\'s, with Shared as a folder');
+  check(rob.join(',') === 'Shared,Vault', `Robin shown: it opens on Robin's folder, with Shared as a folder (got ${rob.join(',')})`);
+  go('Vault');
+  check(main().textContent.includes('Robin ID'), 'Robin\'s Vault holds Robin\'s things');
+  doc.querySelector('[data-vault-go=""]').click();
   go('Shared');
+  go('Vault');
   go('House');
   check(main().textContent.includes('Joint deed'), 'Shared holds what\'s on more than one person');
   People.view('all');
