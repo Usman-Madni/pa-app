@@ -837,6 +837,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
     <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
     <button class="nav-btn more-item" data-view="vehicles" title="Vehicles"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-car"/></svg></span><span>Vehicles</span></button>
+    <button class="nav-btn more-item" data-view="utilities" title="Utilities"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><span>Utilities</span></button>
     <button class="nav-btn more-item" data-view="musings" title="Musings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="ID vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
@@ -914,6 +915,11 @@ body.phone .p-when-time { flex: 1 1 auto; }
 <symbol id="i-silver-coin" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" style="fill:var(--metal-silver-fill);stroke:var(--metal-silver)"/><path d="M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0" style="stroke:var(--metal-silver)"/><path d="M12 9.5v5" style="stroke:var(--metal-silver)"/></symbol>
 <symbol id="i-building-bank" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7 -3l7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></symbol>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M5 12h-2l9 -9l9 9h-2"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/></symbol>
+<symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.621 -2.333 5.294c0 3.616 3.807 7 7 7s7 -3.384 7 -7c0 -1.346 -1.454 -4.448 -2.333 -5.294c-1.573 3 -3.08 3 -4.25 2.235z"/></symbol>
+<symbol id="i-droplet" viewBox="0 0 24 24"><path d="M7.502 19.423c2.602 2.105 6.395 2.105 8.996 0c2.602 -2.105 3.262 -5.708 1.566 -8.546l-4.89 -7.26c-.42 -.625 -1.287 -.803 -1.936 -.397a1.376 1.376 0 0 0 -.41 .397l-4.893 7.26c-1.695 2.838 -1.035 6.441 1.567 8.546z"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"/></symbol>
+<symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 18l.01 0"/><path d="M9.172 15.172a4 4 0 0 1 5.656 0"/><path d="M6.343 12.343a8 8 0 0 1 11.314 0"/><path d="M3.515 9.515c4.686 -4.687 12.284 -4.687 17 0"/></symbol>
 <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
 <symbol id="i-chart-line" viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M4 15l4 -6l4 2l4 -5l4 4"/></symbol>
 <symbol id="i-arrow-back-up" viewBox="0 0 24 24"><path d="M9 14l-4 -4l4 -4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></symbol>
@@ -2543,6 +2549,7 @@ const TRASH_KINDS = {
   tasks: { name: 'Task', icon: 'list-check' }, notes: { name: 'Note', icon: 'notes' }, assets: { name: 'Asset', icon: 'wallet' },
   docs: { name: 'Document', icon: 'id' }, rates: { name: 'Rates', icon: 'coins' }, zakat: { name: 'Zakat record', icon: 'calendar-event' },
   zakatPay: { name: 'Zakat payment', icon: 'coins' }, upkeep: { name: 'Upkeep entry', icon: 'tool' }, musings: { name: 'Musing', icon: 'pencil' },
+  utilities: { name: 'Utility', icon: 'bolt' }, bills: { name: 'Bill', icon: 'receipt' },
 };
 const Trash = {
   KEEP_MS: 30 * 864e5,
@@ -2704,10 +2711,12 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // folders: {id, area:'vault', top: a person's id or 'shared', path: 'Car/Insurance'} — a Vault folder kept even with nothing
 //           in it yet (see Vault). Docs carry folder: their path in their person's Vault ('' the top) and plain: true for
 //           a plain file (a bill, an agreement: no dates), cat 'file'.
+// utilities: {id, type, name, provider, account, property, people, notes, created} — electricity, gas… (see Utilities);
+//           tasks may carry utility: its id. bills: {id, utility, date, period, amount, task, note} — what each came to.
 // hijriFix: {id 'hf-<hyear>-<month>', hyear, month, shift} — an Islamic month that began a day later (+1) or
 //           earlier (-1) here than Umm al-Qura says (see Hijri)
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
-const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'musings', 'folders', 'deleted'];
+const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'musings', 'folders', 'utilities', 'bills', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
@@ -2751,7 +2760,7 @@ function normalizeTask(t) {
 }
 
 const DB = {
-  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], upkeep: [], musings: [], folders: [], deleted: [],
+  tasks: [], notes: [], events: [], buckets: [], labels: [], notices: [], trash: [], people: [], assets: [], rates: [], zakat: [], zakatPay: [], docs: [], hijriFix: [], upkeep: [], musings: [], folders: [], utilities: [], bills: [], deleted: [],
   load() {
     for (const k of DATA_KEYS) {
       try { this[k] = JSON.parse(localStorage.getItem('pa_' + k)) || []; } catch { this[k] = []; }
@@ -3779,7 +3788,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -3931,7 +3940,7 @@ function renderSearch() {
 }
 
 // A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
-const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'zakat', 'vault', 'notices', 'trash'];
+const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'utilities', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
   for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
@@ -4787,7 +4796,7 @@ async function deleteLabel(id) {
 }
 
 // ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
-const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['vehicles', 'car', 'Vehicles'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['vehicles', 'car', 'Vehicles'], ['utilities', 'bolt', 'Utilities'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
 function renderMore() {
   const btn = $('.more-btn');
   if (!btn) return;
@@ -5208,7 +5217,9 @@ function finishDonePrompt(data) {
   if (ButlerTasks.is(t)) { zakatTasks(); vaultTasks(); upkeepTasks(); render(); } // the next one comes at once, like any repeating task
   // An upkeep job's task: Add entry, filled in, so the next round counts from it.
   const job = Upkeep.jobOfTask(t);
-  if (job) { closeTaskDrawer(); openAssetForm('upkeep', Upkeep.logFor(t)); } // dated the day it was done, as chosen in "Done on"
+  if (job) { closeTaskDrawer(); openAssetForm('upkeep', Upkeep.logFor(t)); }
+  // A utility's bill: what did it come to (dated the day it was paid)?
+  if (t.utility && DB.utilities.some((c) => c.id === t.utility)) { closeTaskDrawer(); openAssetForm('bill', { utility: t.utility, task: t.id, date: data.date }); } // dated the day it was done, as chosen in "Done on"
 }
 
 
@@ -6561,6 +6572,183 @@ function musingEditor(m) {
     </div>`;
 }
 
+// ===================== Utilities =====================
+// Connections (`utilities`: {id, type, name, provider, account, property: an asset id, people, notes, created}): the
+// electricity, gas, water, phone and internet you pay for (any other type can be typed). Each can have a bill task, an
+// ordinary repeating task (`utility`: the connection) whose files go to the Vault (Vault › Utilities › <type>, and a
+// folder per connection when one person has more than one of that type: Files go to, kept in step by `sync`).
+// Bills (`bills`: {id, utility, date, period, amount, task, note}): what each came to, asked when its task is ticked.
+const UTILITY_TYPES = [
+  { id: 'Electricity', icon: 'bolt' }, { id: 'Gas', icon: 'flame' }, { id: 'Water', icon: 'droplet' },
+  { id: 'Phone', icon: 'phone' }, { id: 'Internet', icon: 'wifi' },
+];
+const monthLabel = (iso) => (iso ? parseISO(iso.slice(0, 10)).toLocaleString('en-GB', { month: 'short', year: 'numeric' }) : '');
+const Utilities = {
+  // The tabs: the usual types, then any other in use.
+  types() {
+    const extra = [...new Set(DB.utilities.map((c) => c.type).filter((t) => t && !UTILITY_TYPES.some((u) => sameName(u.id, t))))].sort((a, b) => a.localeCompare(b));
+    return [...UTILITY_TYPES.map((u) => u.id), ...extra];
+  },
+  icon(type) { return UTILITY_TYPES.find((u) => sameName(u.id, type))?.icon || 'receipt'; },
+  list(type) { return DB.utilities.filter((c) => People.shows(c) && (!type || sameName(c.type, type))).sort((a, b) => a.name.localeCompare(b.name)); },
+  add(data) {
+    const c = { id: uid(), type: (data.type || 'Electricity').trim(), name: (data.name || '').trim() || (data.type || 'Electricity').trim(), provider: data.provider || '', account: data.account || '', property: data.property || '', people: data.people || People.forNew(), notes: data.notes || '', created: Date.now() };
+    DB.utilities.push(c);
+    return c;
+  },
+  // Its folder in its person's Vault: Utilities › Gas, or Utilities › Gas › House 1 when there's more than one.
+  folder(c) {
+    const several = DB.utilities.filter((x) => sameName(x.type, c.type) && Vault.topOf(x) === Vault.topOf(c)).length > 1;
+    return Files.join('Utilities', Files.dirName(c.type), several ? Files.dirName(c.name) : '');
+  },
+  tasksOf(c) { return DB.tasks.filter((t) => t.utility === c.id); },
+  openTask(c) { return this.tasksOf(c).filter((t) => !t.done && !PendingDelete.has(t.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'))[0] || null; },
+  bucket() {
+    let b = DB.buckets.find((x) => sameName(x.name, 'Utilities'));
+    if (!b) { addBucket('Utilities'); b = DB.buckets.find((x) => sameName(x.name, 'Utilities')); }
+    return b ? b.id : '';
+  },
+  // Its bill task: monthly on that day, a reminder at 9 am (it reaches To Do), its files to the Vault.
+  makeTask(c, day) {
+    const d = Math.min(Math.max(Number(day) || 1, 1), 31);
+    const now = new Date();
+    const on = (y, m) => new Date(y, m, Math.min(d, new Date(y, m + 1, 0).getDate()));
+    let due = on(now.getFullYear(), now.getMonth());
+    if (toISO(due) < todayISO()) due = on(now.getFullYear(), now.getMonth() + 1);
+    const several = DB.utilities.filter((x) => sameName(x.type, c.type)).length > 1;
+    const t = addTask({ title: `${c.type} bill${several ? ` (${c.name})` : ''}`, due: `${toISO(due)}T${ALL_DAY}`, people: People.of(c), bucket: this.bucket(),
+      reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+    TaskEdit.setRepeat(t, { freq: 'monthly', interval: 1 });
+    t.utility = c.id;
+    t.fileTo = this.folder(c);
+    Vault.keepFolder(Vault.topOf(t), t.fileTo);
+    changed('tasks');
+    return t;
+  },
+  // Keep each connection's bill tasks and the bills they put in the Vault in its folder (a second gas connection, a
+  // new name). Returns true if anything changed.
+  sync() {
+    if (state.readOnly) return false;
+    let any = false;
+    for (const c of DB.utilities) {
+      const want = this.folder(c);
+      const series = new Set();
+      for (const t of this.tasksOf(c)) {
+        series.add(Files.seriesOf(t) || t.id);
+        if (t.fileTo !== want) { Series.quietly(t, 'fileTo', want); any = true; }
+      }
+      for (const d of DB.docs) if (d.fromTask && series.has(d.fromTask) && d.folder !== want) { d.folder = want; any = true; }
+      if (series.size && any) Vault.keepFolder(Vault.topOf(c), want);
+    }
+    if (any) changed('tasks', 'docs');
+    return any;
+  },
+  bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')); },
+  addBill(data) {
+    const b = { id: uid(), utility: data.utility, date: data.date || todayISO(), period: data.period || monthLabel(data.date || todayISO()), amount: Number(data.amount) || 0, task: data.task || '', note: data.note || '' };
+    DB.bills.push(b);
+    return b;
+  },
+  // Spent on these connections in a year (up to a month, 1-12), and month by month.
+  sum(cs, year, upto = 12) {
+    const ids = new Set(cs.map((c) => c.id));
+    return DB.bills.filter((b) => ids.has(b.utility) && Number(b.date.slice(0, 4)) === year && Number(b.date.slice(5, 7)) <= upto).reduce((t, b) => t + b.amount, 0);
+  },
+  months(cs, year) {
+    const ids = new Set(cs.map((c) => c.id));
+    const m = Array(12).fill(0);
+    for (const b of DB.bills) if (ids.has(b.utility) && Number(b.date.slice(0, 4)) === year) m[Number(b.date.slice(5, 7)) - 1] += b.amount;
+    return m;
+  },
+  // This month for a connection: paid (a bill dated this month), due (its task this month or overdue), or nothing yet.
+  status(c, today = todayISO()) {
+    const bill = this.bills(c).find((b) => b.date.slice(0, 7) === today.slice(0, 7));
+    if (bill) return { state: 'paid', bill };
+    const t = this.openTask(c);
+    if (t && t.due && t.due.slice(0, 7) <= today.slice(0, 7)) return { state: t.due.slice(0, 10) < today ? 'late' : 'due', task: t };
+    return { state: '', task: t };
+  },
+};
+function utilityTasks() { Utilities.sync(); }
+// "Make its bill task" on a connection: which day of the month it's due.
+async function utilityMakeTask(id) {
+  const c = DB.utilities.find((x) => x.id === id);
+  if (!c || state.readOnly) return;
+  const day = await askText(`${c.name}: the bill is due on which day of the month?`, '', { yes: 'Make it' });
+  if (!day || !(Number(day) >= 1 && Number(day) <= 31)) return;
+  const t = Utilities.makeTask(c, day);
+  toast(`Made "${fullTitle(t)}", due ${fmtDate(t.due)} and every month`);
+  render();
+}
+
+// ===================== Utilities page =====================
+// Tabs: Overview (this month, and what they cost this year against last), then one per type. A type's tab has its
+// connections, each with its bill task, its bills and what it costs; the property it's for shows them too.
+function utilityCard(c) {
+  const t = Utilities.openTask(c);
+  const bills = Utilities.bills(c);
+  const y = new Date().getFullYear();
+  const prop = c.property && DB.assets.find((a) => a.id === c.property);
+  return `
+    <div class="card utility-card">
+      <div class="row util-head">
+        <span class="tl-mark">${ic(Utilities.icon(c.type))}</span>
+        <div class="grow"><div class="title"><b>${esc(c.name)}</b> ${whoBadges(c)}</div>
+          <div class="meta">${[c.provider, c.account ? `Account ${c.account}` : '', prop ? prop.name : ''].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
+        <button type="button" class="icon-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}" aria-label="Edit ${esc(c.name)}" title="Edit">${ic('pencil', 'sm')}</button>
+      </div>
+      <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `, due ${esc(fmtDate(t.due))}` : ''}`
+        : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
+      <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill</span><b>${rupees(bills[0].amount)}</b></div>` : ''}</div>
+      ${bills.length ? `<div class="upkeep-log">${bills.slice(0, 12).map((b) => `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><span class="ur-ico">${ic('receipt', 'sm')}</span><span class="ur-main"><span>${esc(b.period || monthLabel(b.date))}</span><span class="meta">Paid ${esc(fmtDate(b.date))}${b.note ? `, ${esc(b.note)}` : ''}</span></span><span class="ur-cost">${rupees(b.amount)}</span></button>`).join('')}</div>` : '<p class="meta" style="margin:0">No bills yet: ticking its bill task asks what it came to.</p>'}
+      <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
+    </div>`;
+}
+function renderUtilities() {
+  const all = Utilities.list();
+  const types = Utilities.types();
+  let tab = device.get('utilTab', 'overview');
+  if (tab !== 'overview' && !types.includes(tab)) tab = 'overview';
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  let body;
+  if (tab === 'overview') {
+    const rows = all.map((c) => {
+      const st = Utilities.status(c);
+      const pill = st.state === 'paid' ? `<span class="pill">Paid ${rupees(st.bill.amount)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
+      return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(c.type))}</span><div class="body clickable" data-util-tab="${esc(c.type)}"><div class="title">${esc(c.name)} ${whoBadges(c)}</div><div class="meta"><span>${esc(c.type)}</span>${Utilities.bills(c)[0] ? `<span>Last ${rupees(Utilities.bills(c)[0].amount)}</span>` : ''}</div></div>${pill}</li>`;
+    }).join('');
+    const byType = types.map((t) => ({ t, cs: all.filter((c) => sameName(c.type, t)) })).filter((x) => x.cs.length);
+    const months = Utilities.months(all, y);
+    const max = Math.max(1, ...months);
+    body = all.length ? `
+      <h2 class="vault-h">This month</h2><div class="card"><ul class="list">${rows}</ul></div>
+      <h2 class="vault-h">This year so far, against last year</h2>
+      <div class="card"><ul class="list">${byType.map(({ t, cs }) => { const now = Utilities.sum(cs, y, m); const was = Utilities.sum(cs, y - 1, m); return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(t))}</span><div class="body"><div class="title">${esc(t)}</div><div class="meta"><span>Last year to ${esc(MONTHS_SHORT[m - 1])}: ${rupees(was)}</span></div></div><b>${rupees(now)}</b>${was ? `<span class="pill ${now > was ? 'zk-left' : ''}">${now >= was ? '+' : ''}${Math.round(((now - was) / was) * 100)}%</span>` : ''}</li>`; }).join('')}</ul></div>
+      <h2 class="vault-h">Month by month, ${y}</h2>
+      <div class="card"><div class="kind-bars">${months.map((v, i) => `<div class="kind-bar" title="${esc(MONTHS_SHORT[i])}: ${esc(rupees(v))}"><span class="kb-name">${esc(MONTHS_SHORT[i])}</span><span class="kb-track"><span class="kb-fill" style="width:${barPct(v, max)}%"></span></span><span class="kb-val">${v ? rupees(v) : ''}</span></div>`).join('')}</div></div>`
+      : `<div class="card empty-state"><p><b>Nothing here yet.</b> Add your electricity, gas, water, phone and internet: each gets a bill task that reminds you every month, its bills go in the Vault, and here you see what they cost.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="Electricity">${ic('plus', 'sm')}Add a connection</button></div>`;
+  } else {
+    const cs = all.filter((c) => sameName(c.type, tab));
+    body = cs.length ? cs.map(utilityCard).join('') : `<div class="card empty-state"><p>No ${esc(tab.toLowerCase())} yet.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab)}">${ic('plus', 'sm')}Add ${esc(tab.toLowerCase())}</button></div>`;
+  }
+  return `
+    <div class="page-head">
+      <div><h1>Utilities</h1><p class="sub">${all.length ? plural(all.length, 'connection') : 'Electricity, gas, water, phone, internet'}</p></div>
+      <div class="row edit-only page-actions"><button class="btn primary" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab === 'overview' ? 'Electricity' : tab)}">${ic('plus', 'sm')}Add a connection</button></div>
+    </div>
+    <div class="tabs asset-tabs" role="tablist">${['overview', ...types].map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-util-tab="${esc(k)}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : esc(k)}</button>`).join('')}</div>
+    <div class="asset-body">${body}</div>`;
+}
+// A property's utilities, in its pop-up.
+function propertyUtilitiesBlock(a) {
+  const cs = DB.utilities.filter((c) => c.property === a.id);
+  if (!cs.length) return '';
+  const y = new Date().getFullYear();
+  return `<div class="value-history"><div class="meta">Utilities</div>${cs.map((c) => `<div class="vh-row"><button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${ic(Utilities.icon(c.type), 'sm')} ${esc(c.name)}</button><span class="meta">${esc(c.type)}</span><span>${rupees(Utilities.sum([c], y))} this year</span></div>`).join('')}</div>`;
+}
+
 // ===================== Vault page =====================
 // Tabs: Overview (what needs renewing, and what's coming up), then one per category in use. A row opens the document.
 const docState = (d) => {
@@ -6893,6 +7081,47 @@ function renderAssetForm() {
       <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro || !save || f.type === 'zakat-record' ? 'Close' : 'Cancel'}</button>${ro || !save ? '' : `<button class="btn primary">${esc(save)}</button>`}</div>
     </form>`;
   let html = '';
+  if (f.type === 'utility') {
+    const c = f.id ? DB.utilities.find((x) => x.id === f.id) : null;
+    const v = c || { type: f.kind || 'Electricity', name: '', provider: '', account: '', property: '', people: People.forNew(), notes: '' };
+    const on = People.of(v);
+    const props = DB.assets.filter((a) => a.kind === 'property' && !a.closed).sort((a, b) => a.name.localeCompare(b.name));
+    $('#modal').innerHTML = box(c ? c.name : `Add ${v.type.toLowerCase()}`, `
+      <div class="row">
+        <label class="field">Type<input class="input" name="type" list="util-types" value="${esc(v.type)}" maxlength="30" required><datalist id="util-types">${Utilities.types().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
+        <label class="field grow">Name<input class="input" name="name" value="${esc(v.name)}" placeholder="e.g. House, Shop" maxlength="60"></label>
+      </div>
+      <div class="row">
+        <label class="field grow">Provider<input class="input" name="provider" value="${esc(v.provider)}" maxlength="60"></label>
+        <label class="field grow">Account or consumer number<input class="input" name="account" value="${esc(v.account)}" maxlength="60" autocomplete="off"></label>
+      </div>
+      ${props.length ? `<label class="field">For property (optional)<select class="input" name="property"><option value="">None</option>${props.map((a) => `<option value="${esc(a.id)}" ${a.id === v.property ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
+      ${People.several() ? `<fieldset class="owner-box"><legend>Whose</legend><div class="check-row">${People.list().map((p) => `<label><input type="checkbox" name="u-p-${esc(p.id)}" ${on.includes(p.id) ? 'checked' : ''}> ${avatar(p.id)}${esc(p.name)}</label>`).join('')}</div></fieldset>` : ''}
+      ${c ? '' : '<label class="field">Bill due each month on day<input class="input" type="number" name="day" min="1" max="31" placeholder="e.g. 15 (leave empty for no bill task)"></label>'}
+      <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
+    c ? '<button type="button" class="btn danger edit-only" data-action="utility-delete" style="margin-right:auto">Delete</button>' : '');
+    $('#modal input[name="name"]')?.focus();
+    return;
+  }
+  if (f.type === 'bill') {
+    const b = f.id ? DB.bills.find((x) => x.id === f.id) : null;
+    const c = DB.utilities.find((x) => x.id === (b ? b.utility : f.utility));
+    if (!c) return closeAssetForm();
+    const t = f.task && DB.tasks.find((x) => x.id === f.task);
+    const last = Utilities.bills(c)[0];
+    const v = b || { date: f.date || todayISO(), period: t ? (t.period || monthLabel(t.due)) : monthLabel(f.date || todayISO()), amount: '', note: '' };
+    $('#modal').innerHTML = box(b ? `${c.name}: ${b.period}` : `What did the ${c.type.toLowerCase()} bill come to?`, `
+      <p class="meta" style="margin:0">${esc(c.name)}${last && !b ? `. Last one: ${rupees(last.amount)} (${esc(last.period)})` : ''}</p>
+      <div class="row">
+        <label class="field grow">Amount<input class="input" ${amountAttrs(v.amount)} name="amount" placeholder="Leave empty to skip"></label>
+        <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
+      </div>
+      <label class="field">For<input class="input" name="period" value="${esc(v.period)}" placeholder="e.g. Nov 2026" maxlength="30"></label>
+      <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>`,
+    b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '');
+    $('#modal input[name="amount"]')?.focus();
+    return;
+  }
   if (f.type === 'doc') {
     const d = f.id ? DB.docs.find((x) => x.id === f.id) : null;
     const fromAsset = f.asset && DB.assets.find((a) => a.id === f.asset); // "New document" from an asset: linked, and its owners'
@@ -7079,7 +7308,7 @@ function renderAssetForm() {
       ${ownerInputs(owners, a && (a.owners || []).length > 1 ?'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
       a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', a && a.kind === 'vehicle' ? 'Save car details' : 'Save', ro,
-      a ? upkeepBlock(a) + assetDocsBlock(a) + filesBlock(a, 'assets') : '');
+      a ? upkeepBlock(a) + (a.kind === 'property' ? propertyUtilitiesBlock(a) : '') + assetDocsBlock(a) + filesBlock(a, 'assets') : '');
   } else if (f.type === 'transfer') {
     const list = Assets.list().filter((a) => !a.closed);
     const a = DB.assets.find((x) => x.id === f.id) || list[0];
@@ -7354,6 +7583,31 @@ function submitAssetForm(type, data) {
       n++;
     }
     if (n) { changed('assets'); toast(`${plural(n, 'balance')} saved for ${fmtDate(data.date)}`); }
+  } else if (type === 'utility') {
+    const people = People.several() ? People.list().filter((p) => data[`u-p-${p.id}`] === 'on').map((p) => p.id) : [ME];
+    if (!people.length) return formError('Pick whose it is.');
+    if (!(data.type || '').trim()) return formError('Say what it is (electricity, gas…).');
+    const fields = { type: data.type.trim(), name: (data.name || '').trim() || data.type.trim(), provider: (data.provider || '').trim(), account: (data.account || '').trim(), property: data.property || '', people, notes: data.notes || '' };
+    let c = f.id ? DB.utilities.find((x) => x.id === f.id) : null;
+    if (c) Object.assign(c, fields); else c = Utilities.add(fields);
+    changed('utilities');
+    if (!f.id && data.day) Utilities.makeTask(c, data.day);
+    utilityTasks();
+    device.set('utilTab', c.type);
+    toast(`Saved ${c.name}${!f.id && data.day ? `, with its bill task on the ${ordinal(Number(data.day))} of each month` : ''}`);
+    closeAssetForm();
+    render();
+    return;
+  } else if (type === 'bill') {
+    const b = f.id ? DB.bills.find((x) => x.id === f.id) : null;
+    if (!b && (data.amount === '' || data.amount == null)) { closeAssetForm(); return; } // skipped
+    const fields = { amount: Number(data.amount) || 0, date: data.date || todayISO(), period: (data.period || '').trim() || monthLabel(data.date), note: (data.note || '').trim() };
+    if (b) Object.assign(b, fields); else Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
+    changed('bills');
+    toast(`Saved ${rupees(fields.amount)} for ${fields.period}`);
+    closeAssetForm();
+    render();
+    return;
   } else if (type === 'doc') {
     const people = People.several() ? People.list().filter((p) => data[`doc-p-${p.id}`] === 'on').map((p) => p.id) : [ME];
     if (!people.length) return formError('Pick whose it is.');
@@ -8614,7 +8868,7 @@ const EDIT_ACTIONS = new Set([
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
   'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
-  'delete-doc', 'unlink-doc', 'rec-file-remove', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
+  'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -8665,6 +8919,8 @@ document.addEventListener('click', (e) => {
   if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
   if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', vehicleOpen.dataset.tabTo || 'overview'); state.moreOpen = false; return setView('vehicles'); }
+  const utilTab = e.target.closest('[data-util-tab]');
+  if (utilTab) { device.set('utilTab', utilTab.dataset.utilTab); return render(); }
   const vaultTab = e.target.closest('[data-vault-tab]');
   if (vaultTab) { device.set('vaultTab', vaultTab.dataset.vaultTab); return render(); }
   const vaultGo = e.target.closest('[data-vault-go]'); // into a folder, or back up
@@ -8908,6 +9164,22 @@ document.addEventListener('click', (e) => {
     case 'vault-folder-new': case 'vault-folder-rename': case 'vault-folder-delete': vaultFolderAction(action, { ...btn.dataset }); break;
     case 'open-doc': openAssetForm('doc', { id }); break;
     case 'files-go': filesGo(btn.dataset.key, id); break;
+    case 'utility-task': utilityMakeTask(id); break;
+    case 'utility-delete': {
+      const c = state.assetForm && DB.utilities.find((x) => x.id === state.assetForm.id);
+      if (!c) break;
+      closeAssetForm();
+      Trash.discard([['utilities', c], ['bills', DB.bills.filter((b) => b.utility === c.id)], ['tasks', Utilities.tasksOf(c).filter((t) => !t.done)]], `"${c.name}"`);
+      utilityTasks();
+      break;
+    }
+    case 'bill-delete': {
+      const b = state.assetForm && DB.bills.find((x) => x.id === state.assetForm.id);
+      if (!b) break;
+      closeAssetForm();
+      Trash.discard([['bills', b]], `the ${b.period} bill`);
+      break;
+    }
     case 'delete-doc': {
       const d = state.assetForm && DB.docs.find((x) => x.id === state.assetForm.id);
       if (!d) break;
@@ -9658,6 +9930,7 @@ else {
   zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   vaultTasks(); // a renew task for each document that expires
   upkeepTasks(); // a task for each repeating upkeep job
+  utilityTasks(); // bill tasks and bills kept in their Vault folder
   autoRates(); // today's world prices, if no rate is typed yet
   ButlerTasks.placeOld(); // tasks made before they had a bucket go in it
   // The offline copy (sw.js), where the browser allows one: the live site, or this computer's test server.

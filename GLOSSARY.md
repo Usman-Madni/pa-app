@@ -131,6 +131,17 @@ Where a document or plain file sits in its person's vault (Shared when it's on m
 **Renew task**:
 The task a document that expires gets, a chosen time before its expiry. Typing the new expiry date ticks it and makes the next.
 
+## Utilities
+
+**Connection**:
+One electricity, gas, water, phone or internet you pay for (a house's gas), with its provider and account number.
+
+**Bill task**:
+A connection's monthly task to pay its bill; ticking it asks what the bill came to.
+
+**Bill**:
+What one bill came to, and when it was paid.
+
 ## Storage and devices
 
 **Data file**:
