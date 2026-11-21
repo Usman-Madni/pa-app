@@ -146,6 +146,32 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const heads = [...sheet.querySelectorAll('.sheet-side .ledger th')].map((x) => x.textContent).join(',');
   check(sheet.classList.contains('sheet') && sheet.querySelector('details.sheet-details:not([open])') && heads === 'Month,Units,Bill,Net metering,Rate,Effective bill,Effective rate,Paid on', `a connection opens as a sheet, its bills a table like the sheet you kept (got ${heads})`);
   win.eval('closeAssetForm')(true);
+  // --- Paste an electricity sheet ---
+  win.eval('openAssetForm')('utility', { id: el.id });
+  doc.querySelector('#modal .sheet-top [data-form-type="bill-paste"]').click();
+  const sheetText = [
+    'Month\tUnits\tBill\tNet Meter Benefit\tRate\tEffective Bill\tEffective Rate',
+    'Jul-25\t500\tRs30,000\t\tRs60\tRs30,000\tRs60',
+    'Aug-25\t400\tRs24,000\tRs10,000\tRs60\tRs14,000\tRs35',
+    'Sept-25\t300\tRs18,000\t\tRs60\tRs18,000\tRs60',
+    'oops',
+  ].join('\n');
+  const pta = doc.querySelector('#modal textarea[name="sheet"]');
+  pta.value = sheetText;
+  pta.dispatchEvent(new win.Event('input', { bubbles: true }));
+  const ppv = doc.querySelector('#modal .bill-paste-preview').textContent;
+  check(/3 months, Jul 2025 to Sept? 2025; 1,200 units; bills Rs 72,000, credit Rs 10,000, effective Rs 62,000/.test(ppv) && /1 line not understood/.test(ppv), `the preview says what it found (got: ${ppv})`);
+  submitForm(win, 'asset-bill-paste', {});
+  const pasted = PA.DB.bills.filter((b) => b.utility === el.id && b.month.startsWith('2025'));
+  const aug = pasted.find((b) => b.month === '2025-08');
+  check(pasted.length === 3 && aug.units === 400 && aug.amount === 24000 && aug.credit === 10000 && U.figures(aug).eff === 14000 && Math.round(U.figures(aug).effRate) === 35, 'each month becomes a bill with its units, bill and credit; the rest is worked out');
+  check(doc.querySelector('#modal form')?.dataset.form === 'asset-utility', 'and it goes back to the connection');
+  doc.querySelector('#modal .sheet-top [data-form-type="bill-paste"]').click();
+  doc.querySelector('#modal textarea[name="sheet"]').value = sheetText;
+  submitForm(win, 'asset-bill-paste', {});
+  check(PA.DB.bills.filter((b) => b.utility === el.id && b.month.startsWith('2025')).length === 3, 'pasting again replaces those months: nothing doubled');
+  win.eval('closeAssetForm')(true);
+
   // --- The bill itself: a file on the bill ---
   win.eval('openAssetForm')('bill', { id: eb.id });
   const bin = doc.querySelector('#modal input[data-input="bill-files"]');

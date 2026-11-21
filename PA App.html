@@ -6656,6 +6656,10 @@ function musingEditor(m) {
 // monthly task, made with it) and Renew agreement (Butler's, id rent-renew-<id>-<term start>, a chosen time before the
 // term ends). Its files go to Vault › Rentals › <name>.
 const ymOf = (iso) => String(iso || '').slice(0, 7);
+const SHEET_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const sheetMonth = (v) => { const m = String(v || '').trim().match(/^([A-Za-z]{3,9})[\s\-'’/.]*(\d{2}|\d{4})$/); const i = m ? SHEET_MONTHS.indexOf(m[1].slice(0, 3).toLowerCase()) : -1; return i < 0 ? '' : `${m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2])}-${String(i + 1).padStart(2, '0')}`; };
+const sheetAmount = (v) => { const t = String(v || '').replace(/rs\.?/i, '').replace(/[,\s]/g, ''); return !t || /^-+$/.test(t) ? 0 : Number(t); };
+const sheetCells = (line) => (line.includes('\t') ? line.split('\t') : line.trim().split(/\s{2,}/)).map((x) => x.trim());
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const ymLabel = (ym) => monthLabel(`${ym}-01`);
 const monthTag = (ym) => `${MONTHS_SHORT[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`; // a task's moving part: "Nov 26"
@@ -6977,6 +6981,31 @@ const Utilities = {
     }
     return { year: yr.reduce((t, x) => t + x.amount, 0), litres: yr.reduce((t, x) => t + x.litres, 0), kmpl, perKm, entries: f };
   },
+  // An electricity sheet pasted from Excel: Month, Units, Bill, Net Meter Benefit (the worked-out columns after them
+  // are left; Butler works them out). A header, a Total row and blank lines are passed over.
+  parseSheet(text) {
+    const rows = [];
+    const skipped = [];
+    for (const line of String(text || '').split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const c = sheetCells(line);
+      const month = sheetMonth(c[0]);
+      if (!month) { if (!/^(month|total)/i.test(c[0])) skipped.push(line.trim()); continue; }
+      const units = sheetAmount(c[1]);
+      const amount = sheetAmount(c[2]);
+      const credit = sheetAmount(c[3]);
+      if ([units, amount, credit].some((x) => Number.isNaN(x))) { skipped.push(line.trim()); continue; }
+      rows.push({ month, units, amount, credit });
+    }
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return { rows, skipped };
+  },
+  // Those months' bills: the pasted ones replace any it had for them; dated on its bill day in that month.
+  importRows(c, rows) {
+    const months = new Set(rows.map((x) => x.month));
+    DB.bills = DB.bills.filter((b) => !(b.utility === c.id && months.has(this.monthOf(b))));
+    for (const x of rows) this.addBill({ utility: c.id, month: x.month, date: this.dateIn(x.month, c.billDay || 1), amount: x.amount, units: x.units, credit: x.credit });
+  },
   billFiles(b) {
     const t = b.task && DB.tasks.find((x) => x.id === b.task);
     const fromTask = new Set(t ? t.attachments.map((a) => a.file) : []);
@@ -7183,7 +7212,7 @@ function utilityTop(c) {
       ${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}
       ${u && units ? `<div><span class="meta">${esc(u)} this year, rate</span><b>${units.toLocaleString('en-IN')}, ${perUnit(Utilities.sum([c], y) / units)}</b></div>` : ''}
     </div>
-    <div class="row edit-only"><button type="button" class="btn small primary" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button>${Utilities.openTask(c) ? '' : `<button type="button" class="btn small" data-action="utility-task" data-id="${esc(c.id)}">${ic('repeat', 'sm')}Make its bill task</button>`}</div></div>`;
+    <div class="row edit-only"><button type="button" class="btn small primary" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button>${sameName(c.type, 'Electricity') ? `<button type="button" class="btn small" data-action="asset-form" data-form-type="bill-paste" data-id="${esc(c.id)}">${ic('copy', 'sm')}Paste history</button>` : ''}${Utilities.openTask(c) ? '' : `<button type="button" class="btn small" data-action="utility-task" data-id="${esc(c.id)}">${ic('repeat', 'sm')}Make its bill task</button>`}</div></div>`;
 }
 function utilityMain(c) {
   const t = Utilities.openTask(c);
@@ -7731,6 +7760,16 @@ function drawAssetForm() {
     c ? '<button type="button" class="btn danger edit-only" data-action="utility-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro,
     c ? utilityMain(c) : '', c ? { sheet: true, fold: true, top: utilityTop(c), side: `<div class="value-history"><div class="meta">Bills</div>${billsTable(c)}</div>` } : {});
     if (!c) $('#modal input[name="name"]')?.focus();
+    return;
+  }
+  if (f.type === 'bill-paste') {
+    const c = DB.utilities.find((x) => x.id === f.id);
+    if (!c) return closeAssetForm();
+    $('#modal').innerHTML = box(`${c.name}: bring in its bills`, `
+      <p class="meta" style="margin:0">In Excel, select the rows (Month, Units, Bill, Net Meter Benefit; the columns after them can come too, Butler works them out), copy, and paste them here. The months you paste replace the bills here for those months.</p>
+      <label class="field">Pasted rows<textarea class="input" name="sheet" rows="8" data-bill-paste placeholder="Aug-26&#9;345&#9;Rs21,461&#9;Rs12,156"></textarea></label>
+      <div class="meta bill-paste-preview" aria-live="polite">Nothing pasted yet.</div>`, '', 'Bring in');
+    $('#modal textarea')?.focus();
     return;
   }
   if (f.type === 'bill') {
@@ -8301,6 +8340,17 @@ function submitAssetForm(type, data) {
     device.set('utilTab', c.type);
     toast(`Saved ${c.name}${!f.id && billDay ? `, with its bill task on ${billDay === 'last' ? 'the last day' : `the ${ordinal(billDay)}`} of each month` : ''}`);
     closeAssetForm();
+    render();
+    return;
+  } else if (type === 'bill-paste') {
+    const c = DB.utilities.find((x) => x.id === f.id);
+    if (!c) return closeAssetForm();
+    const { rows } = Utilities.parseSheet(data.sheet);
+    if (!rows.length) return formError('No months found: paste the rows straight from Excel.');
+    Utilities.importRows(c, rows);
+    changed('bills');
+    toast(`Brought in ${plural(rows.length, 'bill')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}`);
+    returnToForm({ type: 'utility', id: c.id });
     render();
     return;
   } else if (type === 'bill') {
@@ -10197,6 +10247,13 @@ let taskTimer;
 let titleTyping = null;
 // The rent sheet being pasted: what it found, before bringing it in.
 document.addEventListener('input', (e) => {
+  if (e.target.matches?.('[data-bill-paste]')) {
+    const { rows, skipped } = Utilities.parseSheet(e.target.value);
+    const out = $('#modal .bill-paste-preview');
+    const sum = (k) => rows.reduce((t, x) => t + x[k], 0);
+    if (out) out.textContent = rows.length ? `${plural(rows.length, 'month')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}; ${sum('units').toLocaleString('en-IN')} units; bills ${rupees(sum('amount'))}, credit ${rupees(sum('credit'))}, effective ${rupees(sum('amount') - sum('credit'))}.${skipped.length ? ` ${plural(skipped.length, 'line')} not understood, left out: "${skipped[0].slice(0, 40)}"${skipped.length > 1 ? '…' : ''}` : ''}` : 'No months found yet.';
+    return;
+  }
   if (e.target.matches?.('[data-rent-paste]')) {
     const { rows, skipped } = Rentals.parseSheet(e.target.value);
     const out = $('#modal .rent-paste-preview');
