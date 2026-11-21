@@ -47,3 +47,12 @@ Every page has the same parts, in this order:
 4. **The content:** cards, then lists.
 
 Pages only say what goes in each part (`page-head` with `page-actions`, the `tabs` under it, `listTools` for the toolbar); `tabsRow()` and `tidyPageActions()` lay them out the same everywhere.
+
+## Files in lists
+Every list of files shows each one with `fileMark(att, key, record)`: a picture gets a small preview over its icon (the
+icon stays if the picture can't be shown), anything else its icon. Tapping a picture opens it large in the viewer,
+which offers to open what it's on ("Open the task") unless that's already open under it.
+
+## Pop-ups
+A pop-up opened from another remembers it: ‹ Back, Cancel and Esc go back one level, and saving returns there.
+Open them with `openAssetForm`; leave with `closeAssetForm()` (one level) or `closeAssetForm(true)` (all of them).

@@ -301,6 +301,11 @@ button:disabled { cursor: not-allowed; }
 .ledger tbody tr:hover { background: var(--panel-2); }
 .ledger tr.short td:nth-child(5) { color: var(--danger); }
 .ledger tfoot td { font-weight: 600; }
+.file-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; vertical-align: middle; }
+.file-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm); background: var(--panel-2); }
+.tl-mark:has(.file-mark) { width: 36px; }
+.tl-mark .file-mark { width: 36px; height: 36px; }
+.file-thumb:not([src]) { display: none; }
 .asset-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-md); object-fit: cover; background: var(--panel-2); }
 .thumb-btn { flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--panel-2); cursor: zoom-in; }
 .thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -3366,6 +3371,12 @@ const Files = {
     const i = order.indexOf(key);
     return i > 0 ? `${name} (${i + 1})` : name;
   },
+  // The record a file (an attachment) is on: the one holding that very attachment, else the first that uses the file.
+  owner(att) {
+    for (const key of this.KEYS) { const rec = (DB[key] || []).find((r) => (r.attachments || []).some((a) => a.id === att.id)); if (rec) return { key, rec }; }
+    for (const key of this.KEYS) { const rec = (DB[key] || []).find((r) => (r.attachments || []).some((a) => a.file === att.file)); if (rec) return { key, rec }; }
+    return null;
+  },
   // Where a file belongs: with the first record (in KEYS order) that uses it. Null when nothing does.
   home(path) {
     for (const key of this.KEYS) {
@@ -3844,6 +3855,13 @@ const Viewer = {
     this.draw();
   },
   close() { this.list = []; const el = $('#viewer'); if (el) el.remove(); },
+  // What a picture is on, to go to it: "Open the task" (not when that's already open under the picture).
+  goButton(att) {
+    const o = Files.owner(att);
+    if (!o || state.openTask === o.rec.id || state.assetForm?.id === o.rec.id) return '';
+    const what = o.key === 'tasks' ? 'the task' : o.key === 'upkeep' ? 'the entry' : o.key === 'musings' ? 'the piece' : o.key === 'assets' ? (o.rec.kind === 'vehicle' ? 'the car' : 'the asset') : o.rec.plain ? 'its details' : 'the document';
+    return `<button type="button" class="btn small" data-action="viewer-go" data-key="${o.key}" data-id="${esc(o.rec.id)}">${ic('arrow-up-right', 'sm')}Open ${what}</button>`;
+  },
   on() { return !!$('#viewer'); },
   step(n) { if (this.list.length > 1) { this.at = (this.at + n + this.list.length) % this.list.length; this.draw(); } },
   draw() {
@@ -3861,6 +3879,7 @@ const Viewer = {
           <span class="viewer-name">${esc(att.name)}${many ? ` <span class="viewer-count">${this.at + 1} of ${this.list.length}</span>` : ''}</span>
           <span class="row">
             ${many ? `<button type="button" class="icon-btn" data-action="viewer-prev" aria-label="Previous photo">${ic('chevron-left')}</button><button type="button" class="icon-btn" data-action="viewer-next" aria-label="Next photo">${ic('chevron-right')}</button>` : ''}
+            ${this.goButton(att)}
             <button type="button" class="btn small" data-action="viewer-open">Open</button>
             ${state.phone ? '' : '<button type="button" class="btn small" data-action="viewer-save">Save</button>'}
             <button type="button" class="icon-btn" data-action="viewer-close" aria-label="Close">${ic('x')}</button>
@@ -4930,7 +4949,8 @@ function manageCard() {
 // ===================== Task details drawer =====================
 // Rebuilt only when its structure changes (open, close, checklist, labels…) — never while you type,
 // so the cursor stays put. Typing updates the task in place.
-function renderDrawer() {
+function renderDrawer() { drawDrawer(); loadThumbs(); }
+function drawDrawer() {
   const el = $('#drawer');
   const t = currentTask();
   document.body.classList.toggle('drawer-open', !!t);
@@ -5022,6 +5042,9 @@ function renderDrawer() {
 // Filled in by later sections (buckets/labels, recurring, attachments).
 function sortedBuckets() { return [...DB.buckets].sort((a, b) => a.order - b.order); }
 const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b || 0} B`);
+// The standard mark for a file in any list: a picture shows a small preview over its icon (the icon stays if the picture
+// can't be shown); other files their icon. key/rec: the record it's on, to find it.
+const fileMark = (a, key, rec) => (isImage(a) && rec ? `<span class="file-mark">${fileIcon(a)}<img class="file-thumb" data-thumb="${key}:${esc(rec.id)}:${esc(a.id)}" alt=""></span>` : fileIcon(a));
 const fileIcon = (a) => ic(/^image\//.test(a.type) ? 'photo' : /pdf/.test(a.type) || /\.pdf$/i.test(a.name) ? 'file-type-pdf' : 'file-text');
 
 function reminderBlock(t) {
@@ -5093,7 +5116,7 @@ function attachBlock(t) {
   const repeating = !!(t.repeat || t.seriesId);
   const list = t.attachments.map((a) => `
     <div class="p-row">
-      <span class="p-ico">${fileIcon(a)}</span>
+      <span class="p-ico">${fileMark(a, 'tasks', t)}</span>
       <a href="#" role="button" class="link-btn" data-action="open-attach" data-att="${esc(a.id)}" title="Open ${esc(a.name)}">${esc(a.name)}</a><!-- a link still works when read-only disables the panel -->
       ${fromVaultMark(a)}<span class="meta">${fmtSize(a.size)}</span>
       ${repeating ? `<button class="icon-btn keep-btn ${a.keep ? 'on' : ''}" data-action="toggle-keep" data-att="${esc(a.id)}"
@@ -6917,7 +6940,7 @@ function rentalAfter(r) {
       <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
       <label class="btn small">${ic('paperclip', 'sm')}Add files<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" hidden></label>
     </div></div>
-    ${docs.length ? `<div class="value-history"><div class="meta">Files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${docs.map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileIcon(a)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; }).join('')}</div>` : ''}
+    ${docs.length ? `<div class="value-history"><div class="meta">Files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${docs.map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; }).join('')}</div>` : ''}
     ${rentLedger(r)}`;
 }
 
@@ -7031,7 +7054,7 @@ function vaultFileRow(d) {
   const open = att ? `data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(att.id)}"` : `data-action="open-doc" data-id="${esc(d.id)}"`;
   return `
     <li class="item">
-      <span class="tl-mark">${att ? fileIcon(att) : ic('file-text')}</span>
+      <span class="tl-mark">${att ? fileMark(att, 'docs', d) : ic('file-text')}</span>
       <div class="body clickable" ${open}><div class="title">${esc(d.name)} ${whoBadges(d)}</div><div class="meta">${att ? `<span>${esc(att.name)}</span><span>${fmtSize(att.size)}</span>` : '<span>No file</span>'}${d.attachments.length > 1 ? `<span>${ic('paperclip', 'sm')}${d.attachments.length}</span>` : ''}</div></div>
       <button type="button" class="icon-btn" data-action="open-doc" data-id="${esc(d.id)}" aria-label="Details of ${esc(d.name)}" title="Details">${ic('pencil', 'sm')}</button>
     </li>`;
@@ -7041,7 +7064,7 @@ function areaFileRow({ att, rec, key }) {
   const title = key === 'tasks' ? fullTitle(rec) : rec.title || rec.name || rec.item || 'Untitled';
   return `
     <li class="item">
-      <span class="tl-mark">${fileIcon(att)}</span>
+      <span class="tl-mark">${fileMark(att, key, rec)}</span>
       <div class="body clickable" data-action="rec-file-open" data-key="${key}" data-rec="${esc(rec.id)}" data-att="${esc(att.id)}"><div class="title">${esc(att.name)}</div><div class="meta"><span>On ${esc(title)}</span><span>${fmtSize(att.size)}</span></div></div>
       <button type="button" class="icon-btn" data-action="files-go" data-key="${key}" data-id="${esc(rec.id)}" aria-label="Open ${esc(title)}" title="Open what it's on">${ic('arrow-up-right', 'sm')}</button>
     </li>`;
@@ -7203,7 +7226,7 @@ function filesBlock(r, key) {
   const where = state.phone ? 'OneDrive' : AT.status === 'ok' ? 'the attachments folder' : '';
   return `
     <div class="value-history"><div class="meta">${key === 'docs' ? 'Scans and files' : 'Photos and files'}</div>
-      ${files.map((a) => `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="${key}" data-att="${esc(a.id)}">${fileIcon(a)} ${esc(a.name)}</button><span class="meta">${fromVaultMark(a)}${fmtSize(a.size)}</span><button type="button" class="icon-btn edit-only" data-action="rec-file-remove" data-key="${key}" data-att="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">${ic('x', 'sm')}</button></div>`).join('')}
+      ${files.map((a) => `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="${key}" data-att="${esc(a.id)}">${fileMark(a, key, r)} ${esc(a.name)}</button><span class="meta">${fromVaultMark(a)}${fmtSize(a.size)}</span><button type="button" class="icon-btn edit-only" data-action="rec-file-remove" data-key="${key}" data-att="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">${ic('x', 'sm')}</button></div>`).join('')}
       ${!r ? '<p class="meta" style="margin:0">Save it first, then add files.</p>'
         : !where && !state.phone ? '<p class="meta" style="margin:0">Choose the attachments folder in Settings to add files.</p>'
           : `<div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add file<input type="file" multiple data-input="rec-attach" data-key="${key}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="rec-attach" data-key="${key}" hidden></label>` : ''}${vaultPick(r, key)}</div>`}
@@ -7326,7 +7349,8 @@ function closeAssetForm(all = false) {
   state.assetForm = null;
   $('#modal').innerHTML = '';
 }
-function renderAssetForm() {
+function renderAssetForm() { drawAssetForm(); loadThumbs(); }
+function drawAssetForm() {
   const f = state.assetForm;
   if (!f) return;
   const ro = state.readOnly;
@@ -9551,6 +9575,7 @@ document.addEventListener('click', (e) => {
     case 'vault-folder-new': case 'vault-folder-rename': case 'vault-folder-delete': vaultFolderAction(action, { ...btn.dataset }); break;
     case 'open-doc': openAssetForm('doc', { id }); break;
     case 'files-go': filesGo(btn.dataset.key, id); break;
+    case 'viewer-go': Viewer.close(); closeAssetForm(true); filesGo(btn.dataset.key, id); break;
     case 'utility-task': utilityMakeTask(id); break;
     case 'rental-delete': {
       const r = state.assetForm && DB.rentals.find((x) => x.id === state.assetForm.id);
