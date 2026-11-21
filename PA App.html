@@ -849,7 +849,7 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn more-item" data-view="utilities" title="Utilities"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><span>Utilities</span></button>
     <button class="nav-btn more-item" data-view="musings" title="Musings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
-    <button class="nav-btn more-item" data-view="vault" title="ID vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
+    <button class="nav-btn more-item" data-view="vault" title="Vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
     <button class="nav-btn more-item" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
     <button class="nav-btn more-item" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
@@ -1675,7 +1675,7 @@ const Zakat = {
 // After anything that can change the zakat tasks: make or tick them, and save.
 function zakatTasks() { if (Zakat.ensureTasks()) changed('tasks'); }
 
-// ===================== The ID vault =====================
+// ===================== The Vault =====================
 // Documents (`docs`): a category (IDs, travel, property papers, certificates, other), a type ("Passport"), a name, its
 // number, issue and expiry dates, notes, scans (attachments, like a task's), whose it is (`people`) and the assets it
 // belongs to (`assets`, so a deed shows on its plot and an insurance on its car). A document that expires gets a
@@ -2713,7 +2713,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 //           roundUp, excess:'carry'|'charity', total, nisab, raw, due, made, doneAt, dueBy?} — a zakat record (see Zakat)
 // zakatPay: {id, person, date, amount, to, record} — a zakat payment, counted towards one record
 // docs:    {id, cat, type, name, number, issued, expires, renewMonths, people, assets: [ids], attachments, notes,
-//           created} — the ID vault (see Vault); assets may carry attachments too (photos)
+//           created} — the Vault (see Vault); assets may carry attachments too (photos)
 // upkeep:  {id, asset ('store': supplies kept for the cars, qty: how many left), date, type:'service'|'repair'|'added'|'other', item, cost, vendor, km, notes, attachments, created}
 //           — an asset's upkeep log (see Upkeep); assets may carry plan: [{id, item, km, months, since, sinceKm}],
 //           car: {make, model, year, regYear, plate, boughtKm} and readings: [{date, km}]
@@ -7175,7 +7175,7 @@ function renderVault() {
     });
   return `
     <div class="page-head">
-      <div><h1>ID vault</h1><p class="sub">${docs.length ? [docs.filter((d) => !d.plain).length ? plural(docs.filter((d) => !d.plain).length, 'document') : '', docs.some((d) => d.plain) ? plural(docs.filter((d) => d.plain).length, 'file') : ''].filter(Boolean).join(', ') + (due.length ? `, ${due.length} to renew` : '') : 'Documents, with their numbers, dates and scans'}</p></div>
+      <div><h1>Vault</h1><p class="sub">${docs.length ? [docs.filter((d) => !d.plain).length ? plural(docs.filter((d) => !d.plain).length, 'document') : '', docs.some((d) => d.plain) ? plural(docs.filter((d) => d.plain).length, 'file') : ''].filter(Boolean).join(', ') + (due.length ? `, ${due.length} to renew` : '') : 'Documents, with their numbers, dates and scans'}</p></div>
       <div class="row edit-only page-actions">${tab === 'folders' ? '' : `<button class="btn primary" data-action="asset-form" data-form-type="doc" data-kind="${tab === 'overview' ? 'id' : esc(tab)}">${ic('plus', 'sm')}Add document</button>`}</div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-vault-tab="${k}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : k === 'folders' ? 'Folders' : esc(Vault.cat(k).name)}</button>`).join('')}</div>

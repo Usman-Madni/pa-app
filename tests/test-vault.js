@@ -37,7 +37,7 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
 
   // --- The page ---
   doc.querySelector('[data-view="vault"]').click();
-  check(doc.querySelector('.nav-btn.active').dataset.view === 'vault' && /ID vault/.test(main()), 'the Vault is in the sidebar');
+  check(doc.querySelector('.nav-btn.active').dataset.view === 'vault' && /<h1>Vault<\/h1>/.test(doc.querySelector('#main').innerHTML), 'the Vault is in the sidebar');
   check(!/AB1234567/.test(main()) && /Ending 4567/.test(main()) === false, 'the overview doesn\'t show numbers');
   doc.querySelector('[data-vault-tab="travel"]').click();
   check(/Ending 4567/.test(main()) && !/AB1234567/.test(main()), 'a list shows only the end of a number');
