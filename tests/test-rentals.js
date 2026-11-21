@@ -100,6 +100,18 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   open('rental', { id: r.id });
   const tasks = doc.querySelector('#modal .rental-tasks').textContent;
   check(/Collect rent \(Plaza lease\)/.test(tasks) && /Renew rental agreement \(Plaza lease\)/.test(tasks), 'the agreement shows its Collect rent and Renew tasks');
+  doc.querySelector('#modal .rental-tasks [data-action="files-go"]').click();
+  check(PA.state.openTask && doc.body.classList.contains('drawer-over') && modal()?.dataset.form === 'asset-rental', 'opening a task from the agreement: its panel goes on top, the agreement stays under it');
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  check(!PA.state.openTask && !doc.body.classList.contains('drawer-over') && modal()?.dataset.form === 'asset-rental', 'Esc closes the panel first, back to the agreement');
+  const rt = R.openRenew(r);
+  PA.Series.tick(rt, new Date(), true);
+  win.eval('changed')('tasks');
+  open('rental', { id: r.id });
+  const mk = doc.querySelector('#modal [data-action="rental-renew-task"]');
+  check(mk && /No Renew task for this term/.test(doc.querySelector('#modal .rental-tasks').textContent), 'a ticked Renew task: the agreement says so and offers Make it');
+  mk.click();
+  check(R.openRenew(r) && R.openRenew(r).id === rt.id && !rt.done, 'Make it brings this term\'s Renew task back');
   const oldDue = collect.due;
   submitForm(win, 'asset-rental', { dueDay: '5' });
   check(collect.due.slice(0, 7) === oldDue.slice(0, 7) && Number(collect.due.slice(8, 10)) === 5 && collect.repeat.anchorDay === 5, 'a new due day moves the next Collect rent to that day');

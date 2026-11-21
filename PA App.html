@@ -730,6 +730,10 @@ body.phone .p-when-time { flex: 1 1 auto; }
 
 /* ===== Pop-up (Done on…) ===== */
 .modal-back { position: fixed; inset: 0; background: var(--scrim); z-index: 60; }
+body.drawer-over .drawer { z-index: 70; }
+body.drawer-over .drawer-backdrop { z-index: 69; }
+.modal[data-form="ask"] { z-index: 81; }
+.modal-back:has(+ .modal[data-form="ask"]) { z-index: 80; }
 .modal {
   position: fixed; z-index: 61; left: 50%; top: 30%; transform: translate(-50%, -30%); width: min(380px, calc(100% - 32px));
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-float);
@@ -2684,6 +2688,7 @@ function answerAsk(yes) {
   const text = withText ? $('#modal [name="answer"]').value : '';
   asking = null;
   $('#modal').innerHTML = '';
+  if (state.assetForm) renderAssetForm(); // a question over a pop-up: the pop-up again
   resolve(withText ? (yes ? text : null) : yes);
 }
 
@@ -4955,6 +4960,7 @@ function renderDrawer() { drawDrawer(); loadThumbs(); }
 function drawDrawer() {
   const el = $('#drawer');
   const t = currentTask();
+  document.body.classList.toggle('drawer-over', !!t && !!state.assetForm); // opened from a pop-up: on top of it
   document.body.classList.toggle('drawer-open', !!t);
   if (!t) { state.openTask = null; el.innerHTML = ''; el.dataset.task = ''; return; }
   // Rebuilding the panel would jump it back to the top — keep the scroll position for the same task.
@@ -6744,6 +6750,18 @@ const Rentals = {
     changed('tasks');
     return true;
   },
+  // The current term's Renew task again, when the one it had was ticked or deleted.
+  makeRenew(r) {
+    const term = this.current(r);
+    if (!term || r.ended || !r.renewMonths) return null;
+    const want = `rent-renew-${r.id}-${term.start}`;
+    const had = DB.tasks.find((x) => x.id === want);
+    if (had && had.done) Series.untick(had);
+    else if (!had) DB.deleted = DB.deleted.filter((m) => !(m.key === 'tasks' && m.id === want));
+    this.ensureTasks();
+    changed('tasks', 'deleted');
+    return DB.tasks.find((x) => x.id === want) || null;
+  },
   setTerm(r, id, fields) {
     const t = r.terms.find((x) => x.id === id);
     if (t) Object.assign(t, { start: fields.start || t.start, months: Number(fields.months) || t.months, rent: Number(fields.rent) || t.rent, note: fields.note ?? t.note });
@@ -7017,7 +7035,7 @@ function rentalAfter(r) {
       ${collect ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(collect.id)}">${ic('repeat', 'sm')} ${esc(fullTitle(collect))}</button><span class="meta">Next ${esc(fmtDate(collect.due))}</span><span></span></div>`
         : r.ended ? '' : `<div class="vh-row"><span class="meta">No Collect rent task</span><span></span><button type="button" class="btn small edit-only" data-action="rental-collect" data-id="${esc(r.id)}">${ic('plus', 'sm')}Make it</button></div>`}
       ${renew ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(renew.id)}">${ic('repeat', 'sm')} ${esc(renew.title)}</button><span class="meta">${esc(fmtDate(renew.due))}</span><span></span></div>`
-        : r.ended ? '' : `<div class="vh-row"><span class="meta">${r.renewMonths ? 'No renew reminder for this term' : 'No renew reminder (set Remind to renew)'}</span><span></span><span></span></div>`}
+        : r.ended ? '' : r.renewMonths ? `<div class="vh-row"><span class="meta">No Renew task for this term</span><span></span><button type="button" class="btn small edit-only" data-action="rental-renew-task" data-id="${esc(r.id)}">${ic('plus', 'sm')}Make it</button></div>` : '<div class="vh-row"><span class="meta">No renew reminder (set Remind to renew)</span><span></span><span></span></div>'}
     </div>
     ${others.length ? `<div class="value-history"><div class="meta">Other files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${others.map(fileRow).join('')}</div>` : ''}
     ${rentLedger(r)}`;
@@ -9399,7 +9417,7 @@ const EDIT_ACTIONS = new Set([
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
   'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
-  'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'rental-delete', 'rent-pay-remove', 'rental-collect', 'rent-term-delete', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
+  'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'rental-delete', 'rent-pay-remove', 'rental-collect', 'rent-term-delete', 'rental-renew-task', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -9707,6 +9725,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'rental-collect': { const r = DB.rentals.find((x) => x.id === id); if (r) { const t = Rentals.makeCollect(r); toast(`Made "${fullTitle(t)}", next ${fmtDate(t.due)}`); renderAssetForm(); render(); } break; }
+    case 'rental-renew-task': { const r = DB.rentals.find((x) => x.id === id); const t = r && Rentals.makeRenew(r); if (t) toast(`Made "${t.title}", due ${fmtDate(t.due)}`); renderAssetForm(); render(); break; }
     case 'rent-term-delete': {
       const f = state.assetForm;
       const r = f && DB.rentals.find((x) => x.id === f.id);
@@ -10047,6 +10066,7 @@ document.addEventListener('keydown', (e) => {
   if (Viewer.on()) { Viewer.close(); return; } // the photo first, then the pop-up under it
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
+  if (state.openTask && state.assetForm) { closeTaskDrawer(); return; } // the task panel over a pop-up: it first
   if (state.assetForm) { closeAssetForm(); return; }
   if (state.moreOpen) { state.moreOpen = false; renderMore(); return; }
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
