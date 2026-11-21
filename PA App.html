@@ -285,6 +285,7 @@ button:disabled { cursor: not-allowed; }
 .vault-h + .card { margin-bottom: 20px; }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
+.sub-back { margin-bottom: 2px; }
 .form-back { display: inline-flex; align-items: center; gap: 2px; margin: -4px 0 4px; flex: none; width: auto; }
 .vault-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .vault-crumbs > *, .vault-crumbs > .link-btn { flex: 0 0 auto; width: auto; }
@@ -851,7 +852,6 @@ body.phone .p-when-time { flex: 1 1 auto; }
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
     <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
-    <button class="nav-btn more-item" data-view="vehicles" title="Vehicles"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-car"/></svg></span><span>Vehicles</span></button>
     <button class="nav-btn more-item" data-view="utilities" title="Utilities"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><span>Utilities</span></button>
     <button class="nav-btn more-item" data-view="musings" title="Musings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
@@ -3808,12 +3808,12 @@ function itemsForDay(key, previews) {
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
   document.body.classList.toggle('phone', state.phone);
-  $$('.nav-btn').forEach((b) => { const on = b.dataset.view === state.view; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  $$('.nav-btn').forEach((b) => { const on = b.dataset.view === (PARENT_OF[state.view] || state.view); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderUnread();
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, property: renderProperty, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -3973,7 +3973,7 @@ function renderSearch() {
 }
 
 // A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
-const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'utilities', 'zakat', 'vault', 'notices', 'trash'];
+const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'property', 'utilities', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
   for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
@@ -4829,7 +4829,7 @@ async function deleteLabel(id) {
 }
 
 // ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
-const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['vehicles', 'car', 'Vehicles'], ['utilities', 'bolt', 'Utilities'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['utilities', 'bolt', 'Utilities'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
 function renderMore() {
   const btn = $('.more-btn');
   if (!btn) return;
@@ -5978,15 +5978,20 @@ function renderTrash() {
 // ===================== Assets page =====================
 // Tabs: Overview (cards and charts), one per kind that has something, and Rates. The person picker decides whose
 // assets and whose shares are shown. Actions on the right of the title stay whichever tab is open.
+// Vehicles and Property are pages of their own under Assets (sub-pages): their tabs are always there and open them.
+const SUB_PAGES = { vehicle: 'vehicles', property: 'property' };
+const PARENT_OF = { vehicles: 'assets', property: 'assets' };
 function assetTabs(list) {
-  return ['overview', ...ASSET_KINDS.filter((k) => list.some((a) => a.kind === k.id)).map((k) => k.id), 'rates'];
+  return ['overview', ...ASSET_KINDS.filter((k) => SUB_PAGES[k.id] || list.some((a) => a.kind === k.id)).map((k) => k.id), 'rates'];
 }
+// "‹ Assets" at the top of a sub-page.
+const subPageBack = (view) => `<button type="button" class="link-btn back-link sub-back" data-view="${PARENT_OF[view]}">${ic('chevron-left', 'sm')}${esc({ assets: 'Assets' }[PARENT_OF[view]])}</button>`;
 function renderAssets() {
   const who = People.viewing();
   const list = Assets.list(who);
   const tabs = assetTabs(list);
   let tab = device.get('assetTab', 'overview');
-  if (!tabs.includes(tab)) tab = 'overview';
+  if (!tabs.includes(tab) || SUB_PAGES[tab]) tab = 'overview';
   const t = Assets.totals(who);
   const label = (k) => (k === 'overview' ? 'Overview' : k === 'rates' ? 'Rates' : Assets.kind(k).name);
   const body = tab === 'overview' ? assetOverview(who, list, t) : tab === 'rates' ? ratesTab() : assetKindTab(tab, who, list);
@@ -6032,7 +6037,7 @@ function assetOverview(who, list, t) {
 // One kind's assets as rows: name, owners, details, value now. A row opens it.
 function assetKindTab(kind, who, list) {
   const val = (a) => Assets.partOn(a, who) ?? -Infinity;
-  return (kind === 'property' ? rentalsSection() : '') + listTools(`assets-${kind}`, list.filter((a) => a.kind === kind), {
+  return listTools(`assets-${kind}`, list.filter((a) => a.kind === kind), {
     group: { none: 'No grouping', ...(People.several() ? { owner: 'Owner' } : {}), held: 'Held or sold' },
     sort: { value: 'Most valuable first', name: 'By name', since: 'Had longest first', recent: 'Newest first' },
     key: { owner: (a) => Assets.ownersOn(a).map((o) => People.name(o.id)).join(' and '), held: (a) => (a.closed ? 'Sold or closed' : 'Held') },
@@ -6317,7 +6322,7 @@ function renderVehicles() {
     : { overview: vehicleOverview, log: vehicleLog, plan: vehiclePlan, tasks: vehicleTasks, store: vehicleStore, details: vehicleDetails }[tab](shown, car, vehiclePicker(list, car));
   return `
     <div class="page-head">
-      <div><h1>Vehicles</h1><p class="sub">${list.length ? `${plural(list.length, 'vehicle')}${car ? `, showing ${esc(car.name)}` : ''}` : 'Cars, their upkeep and supplies'}</p></div>
+      <div>${subPageBack('vehicles')}<h1>Vehicles</h1><p class="sub">${list.length ? `${plural(list.length, 'vehicle')}${car ? `, showing ${esc(car.name)}` : ''}` : 'Cars, their upkeep and supplies'}</p></div>
       <div class="row edit-only page-actions">
         ${list.length ? `<button class="btn primary" data-action="upkeep-entry" data-asset="${esc(car ? car.id : '')}" data-choose="${car ? '' : '1'}">${ic('plus', 'sm')}Add entry</button>` : ''}
         <button class="btn" data-action="upkeep-entry" data-asset="store">${ic('plus', 'sm')}Add to store</button>
@@ -6894,7 +6899,27 @@ async function utilityMakeTask(id) {
   render();
 }
 
-// ===================== Rentals on the Property tab =====================
+// ===================== The Property page (under Assets) =====================
+// Tabs: Properties (the property assets) and Rentals (the agreements, what's due, received and owed).
+function renderProperty() {
+  const who = People.viewing();
+  const list = Assets.list(who);
+  const props = list.filter((a) => a.kind === 'property');
+  let tab = device.get('propertyTab', 'properties');
+  if (!['properties', 'rentals'].includes(tab)) tab = 'properties';
+  const rentals = Rentals.list();
+  return `
+    <div class="page-head">
+      <div>${subPageBack('property')}<h1>Property</h1><p class="sub">${props.length} ${props.length === 1 ? 'property' : 'properties'}${rentals.length ? `, ${rentals.filter((r) => !r.ended).length} rented out` : ''}</p></div>
+      <div class="row edit-only page-actions">
+        <button class="btn ${tab === 'properties' ? 'primary' : ''}" data-action="asset-form" data-form-type="asset" data-kind="property">${ic('plus', 'sm')}Add property</button>
+        <button class="btn ${tab === 'rentals' ? 'primary' : ''}" data-action="asset-form" data-form-type="rental">${ic('plus', 'sm')}Add rental agreement</button>
+      </div>
+    </div>
+    <div class="tabs asset-tabs" role="tablist">${[['properties', 'Properties'], ['rentals', 'Rentals']].map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-property-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
+    <div class="asset-body">${tab === 'rentals' ? rentalsSection() : props.length ? assetKindTab('property', who, list) : '<div class="card empty-state"><p><b>No properties yet.</b> Add a house, a plot or a shop: its value by date, its documents and photos, its utilities, and whether it\'s rented out.</p></div>'}</div>`;
+}
+// ===================== Rentals on the Property page =====================
 function rentalsSection() {
   const list = Rentals.list();
   const y = new Date().getFullYear();
@@ -6909,10 +6934,8 @@ function rentalsSection() {
       ${owed > 0 ? `<span class="pill zk-left">Owed ${rupees(owed)}</span>` : owed < 0 ? `<span class="pill">Ahead ${rupees(-owed)}</span>` : ''}</li>`;
   }).join('');
   return `
-    <h2 class="vault-h">Rented out</h2>
     ${list.length ? `<div class="card"><div class="upkeep-sum"><div><span class="meta">Rent due this month</span><b>${rupees(dueNow)}</b></div><div><span class="meta">Received in ${y}</span><b>${rupees(list.reduce((t, r) => t + Rentals.receivedIn(r, y), 0))}</b></div><div><span class="meta">Owed</span><b>${rupees(list.reduce((t, r) => t + Math.max(0, Rentals.owed(r)), 0))}</b></div></div><ul class="list">${rows}</ul></div>` : ''}
-    <div class="row edit-only" style="margin-bottom:12px"><button type="button" class="btn small" data-action="asset-form" data-form-type="rental">${ic('plus', 'sm')}Add rental agreement</button></div>
-    <h2 class="vault-h">Properties</h2>`;
+    ${list.length ? '' : '<div class="card empty-state"><p><b>No rental agreements yet.</b> Rent a property out: its tenant, rent and terms, a monthly Collect rent task and a reminder to renew, and the ledger of what came in.</p></div>'}`;
 }
 // The agreement's ledger, newest month first, with its totals.
 function rentLedger(r) {
@@ -9308,7 +9331,7 @@ document.addEventListener('click', (e) => {
   if (note) { state.activeNote = note.dataset.note; return render(); }
 
   const assetTab = e.target.closest('[data-asset-tab]');
-  if (assetTab) { device.set('assetTab', assetTab.dataset.assetTab); return render(); }
+  if (assetTab) { const k = assetTab.dataset.assetTab; if (SUB_PAGES[k]) return setView(SUB_PAGES[k]); device.set('assetTab', k); return render(); }
   const zakatTab = e.target.closest('[data-zakat-tab]');
   if (zakatTab) { device.set('zakatTab', zakatTab.dataset.zakatTab); return render(); }
   const fold = e.target.closest('[data-list-fold]'); // a group's heading folds or unfolds it; Fold all, Unfold all
@@ -9332,6 +9355,8 @@ document.addEventListener('click', (e) => {
   if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', vehicleOpen.dataset.tabTo || 'overview'); state.moreOpen = false; return setView('vehicles'); }
   const utilTab = e.target.closest('[data-util-tab]');
   if (utilTab) { device.set('utilTab', utilTab.dataset.utilTab); return render(); }
+  const propertyTab = e.target.closest('[data-property-tab]');
+  if (propertyTab) { device.set('propertyTab', propertyTab.dataset.propertyTab); return render(); }
   const vaultTab = e.target.closest('[data-vault-tab]');
   if (vaultTab) { device.set('vaultTab', vaultTab.dataset.vaultTab); return render(); }
   const vaultGo = e.target.closest('[data-vault-go]'); // into a folder, or back up

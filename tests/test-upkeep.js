@@ -40,8 +40,7 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
 
   // --- In the pop-up ---
   doc.querySelector('[data-view="assets"]').click();
-  doc.querySelector('[data-asset-tab="vehicle"]').click();
-  doc.querySelector('#main [data-vehicle-open]').click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
+  PA.device.set('vehicleCar', car.id); PA.device.set('vehicleTab', 'overview'); win.eval('setView')('vehicles'); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
   const box = () => doc.querySelector('#modal .upkeep');
   check(box() && /All time\s*Rs 38,000/.test(box().textContent) && /Latest reading 18,000 km/.test(box().textContent), 'the car shows what it\'s cost and its latest reading');
   check(box().querySelectorAll('.upkeep-log [data-action="upkeep-entry"]').length === 3, 'and its log');
@@ -113,7 +112,8 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
   const t4 = PA.DB.tasks.find((t) => t.id.startsWith(prefix) && !t.done);
   win.eval('Series').tick(t4, new Date(), true);
   win.eval('changed')('tasks');
-  doc.querySelector('[data-view="vehicles"]').click();
+  doc.querySelector('[data-view="assets"]').click();
+  doc.querySelector('[data-asset-tab="vehicle"]').click(); // Vehicles opens from Assets (a page under it)
   doc.querySelector('[data-vehicle-tab="overview"]').click();
   check(doc.querySelector('#main .unlogged'), 'the Vehicles overview shows it too');
   doc.querySelector('#main [data-action="upkeep-skip"]').click();

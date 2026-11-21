@@ -56,3 +56,8 @@ which offers to open what it's on ("Open the task") unless that's already open u
 ## Pop-ups
 A pop-up opened from another remembers it: ‹ Back, Cancel and Esc go back one level, and saving returns there.
 Open them with `openAssetForm`; leave with `closeAssetForm()` (one level) or `closeAssetForm(true)` (all of them).
+
+## Sub-pages
+A tab that grows into a page of its own stays under its parent: its tab on the parent opens it (`SUB_PAGES`), the page
+starts with **‹ Parent** (`subPageBack`), and the sidebar keeps the parent lit (`PARENT_OF`). It isn't in the sidebar
+or the phone's More. Assets › Vehicles and Assets › Property are the first.

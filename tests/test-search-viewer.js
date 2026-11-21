@@ -64,7 +64,7 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   type(filter, 'curr');
   const rows = [...doc.querySelectorAll('#main li.item')];
   check(rows.filter((r) => !r.hidden).length === 1 && /Current account/.test(rows.find((r) => !r.hidden).textContent), 'it narrows the list as you type');
-  doc.querySelector('[data-asset-tab="vehicle"]').click();
+  doc.querySelector('[data-asset-tab="rates"]').click();
   check(doc.querySelector('#main [data-input="page-filter"]').value === 'curr' && doc.querySelectorAll('#main li.item:not([hidden])').length === 0, 'it stays while on the page');
   for (const v of ['tasks', 'zakat', 'vault', 'notices', 'trash']) {
     doc.querySelector(`[data-view="${v}"]`)?.click() || win.eval('setView')(v);
@@ -84,16 +84,16 @@ const { loadApp, fakeFolder, check, done, tick } = require('./helpers');
   check(win.eval('photosOf')(car).length === 2 && win.eval('isImage')(car.attachments[2]), 'a photo with no type is known by its name; a PDF isn\'t a photo');
   check(win.eval('isImage')({ name: 'IMG.JPG', file: 'IMG.JPG', type: 'application/octet-stream' }) && !win.eval('isImage')({ file: 'a.pdf', type: 'application/octet-stream' }), 'a photo labelled only "some file" (as Airtable sends some) is known by its name');
   doc.querySelector('[data-view="assets"]').click();
-  doc.querySelector('[data-asset-tab="vehicle"]').click();
   type(doc.querySelector('#main [data-input="page-filter"]'), '');
-  doc.querySelector('#main [data-action="view-photo"]').click();
+  PA.device.set('assetTab', 'overview');
+  win.eval('Viewer').open(win.eval('photosOf')(car), 0); // a car's photos (cars are on the Vehicles page now)
   await tick(10);
   check(doc.querySelector('#viewer') && /1 of 2/.test(doc.querySelector('#viewer').textContent), 'the small photo on a row opens its photos, large');
   doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   check(/2 of 2/.test(doc.querySelector('#viewer').textContent) && /side\.jpg/.test(doc.querySelector('#viewer').textContent), 'the arrow keys go through them');
   doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   check(!doc.querySelector('#viewer'), 'Esc closes it');
-  doc.querySelector('#main [data-vehicle-open]').click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
+  PA.device.set('vehicleCar', car.id); win.eval('setView')('vehicles'); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click(); // a car opens on the Vehicles page; its Details open the pop-up
   const att = [...doc.querySelectorAll('#modal [data-action="rec-file-open"]')];
   att.find((b) => /side\.jpg/.test(b.textContent)).click();
   await tick(10);

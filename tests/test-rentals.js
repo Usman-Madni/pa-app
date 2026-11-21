@@ -27,11 +27,12 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const flat = Assets.add({ kind: 'property', name: 'Flat', amount: '1000' });
   win.eval('changed')('assets');
   doc.querySelector('[data-view="assets"]').click();
-  doc.querySelector('[data-asset-tab="property"]')?.click();
-  PA.device.set('assetTab', 'property');
-  PA.render();
+  doc.querySelector('[data-asset-tab="property"]').click();
   const main = () => doc.querySelector('#main');
-  check(/Rented out/.test(main().textContent) && main().querySelector('[data-form-type="rental"]'), 'the Property tab has a Rented out part, with Add rental agreement');
+  check(PA.state.view === 'property' && main().querySelector('.sub-back[data-view="assets"]') && doc.querySelector('.nav-btn.active').dataset.view === 'assets', 'Assets › Property opens the Property page, under Assets (‹ Assets, Assets stays lit)');
+  check([...main().querySelectorAll('[data-property-tab]')].map((b) => b.textContent).join() === 'Properties,Rentals' && main().querySelectorAll('.asset-row').length === 2, 'its tabs: Properties (the two) and Rentals');
+  main().querySelector('[data-property-tab="rentals"]').click();
+  check(/No rental agreements yet/.test(main().textContent) && main().querySelector('.page-actions [data-form-type="rental"]'), 'Rentals: none yet, with Add rental agreement');
 
   // --- An agreement over two properties ---
   main().querySelector('[data-form-type="rental"]').click();
@@ -85,8 +86,8 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   doc.querySelector('#modal [data-action="asset-cancel"]').click();
 
   // --- The properties show it ---
-  doc.querySelector('[data-view="assets"]').click();
-  PA.render();
+  win.eval('setView')('property');
+  main().querySelector('[data-property-tab="properties"]').click();
   check([...main().querySelectorAll('.asset-row')].filter((x) => /Rented out/.test(x.textContent)).length === 2, 'both properties show as Rented out');
   open('asset', { id: shop.id });
   check(doc.querySelector('#modal').textContent.includes('Plaza lease'), 'a property\'s pop-up lists its agreement');

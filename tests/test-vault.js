@@ -55,8 +55,7 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   const car = A.add({ kind: 'vehicle', name: 'Family car', amount: 3000000, date: '2026-01-01' });
   changed('assets');
   doc.querySelector('[data-view="assets"]').click();
-  doc.querySelector('[data-asset-tab="vehicle"]').click();
-  doc.querySelector(`#main [data-vehicle-open="${car.id}"]`).click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click();
+  PA.device.set('vehicleCar', car.id); PA.device.set('vehicleTab', 'overview'); win.eval('setView')('vehicles'); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click();
   doc.querySelector('#modal [data-action="asset-form"][data-form-type="doc"]').click();
   check(modal().elements[`doc-a-${car.id}`].checked, '"New document" from an asset starts linked to it');
   submitForm(win, 'asset-doc', { cat: 'other', type: 'Insurance policy', name: 'Car insurance', expires: inYear(1, 3, 1), renewMonths: '1' });
@@ -87,8 +86,7 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   win.eval('vaultTasks')();
   check(People.of(PA.DB.tasks.find((x) => x.title === 'Renew Car insurance (Family car)')).join() === kim.id, 'and so is its renew task (not your To Do)');
   doc.querySelector('[data-view="assets"]').click();
-  doc.querySelector('[data-asset-tab="vehicle"]')?.click();
-  doc.querySelector(`#main [data-vehicle-open="${car.id}"]`).click(); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click();
+  PA.device.set('vehicleCar', car.id); PA.device.set('vehicleTab', 'overview'); win.eval('setView')('vehicles'); doc.querySelector('[data-vehicle-tab="details"]').click(); doc.querySelector('#main [data-action="open-asset"]').click();
   doc.querySelector('#modal [data-action="delete-asset"]').click();
   check(PA.DB.docs.includes(ins) && !V.forAsset(car.id).length === false && !PA.DB.assets.some((a) => a.id === car.id), 'deleting the car keeps its insurance');
   check(PA.DB.tasks.some((x) => x.title === 'Renew Car insurance' && !x.done), 'whose renew task no longer names it');

@@ -28,10 +28,12 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   win.eval('upkeepTasks')();
 
   // --- The page ---
-  doc.querySelector('[data-view="vehicles"]').click();
+  doc.querySelector('[data-view="assets"]').click();
+  doc.querySelector('[data-asset-tab="vehicle"]').click();
   check(PA.state.view === 'vehicles' && doc.querySelectorAll('#main .vehicle-card').length === 3, 'the Vehicles page has a card per car');
   check(/1 job overdue/.test(main()) && /Upkeep by year/.test(main()), 'a card says what\'s overdue; upkeep by year below');
-  check([...doc.querySelectorAll('#more-sheet [data-view], .nav-btn[data-view="vehicles"]')].length >= 1, 'it\'s in the sidebar (and More on the phone)');
+  check(!doc.querySelector('.nav-btn[data-view="vehicles"]') && !doc.querySelector('#more-sheet [data-view="vehicles"]') && doc.querySelector('.nav-btn.active').dataset.view === 'assets', 'it\'s a page under Assets: not in the sidebar or More, and Assets stays lit');
+  check(doc.querySelector('#main .page-head .sub-back[data-view="assets"]'), '‹ Assets at the top goes back');
   doc.querySelector('[data-vehicle-tab="log"]').click();
   check(doc.querySelectorAll('#main li.item').length === 4, 'the Log has every car\'s entries');
   const pick = doc.querySelector('[data-vehicle-pick]');
@@ -45,8 +47,9 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   // From Assets
   doc.querySelector('[data-view="assets"]').click();
   doc.querySelector('[data-asset-tab="vehicle"]').click();
-  doc.querySelector(`#main [data-vehicle-open="${city.id}"]`).click();
-  check(PA.state.view === 'vehicles' && doc.querySelector('[data-vehicle-pick]').value === city.id, 'a car opened from Assets opens on the Vehicles page');
+  check(PA.state.view === 'vehicles', 'the Vehicles tab in Assets opens the Vehicles page');
+  win.eval('filesGo')('assets', city.id);
+  check(PA.state.view === 'vehicles' && doc.querySelector('[data-vehicle-pick]').value === city.id, 'a car opened from elsewhere opens on the Vehicles page');
 
   // --- Grouping and sorting ---
   pick.value = 'all';

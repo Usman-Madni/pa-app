@@ -70,7 +70,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   doc.querySelector('[data-view="assets"]').click();
   check(doc.querySelector('.nav-btn.active').dataset.view === 'assets', 'Assets is in the sidebar');
   const tabs = [...doc.querySelectorAll('#main [data-asset-tab]')].map((b) => b.dataset.assetTab);
-  check(tabs.join() === 'overview,gold,silver,cash,vehicle,debt,rates', 'tabs: Overview, a tab for each kind in use (in a fixed order), Rates');
+  check(tabs.join() === 'overview,gold,silver,cash,property,vehicle,debt,rates', 'tabs: Overview, a tab for each kind in use (in a fixed order; Property and Vehicles always, as they open pages of their own), Rates');
   check(/Net worth Rs/.test(main()) && doc.querySelectorAll('#main .stat-card').length >= 4, 'the Overview has number cards');
   check(/can't be valued yet/.test(main()), 'it says what can\'t be valued yet');
   const pts = JSON.parse(doc.querySelector('#main .worth-chart').dataset.worth);
@@ -151,7 +151,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   const pick = (v) => { const s = doc.querySelector('#person-pick select'); s.value = v; s.dispatchEvent(new win.Event('input', { bubbles: true })); };
   pick(kim.id);
   doc.querySelector('[data-asset-tab="overview"]').click();
-  check(/for Kim Lee/.test(main()) && !doc.querySelector('[data-asset-tab="vehicle"]'), 'showing Kim: only what Kim has a share in');
+  check(/for Kim Lee/.test(main()) && !doc.querySelector('[data-asset-tab="debt"]'), 'showing Kim: only what Kim has a share in');
   pick('all');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
 
