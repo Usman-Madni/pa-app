@@ -96,6 +96,40 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   submitForm(win, 'asset-utility', { type: 'Security', name: 'Guard' });
   check(tabs().includes('Security'), 'any other type gets its own tab');
 
+  // --- Bill days: the last day of the month; a bill due the month after the one it's for ---
+  const lastOf = (ym) => { const [yy, mm] = ym.split('-').map(Number); return `${ym}-${String(new Date(yy, mm, 0).getDate()).padStart(2, '0')}`; };
+  const ymNow = today.slice(0, 7);
+  const ymNext = PA.toISO(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)).slice(0, 7);
+  const ymPrev = PA.toISO(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)).slice(0, 7);
+  win.eval('openAssetForm')('utility', {});
+  submitForm(win, 'asset-utility', { type: 'Water', name: 'Tank', day: 'last' });
+  const water = PA.DB.utilities.find((x) => x.name === 'Tank');
+  const wt = U.openTask(water);
+  check(water.billDay === 'last' && wt.due.slice(0, 10) === lastOf(ymNow) && wt.repeat.anchorDay === 31, 'Last day of the month: due on this month\'s last day');
+  const wn = PA.Series.tick(wt).next;
+  check(wn.due.slice(0, 10) === lastOf(ymNext), 'and the next one on next month\'s last day (30, 31 or 28/29)');
+  win.eval('openAssetForm')('utility', {});
+  submitForm(win, 'asset-utility', { type: 'Phone', name: 'Mobile', day: '1', billFor: 'after' });
+  const ph = PA.DB.utilities.find((x) => x.name === 'Mobile');
+  const pt = U.openTask(ph);
+  const mon = (ym) => `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
+  check(pt.due.slice(0, 7) === ymNext && pt.period === mon(ymNow) && PA.fullTitle(pt) === `Phone bill (${mon(ymNow)})`, 'due the month after: the task is named for the month the bill is for ("Phone bill (this month)", due next month)');
+  doc.querySelector('[data-view="tasks"]').click();
+  doc.querySelector(`#main [data-action="toggle-task"][data-id="${pt.id}"]`).click();
+  confirmDone(win);
+  await tick(10);
+  check(doc.querySelector('#modal form').elements.month.value === ymNow, 'ticking it: the bill is for that month');
+  submitForm(win, 'asset-bill', { amount: '1200' });
+  const pb = PA.DB.bills.find((b) => b.utility === ph.id);
+  check(pb.month === ymNow && U.months([ph], new Date().getFullYear())[new Date().getMonth()] === 1200, 'and it counts in the month it\'s for');
+  const pnext = U.openTask(ph);
+  check(pnext.period === mon(ymNext), 'the next copy is for the month after');
+  win.eval('openAssetForm')('utility', { id: ph.id });
+  submitForm(win, 'asset-utility', { day: '10' });
+  check(Number(pnext.due.slice(8, 10)) === 10 && pnext.repeat.anchorDay === 10, 'a new bill day moves its next bill task');
+  U.addBill({ utility: ph.id, date: `${ymNow}-03`, amount: 500, month: ymPrev });
+  check(U.months([ph], new Date().getFullYear())[new Date().getMonth()] === 1200 || ymPrev.slice(0, 4) !== ymNow.slice(0, 4), 'a bill paid this month for last month counts in last month');
+
   // --- Delete ---
   win.eval('openAssetForm')('utility', { id: c.id });
   doc.querySelector('#modal [data-action="utility-delete"]').click();

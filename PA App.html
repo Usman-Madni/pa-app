@@ -6831,7 +6831,7 @@ const Utilities = {
   icon(type) { return UTILITY_TYPES.find((u) => sameName(u.id, type))?.icon || 'receipt'; },
   list(type) { return DB.utilities.filter((c) => People.shows(c) && (!type || sameName(c.type, type))).sort((a, b) => a.name.localeCompare(b.name)); },
   add(data) {
-    const c = { id: uid(), type: (data.type || 'Electricity').trim(), name: (data.name || '').trim() || (data.type || 'Electricity').trim(), provider: data.provider || '', account: data.account || '', property: data.property || '', people: data.people || People.forNew(), notes: data.notes || '', created: Date.now() };
+    const c = { billDay: data.billDay || '', billFor: data.billFor || 'same', id: uid(), type: (data.type || 'Electricity').trim(), name: (data.name || '').trim() || (data.type || 'Electricity').trim(), provider: data.provider || '', account: data.account || '', property: data.property || '', people: data.people || People.forNew(), notes: data.notes || '', created: Date.now() };
     DB.utilities.push(c);
     return c;
   },
@@ -6847,22 +6847,40 @@ const Utilities = {
     if (!b) { addBucket('Utilities'); b = DB.buckets.find((x) => sameName(x.name, 'Utilities')); }
     return b ? b.id : '';
   },
-  // Its bill task: monthly on that day, a reminder at 9 am (it reaches To Do), its files to the Vault.
-  makeTask(c, day) {
-    const d = Math.min(Math.max(Number(day) || 1, 1), 31);
-    const now = new Date();
-    const on = (y, m) => new Date(y, m, Math.min(d, new Date(y, m + 1, 0).getDate()));
-    let due = on(now.getFullYear(), now.getMonth());
-    if (toISO(due) < todayISO()) due = on(now.getFullYear(), now.getMonth() + 1);
+  // The bill day: a day of the month (1-31) or 'last' (the last day, whatever the month). A day past the month's end
+  // is its last day.
+  dayNum(day) { return day === 'last' ? 31 : Math.min(Math.max(Number(day) || 1, 1), 31); },
+  dateIn(ym, day) { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(Math.min(this.dayNum(day), new Date(y, m, 0).getDate())).padStart(2, '0')}`; },
+  // Which month a bill due in this month is for: the same, the month before (due the month after it) or after.
+  forMonth(c, dueYm) { return ymAdd(dueYm, c.billFor === 'after' ? -1 : c.billFor === 'before' ? 1 : 0); },
+  periodOf(c, dueYm) { const ym = this.forMonth(c, dueYm); return `${MONTHS_SHORT[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`; },
+  // Its bill task: monthly on its bill day, named for the month the bill is for ("Gas bill (Oct 26)", due 5 Nov), a
+  // reminder at 9 am (it reaches To Do), its files to the Vault.
+  makeTask(c, day = c.billDay) {
+    if (day) c.billDay = day === 'last' ? 'last' : this.dayNum(day);
+    let due = this.dateIn(ymOf(todayISO()), c.billDay);
+    if (due < todayISO()) due = this.dateIn(ymAdd(ymOf(todayISO()), 1), c.billDay);
     const several = DB.utilities.filter((x) => sameName(x.type, c.type)).length > 1;
-    const t = addTask({ title: `${c.type} bill${several ? ` (${c.name})` : ''}`, due: `${toISO(due)}T${ALL_DAY}`, people: People.of(c), bucket: this.bucket(),
+    const t = addTask({ title: `${c.type} bill${several ? ` (${c.name})` : ''}`, due: `${due}T${ALL_DAY}`, people: People.of(c), bucket: this.bucket(),
       reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
     TaskEdit.setRepeat(t, { freq: 'monthly', interval: 1 });
+    t.repeat.anchorDay = this.dayNum(c.billDay);
+    t.period = this.periodOf(c, ymOf(due));
     t.utility = c.id;
     t.fileTo = this.folder(c);
     Vault.keepFolder(Vault.topOf(t), t.fileTo);
-    changed('tasks');
+    changed('tasks', 'utilities');
     return t;
+  },
+  // The bill day or month changed: the next bill task moves to that day of its month and says the month it's for.
+  retime(c) {
+    const t = this.openTask(c);
+    if (!t || !t.due || !c.billDay) return false;
+    TaskEdit.setDue(t, this.dateIn(ymOf(t.due), c.billDay));
+    if (t.repeat) t.repeat.anchorDay = this.dayNum(c.billDay);
+    t.period = this.periodOf(c, ymOf(t.due));
+    changed('tasks');
+    return true;
   },
   // Keep each connection's bill tasks and the bills they put in the Vault in its folder (a second gas connection, a
   // new name). Returns true if anything changed.
@@ -6882,21 +6900,23 @@ const Utilities = {
     if (any) changed('tasks', 'docs');
     return any;
   },
-  bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')); },
+  monthOf(b) { return b.month || ymOf(b.date); }, // the month a bill is for (bills from before: the month paid)
+  bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => this.monthOf(b).localeCompare(this.monthOf(a)) || (b.date || '').localeCompare(a.date || '')); },
   addBill(data) {
-    const b = { id: uid(), utility: data.utility, date: data.date || todayISO(), period: data.period || monthLabel(data.date || todayISO()), amount: Number(data.amount) || 0, task: data.task || '', note: data.note || '' };
+    const month = data.month || ymOf(data.date || todayISO());
+    const b = { id: uid(), utility: data.utility, month, date: data.date || todayISO(), period: data.period || ymLabel(month), amount: Number(data.amount) || 0, task: data.task || '', note: data.note || '' };
     DB.bills.push(b);
     return b;
   },
   // Spent on these connections in a year (up to a month, 1-12), and month by month.
   sum(cs, year, upto = 12) {
     const ids = new Set(cs.map((c) => c.id));
-    return DB.bills.filter((b) => ids.has(b.utility) && Number(b.date.slice(0, 4)) === year && Number(b.date.slice(5, 7)) <= upto).reduce((t, b) => t + b.amount, 0);
+    return DB.bills.filter((b) => ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto).reduce((t, b) => t + b.amount, 0);
   },
   months(cs, year) {
     const ids = new Set(cs.map((c) => c.id));
     const m = Array(12).fill(0);
-    for (const b of DB.bills) if (ids.has(b.utility) && Number(b.date.slice(0, 4)) === year) m[Number(b.date.slice(5, 7)) - 1] += b.amount;
+    for (const b of DB.bills) if (ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year) m[Number(this.monthOf(b).slice(5, 7)) - 1] += b.amount;
     return m;
   },
   // This month for a connection: paid (a bill dated this month), due (its task this month or overdue), or nothing yet.
@@ -6913,8 +6933,8 @@ function utilityTasks() { Utilities.sync(); }
 async function utilityMakeTask(id) {
   const c = DB.utilities.find((x) => x.id === id);
   if (!c || state.readOnly) return;
-  const day = await askText(`${c.name}: the bill is due on which day of the month?`, '', { yes: 'Make it' });
-  if (!day || !(Number(day) >= 1 && Number(day) <= 31)) return;
+  const day = c.billDay ? String(c.billDay) : await askChoice(`${c.name}: the bill is due on which day of the month?`, [...Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `The ${ordinal(i + 1)}` })), { value: 'last', label: 'The last day of the month' }], { yes: 'Make it' });
+  if (!day) return;
   const t = Utilities.makeTask(c, day);
   toast(`Made "${fullTitle(t)}", due ${fmtDate(t.due)} and every month`);
   render();
@@ -7022,7 +7042,7 @@ function utilityCard(c) {
       <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `, due ${esc(fmtDate(t.due))}` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
       <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill</span><b>${rupees(bills[0].amount)}</b></div>` : ''}</div>
-      ${bills.length ? `<div class="upkeep-log">${bills.slice(0, 12).map((b) => `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><span class="ur-ico">${ic('receipt', 'sm')}</span><span class="ur-main"><span>${esc(b.period || monthLabel(b.date))}</span><span class="meta">Paid ${esc(fmtDate(b.date))}${b.note ? `, ${esc(b.note)}` : ''}</span></span><span class="ur-cost">${rupees(b.amount)}</span></button>`).join('')}</div>` : '<p class="meta" style="margin:0">No bills yet: ticking its bill task asks what it came to.</p>'}
+      ${bills.length ? `<div class="upkeep-log">${bills.slice(0, 12).map((b) => `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><span class="ur-ico">${ic('receipt', 'sm')}</span><span class="ur-main"><span>${esc(ymLabel(Utilities.monthOf(b)))}</span><span class="meta">Paid ${esc(fmtDate(b.date))}${b.note ? `, ${esc(b.note)}` : ''}</span></span><span class="ur-cost">${rupees(b.amount)}</span></button>`).join('')}</div>` : '<p class="meta" style="margin:0">No bills yet: ticking its bill task asks what it came to.</p>'}
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
 }
@@ -7522,7 +7542,7 @@ function drawAssetForm() {
   }
   if (f.type === 'utility') {
     const c = f.id ? DB.utilities.find((x) => x.id === f.id) : null;
-    const v = c || { type: f.kind || 'Electricity', name: '', provider: '', account: '', property: '', people: People.forNew(), notes: '' };
+    const v = c || { type: f.kind || 'Electricity', name: '', provider: '', account: '', property: '', people: People.forNew(), notes: '', billDay: '', billFor: 'same' };
     const on = People.of(v);
     const props = DB.assets.filter((a) => a.kind === 'property' && !a.closed).sort((a, b) => a.name.localeCompare(b.name));
     $('#modal').innerHTML = box(c ? c.name : `Add ${v.type.toLowerCase()}`, `
@@ -7536,7 +7556,10 @@ function drawAssetForm() {
       </div>
       ${props.length ? `<label class="field">For property (optional)<select class="input" name="property"><option value="">None</option>${props.map((a) => `<option value="${esc(a.id)}" ${a.id === v.property ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
       ${People.several() ? `<fieldset class="owner-box"><legend>Whose</legend><div class="check-row">${People.list().map((p) => `<label><input type="checkbox" name="u-p-${esc(p.id)}" ${on.includes(p.id) ? 'checked' : ''}> ${avatar(p.id)}${esc(p.name)}</label>`).join('')}</div></fieldset>` : ''}
-      ${c ? '' : '<label class="field">Bill due each month on day<input class="input" type="number" name="day" min="1" max="31" placeholder="e.g. 15 (leave empty for no bill task)"></label>'}
+      <div class="row">
+        <label class="field">Bill due each month on<select class="input" name="day"><option value="">${c ? 'Not set' : 'No bill task'}</option>${Array.from({ length: 31 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${String(v.billDay) === String(n) ? 'selected' : ''}>the ${ordinal(n)}</option>`).join('')}<option value="last" ${v.billDay === 'last' ? 'selected' : ''}>the last day of the month</option></select></label>
+        <label class="field grow">The bill due then is for<select class="input" name="billFor">${[['same', 'that month'], ['after', 'the month before (due the month after it)'], ['before', 'the month after (due the month before it)']].map(([k, l]) => `<option value="${k}" ${(v.billFor || 'same') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      </div>
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
     c ? '<button type="button" class="btn danger edit-only" data-action="utility-delete" style="margin-right:auto">Delete</button>' : '');
     $('#modal input[name="name"]')?.focus();
@@ -7548,14 +7571,14 @@ function drawAssetForm() {
     if (!c) return closeAssetForm();
     const t = f.task && DB.tasks.find((x) => x.id === f.task);
     const last = Utilities.bills(c)[0];
-    const v = b || { date: f.date || todayISO(), period: t ? (t.period || monthLabel(t.due)) : monthLabel(f.date || todayISO()), amount: '', note: '' };
+    const v = b ? { ...b, month: Utilities.monthOf(b) } : { date: f.date || todayISO(), month: t && t.due ? Utilities.forMonth(c, ymOf(t.due)) : ymOf(f.date || todayISO()), amount: '', note: '' };
     $('#modal').innerHTML = box(b ? `${c.name}: ${b.period}` : `What did the ${c.type.toLowerCase()} bill come to?`, `
       <p class="meta" style="margin:0">${esc(c.name)}${last && !b ? `. Last one: ${rupees(last.amount)} (${esc(last.period)})` : ''}</p>
       <div class="row">
         <label class="field grow">Amount<input class="input" ${amountAttrs(v.amount)} name="amount" placeholder="Leave empty to skip"></label>
         <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       </div>
-      <label class="field">For<input class="input" name="period" value="${esc(v.period)}" placeholder="e.g. Nov 2026" maxlength="30"></label>
+      <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
       <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>`,
     b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '');
     $('#modal input[name="amount"]')?.focus();
@@ -8091,21 +8114,25 @@ function submitAssetForm(type, data) {
     const people = People.several() ? People.list().filter((p) => data[`u-p-${p.id}`] === 'on').map((p) => p.id) : [ME];
     if (!people.length) return formError('Pick whose it is.');
     if (!(data.type || '').trim()) return formError('Say what it is (electricity, gas…).');
-    const fields = { type: data.type.trim(), name: (data.name || '').trim() || data.type.trim(), provider: (data.provider || '').trim(), account: (data.account || '').trim(), property: data.property || '', people, notes: data.notes || '' };
+    const billDay = data.day === 'last' ? 'last' : Number(data.day) || '';
+    const fields = { type: data.type.trim(), name: (data.name || '').trim() || data.type.trim(), provider: (data.provider || '').trim(), account: (data.account || '').trim(), property: data.property || '', people, notes: data.notes || '', billDay, billFor: data.billFor || 'same' };
     let c = f.id ? DB.utilities.find((x) => x.id === f.id) : null;
+    const was = c ? `${c.billDay}|${c.billFor}` : '';
     if (c) Object.assign(c, fields); else c = Utilities.add(fields);
     changed('utilities');
-    if (!f.id && data.day) Utilities.makeTask(c, data.day);
+    if (!f.id && billDay) Utilities.makeTask(c);
+    else if (f.id && was !== `${c.billDay}|${c.billFor}` && Utilities.retime(c)) toast(`Its next bill task moves to ${c.billDay === 'last' ? 'the last day of the month' : `the ${ordinal(c.billDay)}`}`);
     utilityTasks();
     device.set('utilTab', c.type);
-    toast(`Saved ${c.name}${!f.id && data.day ? `, with its bill task on the ${ordinal(Number(data.day))} of each month` : ''}`);
+    toast(`Saved ${c.name}${!f.id && billDay ? `, with its bill task on ${billDay === 'last' ? 'the last day' : `the ${ordinal(billDay)}`} of each month` : ''}`);
     closeAssetForm();
     render();
     return;
   } else if (type === 'bill') {
     const b = f.id ? DB.bills.find((x) => x.id === f.id) : null;
     if (!b && (data.amount === '' || data.amount == null)) { closeAssetForm(); return; } // skipped
-    const fields = { amount: Number(data.amount) || 0, date: data.date || todayISO(), period: (data.period || '').trim() || monthLabel(data.date), note: (data.note || '').trim() };
+    const month = data.month || ymOf(data.date || todayISO());
+    const fields = { amount: Number(data.amount) || 0, date: data.date || todayISO(), month, period: ymLabel(month), note: (data.note || '').trim() };
     if (b) Object.assign(b, fields); else Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
     toast(`Saved ${rupees(fields.amount)} for ${fields.period}`);
