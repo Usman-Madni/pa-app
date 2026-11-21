@@ -1866,7 +1866,7 @@ const Vault = {
   },
   // Plain files dropped into a folder: each its own thing in the Vault, named after the file, kept with it.
   // place: a folder outside the Vault ('Assets/Gold') to keep them in instead (Folders tab, "Just keep it here").
-  async addFiles(top, path, files, place = '') {
+  async addFiles(top, path, files, place = '', named = '') {
     if (state.readOnly) return [];
     const made = [];
     for (const f of files) {
@@ -1875,6 +1875,7 @@ const Vault = {
       d.plain = true;
       d.folder = path;
       if (place) d.place = place;
+      if (named) { d.name = named; d.named = true; }
       made.push(d);
     }
     changed('docs');
@@ -3492,6 +3493,7 @@ const AT = {
   // "Phone bill Oct 26.pdf": the title and moving part; with no moving part, the year is added when the
   // title doesn't have one ("Elec bill 2026.pdf"). A document or asset uses its name.
   suggestName(task, original) {
+    if (task.plain && task.named) { const dot = original.lastIndexOf('.'); return `${task.name}${dot > 0 ? original.slice(dot).toLowerCase() : ''}`; } // named for what it's for
     if (task.plain) return original; // a plain file in the Vault keeps its own name
     const dot = original.lastIndexOf('.');
     const ext = dot > 0 ? original.slice(dot).toLowerCase() : '';
@@ -6727,6 +6729,25 @@ const Rentals = {
   },
   renew(r, { start, months, rent, note }) { r.terms.push({ id: uid(), start, months: Number(months) || 11, rent: Number(rent) || 0, note: note || '' }); },
   folder(r) { return Files.join('Rentals', Files.dirName(r.name)); },
+  lastDay(t) { return toISO(addDays(parseISO(this.endOf(t)), -1)); },
+  termLabel(r, t) { return `${r.name} ${ymLabel(ymOf(t.start))} – ${ymLabel(ymOf(this.lastDay(t)))}`; },
+  openCollect(r) { return this.tasksOf(r).filter((t) => t.rentKind === 'collect' && !t.done && !PendingDelete.has(t.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'))[0] || null; },
+  openRenew(r) { return DB.tasks.find((t) => t.id.startsWith(`rent-renew-${r.id}-`) && !t.done && !PendingDelete.has(t.id)) || null; },
+  // The due day changed: the next Collect rent moves to that day of its month (and every month after).
+  moveDay(r) {
+    const t = this.openCollect(r);
+    if (!t || !t.due) return false;
+    const [y, m] = t.due.slice(0, 7).split('-').map(Number);
+    const day = Math.min(r.dueDay, new Date(y, m, 0).getDate());
+    TaskEdit.setDue(t, `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    if (t.repeat) t.repeat.anchorDay = r.dueDay;
+    changed('tasks');
+    return true;
+  },
+  setTerm(r, id, fields) {
+    const t = r.terms.find((x) => x.id === id);
+    if (t) Object.assign(t, { start: fields.start || t.start, months: Number(fields.months) || t.months, rent: Number(fields.rent) || t.rent, note: fields.note ?? t.note });
+  },
   tasksOf(r) { return DB.tasks.filter((t) => t.rental === r.id); },
   bucket() {
     let b = DB.buckets.find((x) => sameName(x.name, 'Rentals'));
@@ -6951,10 +6972,16 @@ function rentalAfter(r) {
   const term = Rentals.current(r);
   const owed = Rentals.owed(r);
   const docs = Rentals.docsOf(r);
+  const terms = Rentals.terms(r);
+  const termFiles = (t) => docs.filter((d) => d.term === t.id);
+  const others = docs.filter((d) => !terms.some((t) => t.id === d.term));
+  const collect = Rentals.openCollect(r);
+  const renew = Rentals.openRenew(r);
+  const fileRow = (d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; };
   return `
     <div class="value-history"><div class="upkeep-sum">
       <div><span class="meta">Rent now</span><b>${rupees(Rentals.rentNow(r))}</b></div>
-      ${term ? `<div><span class="meta">This term ends</span><b>${esc(fmtDate(Rentals.endOf(term)))}</b></div>` : ''}
+      ${term ? `<div><span class="meta">This term ends</span><b>${esc(fmtDate(Rentals.lastDay(term)))}</b></div>` : ''}
       <div><span class="meta">Owed</span><b>${rupees(Math.max(0, owed))}</b></div>
     </div>
     <div class="row edit-only">
@@ -6963,7 +6990,16 @@ function rentalAfter(r) {
       <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
       <label class="btn small">${ic('paperclip', 'sm')}Add files<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" hidden></label>
     </div></div>
-    ${docs.length ? `<div class="value-history"><div class="meta">Files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${docs.map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; }).join('')}</div>` : ''}
+    <div class="value-history rental-terms"><div class="meta">Terms (tap one to change it or add its agreement)</div>
+      ${terms.slice().reverse().map((t, i, all) => { const prev = all[i + 1]; const n = termFiles(t).length; return `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="rent-term" data-id="${esc(r.id)}" data-term="${esc(t.id)}"><span class="ur-ico">${ic('file-text', 'sm')}</span><span class="ur-main"><span>${esc(fmtDate(t.start))} – ${esc(fmtDate(Rentals.lastDay(t)))}</span><span class="meta">${t.months} months${prev && prev.rent ? `, ${Math.round(((t.rent - prev.rent) / prev.rent) * 1000) / 10}% more` : ''}${t.note ? `, ${esc(t.note)}` : ''}${n ? `, ${plural(n, 'file')}` : ''}</span></span><span class="ur-cost">${rupees(t.rent)}</span></button>`; }).join('')}
+    </div>
+    <div class="value-history rental-tasks"><div class="meta">Tasks</div>
+      ${collect ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(collect.id)}">${ic('repeat', 'sm')} ${esc(fullTitle(collect))}</button><span class="meta">Next ${esc(fmtDate(collect.due))}</span><span></span></div>`
+        : r.ended ? '' : `<div class="vh-row"><span class="meta">No Collect rent task</span><span></span><button type="button" class="btn small edit-only" data-action="rental-collect" data-id="${esc(r.id)}">${ic('plus', 'sm')}Make it</button></div>`}
+      ${renew ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(renew.id)}">${ic('repeat', 'sm')} ${esc(renew.title)}</button><span class="meta">${esc(fmtDate(renew.due))}</span><span></span></div>`
+        : r.ended ? '' : `<div class="vh-row"><span class="meta">${r.renewMonths ? 'No renew reminder for this term' : 'No renew reminder (set Remind to renew)'}</span><span></span><span></span></div>`}
+    </div>
+    ${others.length ? `<div class="value-history"><div class="meta">Other files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${others.map(fileRow).join('')}</div>` : ''}
     ${rentLedger(r)}`;
 }
 
@@ -7448,6 +7484,25 @@ function drawAssetForm() {
     '', 'Save', ro,
     pays.length ? `<div class="value-history"><div class="meta">Already recorded for ${esc(ymLabel(ym))}</div>${pays.map((p) => `<div class="vh-row"><span>${p.writeOff ? 'Written off' : esc(fmtDate(p.date))}</span><span>${rupees(p.amount)}${p.note ? ` <span class="meta">${esc(p.note)}</span>` : ''}</span><button type="button" class="icon-btn edit-only" data-action="rent-pay-remove" data-id="${esc(r.id)}" data-pay="${esc(p.id)}" aria-label="Remove">${ic('x', 'sm')}</button></div>`).join('')}</div>` : '');
     $('#modal input[name="amount"]')?.focus();
+    return;
+  }
+  if (f.type === 'rent-term') {
+    const r = DB.rentals.find((x) => x.id === f.id);
+    const t = r && r.terms.find((x) => x.id === f.term);
+    if (!t) return closeAssetForm();
+    const files = Rentals.docsOf(r).filter((d) => d.term === t.id);
+    $('#modal').innerHTML = box(`${r.name}: a term`, `
+      <div class="row">
+        <label class="field">Starts<input class="input" type="date" name="start" value="${esc(t.start)}" required></label>
+        <label class="field">For (months)<input class="input" type="number" name="months" min="1" max="120" value="${esc(t.months)}"></label>
+        <label class="field grow">Rent a month<input class="input" ${amountAttrs(t.rent)} name="rent" required></label>
+      </div>
+      <label class="field">Note<input class="input" name="note" value="${esc(t.note || '')}" maxlength="120"></label>`,
+    r.terms.length > 1 ? '<button type="button" class="btn danger edit-only" data-action="rent-term-delete" style="margin-right:auto">Delete this term</button>' : '', 'Save', ro,
+    `<div class="value-history"><div class="meta">Its agreement (named "${esc(Rentals.termLabel(r, t))}", in Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>
+      ${files.map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; }).join('')}
+      <div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add its agreement<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" data-term="${esc(t.id)}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="rental-files" data-id="${esc(r.id)}" data-term="${esc(t.id)}" hidden></label>` : ''}</div>
+    </div>`);
     return;
   }
   if (f.type === 'rent-renew') {
@@ -7973,7 +8028,9 @@ function submitAssetForm(type, data) {
     const properties = DB.assets.filter((a) => data[`rp-${a.id}`] === 'on').map((a) => a.id);
     const fields = { name: (data.name || '').trim() || 'Rental agreement', properties, tenant: (data.tenant || '').trim(), phone: (data.phone || '').trim(), deposit: Number(data.deposit) || 0, dueDay: Math.min(31, Math.max(1, Number(data.dueDay) || 1)), renewMonths: Number(data.renewMonths) || 0, people, notes: data.notes || '' };
     let r = f.id ? DB.rentals.find((x) => x.id === f.id) : null;
+    const dayWas = r ? r.dueDay : 0;
     if (r) Object.assign(r, fields, { ended: data.ended || '' });
+    if (r && dayWas !== r.dueDay && Rentals.moveDay(r)) toast(`The next Collect rent moves to the ${ordinal(r.dueDay)}`);
     else {
       if (!data.start || !Number(data.rent)) return formError('Say when this term starts and the rent.');
       r = Rentals.add({ ...fields, start: data.start, months: data.months, rent: data.rent });
@@ -8002,6 +8059,19 @@ function submitAssetForm(type, data) {
     changed('rentals');
     rentalTasks();
     toast(`Brought in ${plural(rows.length, 'month')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}. Owed now ${rupees(Math.max(0, Rentals.owed(r)))}`);
+    returnToForm({ type: 'rental', id: r.id });
+    render();
+    return;
+  } else if (type === 'rent-term') {
+    const r = DB.rentals.find((x) => x.id === f.id);
+    const t = r && r.terms.find((x) => x.id === f.term);
+    if (!t) return closeAssetForm();
+    if (!data.start || !Number(data.rent)) return formError('A term needs a start and a rent.');
+    if (r.terms.some((x) => x !== t && x.start === data.start)) return formError('Another term starts that day.');
+    Rentals.setTerm(r, t.id, { start: data.start, months: data.months, rent: data.rent, note: (data.note || '').trim() });
+    changed('rentals');
+    rentalTasks();
+    toast(`Saved the term from ${fmtDate(data.start)}`);
     returnToForm({ type: 'rental', id: r.id });
     render();
     return;
@@ -9302,7 +9372,7 @@ const EDIT_ACTIONS = new Set([
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
   'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
-  'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'rental-delete', 'rent-pay-remove', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
+  'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'rental-delete', 'rent-pay-remove', 'rental-collect', 'rent-term-delete', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
 ]);
 
 document.addEventListener('click', (e) => {
@@ -9607,6 +9677,19 @@ document.addEventListener('click', (e) => {
       if (!r) break;
       closeAssetForm();
       Trash.discard([['rentals', r], ['tasks', Rentals.tasksOf(r).filter((t) => !t.done)]], `"${r.name}"`);
+      break;
+    }
+    case 'rental-collect': { const r = DB.rentals.find((x) => x.id === id); if (r) { const t = Rentals.makeCollect(r); toast(`Made "${fullTitle(t)}", next ${fmtDate(t.due)}`); renderAssetForm(); render(); } break; }
+    case 'rent-term-delete': {
+      const f = state.assetForm;
+      const r = f && DB.rentals.find((x) => x.id === f.id);
+      if (!r || r.terms.length < 2) break;
+      r.terms = r.terms.filter((x) => x.id !== f.term);
+      changed('rentals');
+      rentalTasks();
+      toast('Deleted that term; its files stay in the agreement\'s folder');
+      closeAssetForm();
+      render();
       break;
     }
     case 'rent-pay-remove': {
@@ -10309,7 +10392,8 @@ document.addEventListener('change', (e) => {
     e.target.value = '';
     if (r && files.length) {
       Vault.keepFolder(Vault.topOf(r), Rentals.folder(r));
-      Vault.addFiles(Vault.topOf(r), Rentals.folder(r), files).then((made) => { made.forEach((d) => { d.rental = r.id; }); if (made.length) { changed('docs'); toast(`Added ${plural(made.length, 'file')} to ${r.name}`); } renderAssetForm(); render(); });
+      const term = r.terms.find((t) => t.id === e.target.dataset.term);
+      Vault.addFiles(Vault.topOf(r), Rentals.folder(r), files, '', term ? Rentals.termLabel(r, term) : '').then((made) => { made.forEach((d) => { d.rental = r.id; if (term) d.term = term.id; }); if (made.length) { changed('docs'); toast(`Added ${plural(made.length, 'file')} to ${r.name}`); } renderAssetForm(); render(); });
     }
     return;
   }

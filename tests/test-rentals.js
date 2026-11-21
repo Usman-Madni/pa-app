@@ -76,6 +76,36 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check(R.rentNow(r) === 110050 && at.due === 110050 && /^Renewed, 10.1% increase/.test(at.note) && L2.find((x) => x.month === ym(3)).due === 100000, 'the typed rent from that month, marked "Renewed, 10.1% increase"');
   check(renewTask.done && PA.DB.tasks.some((t) => t.id === `rent-renew-${r.id}-${monthsAgo(2)}` && !t.done), 'the old Renew task is ticked, the next is made');
 
+  // --- Terms: each renewal, to change or delete, with its own agreement file ---
+  open('rental', { id: r.id });
+  const termRows = [...doc.querySelectorAll('#modal .rental-terms .upkeep-row')];
+  check(termRows.length === 2 && /Rs 1,10,050/.test(termRows[0].textContent) && /10.1% more/.test(termRows[0].textContent), 'the agreement lists its terms, newest first, with the increase');
+  termRows[1].click();
+  check(modal().dataset.form === 'asset-rent-term' && doc.querySelector('#modal [data-action="asset-back"]'), 'tapping a term opens it (with ‹ Back)');
+  const tin = doc.querySelector('#modal input[data-input="rental-files"][data-term]');
+  Object.defineProperty(tin, 'files', { value: [new win.File(['%PDF'], 'scan001.pdf', { type: 'application/pdf' })], configurable: true });
+  tin.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick(40);
+  const tf = PA.DB.docs.find((x) => x.term === r.terms[0].id);
+  check(tf && tf.attachments[0].file === `Me/Vault/Rentals/Plaza lease/${R.termLabel(r, r.terms[0])}.pdf` && /^Plaza lease \w+ \d{4} – \w+ \d{4}$/.test(tf.name), 'its agreement is named after the term, in the agreement\'s folder');
+  check(doc.querySelector('#modal').textContent.includes(tf.attachments[0].name), 'and listed on the term');
+  submitForm(win, 'asset-rent-term', { rent: '99,000' });
+  check(modal().dataset.form === 'asset-rental' && R.ledger(r)[0].due === 99000, 'changing its rent: the ledger follows, and it goes back to the agreement');
+  open('rental', { id: r.id });
+  const first = [...doc.querySelectorAll('#modal .rental-terms .upkeep-row')].pop();
+  first.click();
+  submitForm(win, 'asset-rent-term', { rent: '100000' });
+
+  // --- Its tasks ---
+  open('rental', { id: r.id });
+  const tasks = doc.querySelector('#modal .rental-tasks').textContent;
+  check(/Collect rent \(Plaza lease\)/.test(tasks) && /Renew rental agreement \(Plaza lease\)/.test(tasks), 'the agreement shows its Collect rent and Renew tasks');
+  const oldDue = collect.due;
+  submitForm(win, 'asset-rental', { dueDay: '5' });
+  check(collect.due.slice(0, 7) === oldDue.slice(0, 7) && Number(collect.due.slice(8, 10)) === 5 && collect.repeat.anchorDay === 5, 'a new due day moves the next Collect rent to that day');
+  open('rental', { id: r.id });
+  submitForm(win, 'asset-rental', { dueDay: '18' });
+
   // --- Ticking Collect rent asks what came in ---
   doc.querySelector('#modal [data-action="asset-cancel"]').click();
   doc.querySelector('[data-view="tasks"]').click();
@@ -98,7 +128,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   Object.defineProperty(input, 'files', { value: [new win.File(['%PDF'], 'Agreement 2026.pdf', { type: 'application/pdf' })], configurable: true });
   input.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(40);
-  const d = PA.DB.docs.find((x) => x.rental === r.id);
+  const d = PA.DB.docs.find((x) => x.rental === r.id && !x.term);
   check(d && d.folder === 'Rentals/Plaza lease' && d.attachments[0].file === 'Me/Vault/Rentals/Plaza lease/Agreement 2026.pdf' && doc.querySelector('#modal').textContent.includes('Agreement 2026.pdf'), 'Add files: into Vault › Rentals › Plaza lease, listed on the agreement');
 
   // --- Paste history from a sheet ---
