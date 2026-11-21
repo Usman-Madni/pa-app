@@ -748,6 +748,8 @@ body.phone .p-when-time { flex: 1 1 auto; }
 
 /* ===== Pop-up (Done on…) ===== */
 .modal-back { position: fixed; inset: 0; background: var(--scrim); z-index: 60; }
+#modal-under .modal-back { display: none; }
+#modal-under .modal { z-index: 59; pointer-events: none; }
 body.drawer-over .drawer { z-index: 70; }
 body.drawer-over .drawer-backdrop { z-index: 69; }
 .modal[data-form="ask"] { z-index: 81; }
@@ -893,6 +895,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
 </div>
 <div class="drawer-backdrop" data-action="close-task"></div>
 <aside id="drawer" class="drawer" aria-label="Task details"></aside>
+<div id="modal-under" inert aria-hidden="true"></div><!-- the pop-up a pop-up was opened from, dimmed behind it -->
 <div id="modal"></div>
 <div id="toasts" class="toasts"></div>
 <!-- Icons: Tabler Icons (outline), MIT License, https://tabler.io/icons. Used as <svg class="i"><use href="#i-name"/></svg>. -->
@@ -7611,7 +7614,10 @@ const UPKEEP_FORMS = ['upkeep', 'plan', 'reading', 'store-use'];
 // saving returns to it (it's drawn again, so it shows the change). Opened from a page, they just close.
 function openAssetForm(type, opts = {}) {
   const cur = state.assetForm;
-  if (cur && !(cur.type === type && (cur.id || '') === (opts.id || ''))) state.formStack = [...(state.formStack || []), cur];
+  if (cur && !(cur.type === type && (cur.id || '') === (opts.id || ''))) {
+    state.formStack = [...(state.formStack || []), cur];
+    $('#modal-under').replaceChildren(...$('#modal').childNodes); // it stays in sight, dimmed, under the new one
+  }
   state.assetForm = { type, ...opts };
   renderAssetForm();
 }
@@ -7624,10 +7630,11 @@ function upkeepReturn() {
 function returnToForm(form) {
   const top = (state.formStack || [])[(state.formStack || []).length - 1];
   if (top && top.type === form.type && (top.id || '') === (form.id || '')) closeAssetForm();
-  else { state.assetForm = form; renderAssetForm(); }
+  else { $('#modal-under').replaceChildren(); state.formStack = []; state.assetForm = form; renderAssetForm(); }
 }
 // One level back (all: close every pop-up). A pop-up whose record is gone closes itself when drawn, so it steps on back.
 function closeAssetForm(all = false) {
+  $('#modal-under').replaceChildren();
   const prev = all ? null : (state.formStack || []).pop();
   if (prev) { state.assetForm = prev; renderAssetForm(); return; }
   state.formStack = [];

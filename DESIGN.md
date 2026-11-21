@@ -54,7 +54,7 @@ icon stays if the picture can't be shown), anything else its icon. Tapping a pic
 which offers to open what it's on ("Open the task") unless that's already open under it.
 
 ## Pop-ups
-A pop-up opened from another remembers it: ‹ Back, Cancel and Esc go back one level, and saving returns there.
+A pop-up opened from another opens on top of it (the one behind stays in sight, dimmed, in `#modal-under`) and remembers it: ‹ Back, Cancel and Esc go back one level, and saving returns there.
 Open them with `openAssetForm`; leave with `closeAssetForm()` (one level) or `closeAssetForm(true)` (all of them).
 
 ## Sub-pages

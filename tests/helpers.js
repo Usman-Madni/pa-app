@@ -142,7 +142,8 @@ function loadApp(opts = {}) {
 
 // Fill and submit a form in the app.
 function submitForm(win, formName, values) {
-  const form = win.document.querySelector(`[data-form="${formName}"]`);
+  // The pop-up in front first (one it was opened from may be dimmed behind it, under #modal-under).
+  const form = win.document.querySelector(`#modal [data-form="${formName}"]`) || win.document.querySelector(`[data-form="${formName}"]`);
   if (!form) throw new Error(`form ${formName} not on screen`);
   for (const [k, v] of Object.entries(values)) form.elements[k].value = v;
   form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
