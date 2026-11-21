@@ -222,6 +222,19 @@ button:disabled { cursor: not-allowed; }
 .empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .empty-state p { margin: 0; }
 /* The Assets pop-ups: wider, and scrolls on a short screen */
+.modal.wide.sheet { width: min(1120px, calc(100% - 32px)); gap: 14px; }
+.sheet-details { border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px 12px; }
+.sheet-details > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--muted); list-style: none; }
+.sheet-details > summary::-webkit-details-marker { display: none; }
+.sheet-details[open] > summary { margin-bottom: 10px; color: var(--text); }
+.modal.sheet .ledger-wrap { max-height: 62vh; }
+.sheet-top .upkeep-sum { margin-bottom: 8px; }
+.sheet-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 16px; align-items: start; }
+.sheet-main, .sheet-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.modal.sheet .value-history { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; background: var(--panel-2); }
+.modal.sheet .value-history > .meta:first-child { font-weight: 600; color: var(--text); font-size: var(--t-sm); margin-bottom: 4px; }
+@media (max-width: 860px) { .sheet-cols { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .modal.wide.sheet { inset: 0; width: 100%; max-height: none; height: 100%; top: 0; left: 0; transform: none; border-radius: 0; } }
 .modal.wide { width: min(560px, calc(100% - 32px)); top: 50%; transform: translate(-50%, -50%); max-height: calc(100vh - 32px); overflow-y: auto; }
 .modal fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .modal .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); color: var(--muted); }
@@ -989,6 +1002,7 @@ const fmtTime = (hhmm) => {
 // A day: 'Wed 4 Feb', with the year when it isn't this year's (tasks, My Day, the calendar).
 const fmtDay = (k) => { const d = parseISO(k); return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
 // A day always with its year, where records span years (zakat, assets, rates, the vault): 'Wed 4 Feb 2026'.
+const shortDate = (k) => parseISO(String(k).slice(0, 10)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); // "18 Aug 2026"
 const fmtDate = (k) => parseISO(String(k).slice(0, 10)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const fmtClock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'HH:mm' for a time box
 const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hour12: true }) : '—');
@@ -7014,8 +7028,26 @@ function rentLedger(r) {
   const sum = (k) => rows.reduce((t, x) => t + x[k], 0);
   return `<div class="value-history"><div class="meta">Rent, month by month</div>
     <div class="ledger-wrap"><table class="ledger"><thead><tr><th>Month</th><th>Due</th><th>Received</th><th>Paid on</th><th>Balance</th><th>Note</th></tr></thead><tbody>
-    ${rows.slice().reverse().map((x) => `<tr class="${x.balance > 0 ? 'short' : ''}" data-action="asset-form" data-form-type="rent-pay" data-id="${esc(r.id)}" data-month="${x.month}"><td>${esc(ymLabel(x.month))}</td><td>${rupees(x.due)}</td><td>${x.received ? rupees(x.received) : ''}</td><td>${x.dates.map((d) => esc(parseISO(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))).join(', ')}</td><td>${x.balance ? rupees(x.balance) : '-'}</td><td>${esc(x.note)}</td></tr>`).join('')}
+    ${rows.slice().reverse().map((x) => `<tr class="${x.balance > 0 ? 'short' : ''}" data-action="asset-form" data-form-type="rent-pay" data-id="${esc(r.id)}" data-month="${x.month}"><td>${esc(ymLabel(x.month))}</td><td>${rupees(x.due)}</td><td>${x.received ? rupees(x.received) : ''}</td><td>${x.dates.map((d) => esc(shortDate(d))).join(', ')}</td><td>${x.balance ? rupees(x.balance) : '-'}</td><td>${esc(x.note)}</td></tr>`).join('')}
     </tbody><tfoot><tr><td>Total</td><td>${rupees(sum('due'))}</td><td>${rupees(sum('received'))}</td><td></td><td>${rupees(sum('balance'))}</td><td></td></tr></tfoot></table></div></div>`;
+}
+// Across the top of an agreement: rent now, when the term ends, what's owed, and what you can do.
+function rentalTop(r) {
+  const term = Rentals.current(r);
+  const owed = Rentals.owed(r);
+  return `
+    <div class="value-history sheet-top"><div class="upkeep-sum">
+      <div><span class="meta">Rent now</span><b>${rupees(Rentals.rentNow(r))}</b></div>
+      ${term ? `<div><span class="meta">This term ends</span><b>${esc(fmtDate(Rentals.lastDay(term)))}</b></div>` : ''}
+      <div><span class="meta">Owed</span><b>${rupees(Math.max(0, owed))}</b></div>
+    </div>
+    <div class="row edit-only">
+      <button type="button" class="btn small primary" data-action="asset-form" data-form-type="rent-pay" data-id="${esc(r.id)}">${ic('coins', 'sm')}Record rent</button>
+      <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-renew" data-id="${esc(r.id)}">${ic('repeat', 'sm')}Renew</button>
+      <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
+      <label class="btn small">${ic('paperclip', 'sm')}Add files<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" hidden></label>
+    </div></div>
+`;
 }
 function rentalAfter(r) {
   const term = Rentals.current(r);
@@ -7028,19 +7060,8 @@ function rentalAfter(r) {
   const renew = Rentals.openRenew(r);
   const fileRow = (d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; };
   return `
-    <div class="value-history"><div class="upkeep-sum">
-      <div><span class="meta">Rent now</span><b>${rupees(Rentals.rentNow(r))}</b></div>
-      ${term ? `<div><span class="meta">This term ends</span><b>${esc(fmtDate(Rentals.lastDay(term)))}</b></div>` : ''}
-      <div><span class="meta">Owed</span><b>${rupees(Math.max(0, owed))}</b></div>
-    </div>
-    <div class="row edit-only">
-      <button type="button" class="btn small primary" data-action="asset-form" data-form-type="rent-pay" data-id="${esc(r.id)}">${ic('coins', 'sm')}Record rent</button>
-      <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-renew" data-id="${esc(r.id)}">${ic('repeat', 'sm')}Renew</button>
-      <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
-      <label class="btn small">${ic('paperclip', 'sm')}Add files<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" hidden></label>
-    </div></div>
     <div class="value-history rental-terms"><div class="meta">Terms (tap one to change it or add its agreement)</div>
-      ${terms.slice().reverse().map((t, i, all) => { const prev = all[i + 1]; const n = termFiles(t).length; return `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="rent-term" data-id="${esc(r.id)}" data-term="${esc(t.id)}"><span class="ur-ico">${ic('file-text', 'sm')}</span><span class="ur-main"><span>${esc(fmtDate(t.start))} – ${esc(fmtDate(Rentals.lastDay(t)))}</span><span class="meta">${t.months} months${prev && prev.rent ? `, ${Math.round(((t.rent - prev.rent) / prev.rent) * 1000) / 10}% more` : ''}${t.note ? `, ${esc(t.note)}` : ''}${n ? `, ${plural(n, 'file')}` : ''}</span></span><span class="ur-cost">${rupees(t.rent)}</span></button>`; }).join('')}
+      ${terms.slice().reverse().map((t, i, all) => { const prev = all[i + 1]; const n = termFiles(t).length; return `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="rent-term" data-id="${esc(r.id)}" data-term="${esc(t.id)}"><span class="ur-ico">${ic('file-text', 'sm')}</span><span class="ur-main"><span>${esc(shortDate(t.start))} – ${esc(shortDate(Rentals.lastDay(t)))}</span><span class="meta">${t.months} months${prev && prev.rent ? `, ${Math.round(((t.rent - prev.rent) / prev.rent) * 1000) / 10}% more` : ''}${t.note ? `, ${esc(t.note)}` : ''}${n ? `, ${plural(n, 'file')}` : ''}</span></span><span class="ur-cost">${rupees(t.rent)}</span></button>`; }).join('')}
     </div>
     <div class="value-history rental-tasks"><div class="meta">Tasks</div>
       ${collect ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(collect.id)}">${ic('repeat', 'sm')} ${esc(fullTitle(collect))}</button><span class="meta">Next ${esc(fmtDate(collect.due))}</span><span></span></div>`
@@ -7048,8 +7069,7 @@ function rentalAfter(r) {
       ${renew ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(renew.id)}">${ic('repeat', 'sm')} ${esc(renew.title)}</button><span class="meta">${esc(fmtDate(renew.due))}</span><span></span></div>`
         : r.ended ? '' : r.renewMonths ? `<div class="vh-row"><span class="meta">No Renew task for this term</span><span></span><button type="button" class="btn small edit-only" data-action="rental-renew-task" data-id="${esc(r.id)}">${ic('plus', 'sm')}Make it</button></div>` : '<div class="vh-row"><span class="meta">No renew reminder (set Remind to renew)</span><span></span><span></span></div>'}
     </div>
-    ${others.length ? `<div class="value-history"><div class="meta">Other files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${others.map(fileRow).join('')}</div>` : ''}
-    ${rentLedger(r)}`;
+    ${others.length ? `<div class="value-history"><div class="meta">Other files (Vault › ${esc(Rentals.folder(r).split('/').join(' › '))})</div>${others.map(fileRow).join('')}</div>` : ''}`;
 }
 
 // ===================== Utilities page =====================
@@ -7463,12 +7483,14 @@ function drawAssetForm() {
   if (!f) return;
   const ro = state.readOnly;
   // after: shown below the fields and never locked (files and links open even when only looking).
-  const box = (title, inner, foot, save = 'Save', locked = ro, after = '') => `
+  // layout: a wide sheet with sections for something with a lot in it (sheet), its fields folded under Details (fold),
+  // and a column beside the rest on a wide screen (side).
+  const box = (title, inner, foot, save = 'Save', locked = ro, after = '', layout = {}) => `
     <div class="modal-back" data-action="asset-cancel"></div>
-    <form class="modal wide" data-form="asset-${f.type}" role="dialog" aria-label="${esc(title)}" autocomplete="off">
+    <form class="modal wide${layout.sheet ? ' sheet' : ''}" data-form="asset-${f.type}" role="dialog" aria-label="${esc(title)}" autocomplete="off">
       ${(state.formStack || []).length ? `<button type="button" class="link-btn form-back" data-action="asset-back">${ic('chevron-left', 'sm')}Back</button>` : ''}
       <h3>${esc(title)}</h3>
-      <fieldset class="plain" ${locked ? 'disabled' : ''}>${inner}</fieldset>${after}
+      ${layout.fold ? `<details class="sheet-details"><summary>${ic('pencil', 'sm')}Details</summary><fieldset class="plain" ${locked ? 'disabled' : ''}>${inner}</fieldset></details>` : `<fieldset class="plain" ${locked ? 'disabled' : ''}>${inner}</fieldset>`}${layout.top || ''}${layout.side ? `<div class="sheet-cols"><div class="sheet-main">${after}</div><div class="sheet-side">${layout.side}</div></div>` : after}
       <p class="form-error" role="alert" hidden></p>
       <div class="row" style="justify-content:flex-end">${foot || ''}<button type="button" class="btn" data-action="asset-cancel">${ro || !save || f.type === 'zakat-record' ? 'Close' : 'Cancel'}</button>${ro || !save ? '' : `<button class="btn primary">${esc(save)}</button>`}</div>
     </form>`;
@@ -7499,7 +7521,7 @@ function drawAssetForm() {
       </div>`}
       ${People.several() ? `<fieldset class="owner-box"><legend>Whose</legend><div class="check-row">${People.list().map((p) => `<label><input type="checkbox" name="r-p-${esc(p.id)}" ${on.includes(p.id) ? 'checked' : ''}> ${avatar(p.id)}${esc(p.name)}</label>`).join('')}</div></fieldset>` : ''}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
-    r ? '<button type="button" class="btn danger edit-only" data-action="rental-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro, r ? rentalAfter(r) : '');
+    r ? '<button type="button" class="btn danger edit-only" data-action="rental-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro, r ? rentalAfter(r) : '', r ? { sheet: true, fold: true, top: rentalTop(r), side: rentLedger(r) } : {});
     if (!r) $('#modal input[name="name"]')?.focus();
     return;
   }
@@ -7799,7 +7821,8 @@ function drawAssetForm() {
       ${ownerInputs(owners, a && (a.owners || []).length > 1 ?'Who owns it now. To change owners from a date on (keeping who had it before), use Transfer.' : '')}
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(a ? a.notes : '')}</textarea></label>`,
       a ? `<button type="button" class="btn danger edit-only" data-action="delete-asset" style="margin-right:auto">Delete</button>` : '', a && a.kind === 'vehicle' ? 'Save car details' : 'Save', ro,
-      a ? upkeepBlock(a) + (a.kind === 'property' ? propertyRentalsBlock(a) + propertyUtilitiesBlock(a) : '') + assetDocsBlock(a) + filesBlock(a, 'assets') : '');
+      a ? (a.kind === 'property' ? propertyRentalsBlock(a) + propertyUtilitiesBlock(a) : '') + assetDocsBlock(a) + filesBlock(a, 'assets') : '',
+      a ? { sheet: true, fold: true, side: upkeepBlock(a) } : {});
   } else if (f.type === 'transfer') {
     const list = Assets.list().filter((a) => !a.closed);
     const a = DB.assets.find((x) => x.id === f.id) || list[0];

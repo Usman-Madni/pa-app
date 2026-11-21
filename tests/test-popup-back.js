@@ -17,6 +17,7 @@ const { loadApp, submitForm, tick, check, done } = require('./helpers');
 
   open('rental', { id: r.id });
   check(form().dataset.form === 'asset-rental' && !doc.querySelector('#modal [data-action="asset-back"]'), 'opened from a page: no Back');
+  check(form().classList.contains('sheet') && form().querySelector('details.sheet-details:not([open]) [name="tenant"]') && form().querySelector('.sheet-top [data-form-type="rent-pay"]') && form().querySelector('.sheet-side .ledger'), 'an agreement opens as a wide sheet: Details folded, its summary across the top, the ledger beside the rest');
   doc.querySelector('#modal .ledger tbody tr').click();
   check(form().dataset.form === 'asset-rent-pay' && doc.querySelector('#modal [data-action="asset-back"]'), 'a month opened from the agreement has ‹ Back');
   esc();
@@ -37,6 +38,7 @@ const { loadApp, submitForm, tick, check, done } = require('./helpers');
   const car = Assets.add({ kind: 'vehicle', name: 'Civic' });
   win.eval('changed')('assets');
   open('asset', { id: car.id });
+  check(form().classList.contains('sheet') && form().querySelector('details.sheet-details:not([open])') && form().querySelector('.sheet-side .upkeep'), 'a car opens as a sheet too, its upkeep beside the rest');
   doc.querySelector('#modal [data-action="upkeep-entry"][data-asset]').click();
   check(form().dataset.form === 'asset-upkeep' && doc.querySelector('#modal [data-action="asset-back"]'), 'Add entry from the car: ‹ Back');
   submitForm(win, 'asset-upkeep', { what: 'Wash', cost: '500' });

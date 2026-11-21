@@ -61,3 +61,9 @@ Open them with `openAssetForm`; leave with `closeAssetForm()` (one level) or `cl
 A tab that grows into a page of its own stays under its parent: its tab on the parent opens it (`SUB_PAGES`), the page
 starts with **‹ Parent** (`subPageBack`), and the sidebar keeps the parent lit (`PARENT_OF`). It isn't in the sidebar
 or the phone's More. Assets › Vehicles and Assets › Property are the first.
+
+## Sheets
+Something with a lot in it (a rental agreement, a car or other asset, a utility connection) opens as a wide **sheet**
+rather than a small pop-up: `box(…, { sheet, fold, top, side })`. Its fields fold under **Details** once it exists, a
+summary row with its main buttons runs across the top, and its sections are cards; on a wide screen the long part
+(a ledger, upkeep, bills) sits in a column beside the rest. On a phone the sheet is full screen.
