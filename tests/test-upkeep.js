@@ -53,7 +53,7 @@ const { loadApp, check, done, submitForm, confirmDone, tick } = require('./helpe
   // Add an entry from the car: photos picked with it; Save returns to the car, saying so
   box().querySelector('[data-action="upkeep-entry"][data-asset]').click();
   check(/add to upkeep/.test(modal().querySelector('h3').textContent) && modal().elements.km, 'Add entry asks the reading for a vehicle');
-  check(doc.querySelector('#modal [data-pending-files]') && doc.querySelector('#modal [data-action="open-asset"]'), 'photos and the bill can be picked with it, and Back leads to the car');
+  check(doc.querySelector('#modal [data-pending-files]') && doc.querySelector('#modal [data-action="asset-back"]'), 'photos and the bill can be picked with it, and Back leads to the car');
   submitForm(win, 'asset-upkeep', { what: 'Wiper blades', type: 'added', cost: '1,500', km: '19,000' });
   const wip = PA.DB.upkeep.find((e) => e.item === 'Wiper blades');
   check(wip && wip.cost === 1500 && wip.km === 19000, 'saved');

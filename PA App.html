@@ -285,6 +285,7 @@ button:disabled { cursor: not-allowed; }
 .vault-h + .card { margin-bottom: 20px; }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .check-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--t-sm); }
+.form-back { display: inline-flex; align-items: center; gap: 2px; margin: -4px 0 4px; flex: none; width: auto; }
 .vault-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .vault-crumbs > *, .vault-crumbs > .link-btn { flex: 0 0 auto; width: auto; }
 .vault-actions { margin-bottom: 10px; flex-wrap: wrap; }
@@ -7298,19 +7299,33 @@ function upkeepTasks() { if (Upkeep.ensureTasks()) changed('tasks'); }
 // The upkeep pop-ups (an entry, a job, a reading, using a store item) remember whether they were opened from a car's
 // pop-up (`back`: Save and Cancel return to it) or from a page (they just close).
 const UPKEEP_FORMS = ['upkeep', 'plan', 'reading', 'store-use'];
+// Pop-ups opened from another pop-up remember it (state.formStack): ‹ Back, Cancel and Esc step back one level, and
+// saving returns to it (it's drawn again, so it shows the change). Opened from a page, they just close.
 function openAssetForm(type, opts = {}) {
   const cur = state.assetForm;
-  if (UPKEEP_FORMS.includes(type) && opts.back === undefined) opts.back = cur?.type === 'asset' ? cur.id : cur && UPKEEP_FORMS.includes(cur.type) ? cur.back || '' : '';
+  if (cur && !(cur.type === type && (cur.id || '') === (opts.id || ''))) state.formStack = [...(state.formStack || []), cur];
   state.assetForm = { type, ...opts };
   renderAssetForm();
 }
-// After saving an upkeep pop-up: back to the car's pop-up it came from, or closed (the page shows the change).
-function upkeepReturn(f) {
-  if (f?.back && DB.assets.some((a) => a.id === f.back)) openAssetForm('asset', { id: f.back });
-  else closeAssetForm();
+// After saving an upkeep pop-up: back to the pop-up it came from (the car's), or closed (the page shows the change).
+function upkeepReturn() {
+  closeAssetForm();
   render();
 }
-function closeAssetForm() { state.assetForm = null; $('#modal').innerHTML = ''; }
+// After saving: back to this pop-up if it's the one this came from, else on to it.
+function returnToForm(form) {
+  const top = (state.formStack || [])[(state.formStack || []).length - 1];
+  if (top && top.type === form.type && (top.id || '') === (form.id || '')) closeAssetForm();
+  else { state.assetForm = form; renderAssetForm(); }
+}
+// One level back (all: close every pop-up). A pop-up whose record is gone closes itself when drawn, so it steps on back.
+function closeAssetForm(all = false) {
+  const prev = all ? null : (state.formStack || []).pop();
+  if (prev) { state.assetForm = prev; renderAssetForm(); return; }
+  state.formStack = [];
+  state.assetForm = null;
+  $('#modal').innerHTML = '';
+}
 function renderAssetForm() {
   const f = state.assetForm;
   if (!f) return;
@@ -7319,6 +7334,7 @@ function renderAssetForm() {
   const box = (title, inner, foot, save = 'Save', locked = ro, after = '') => `
     <div class="modal-back" data-action="asset-cancel"></div>
     <form class="modal wide" data-form="asset-${f.type}" role="dialog" aria-label="${esc(title)}" autocomplete="off">
+      ${(state.formStack || []).length ? `<button type="button" class="link-btn form-back" data-action="asset-back">${ic('chevron-left', 'sm')}Back</button>` : ''}
       <h3>${esc(title)}</h3>
       <fieldset class="plain" ${locked ? 'disabled' : ''}>${inner}</fieldset>${after}
       <p class="form-error" role="alert" hidden></p>
@@ -7507,7 +7523,7 @@ function renderAssetForm() {
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>
       ${e ? `<label class="field">Belongs to <span class="meta">(move it to another car, or to the store)</span><select class="input" name="asset">${homes.map((x) => `<option value="${esc(x.id)}" ${x.id === a.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
       ${e ? '' : `<label class="field">Photos and bill <span class="meta">(optional; saved with it)</span><input class="input" type="file" multiple accept="image/*,application/pdf" data-pending-files></label>`}`,
-    `${inStore ? (e && Number(e.qty) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(e.id)}" style="margin-right:auto">Use on a car</button>` : '<span style="margin-right:auto"></span>') : f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(f.back)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
+    `${inStore ? (e && Number(e.qty) > 0 ? `<button type="button" class="btn edit-only" data-action="asset-form" data-form-type="store-use" data-id="${esc(e.id)}" style="margin-right:auto">Use on a car</button>` : '<span style="margin-right:auto"></span>') : '<span style="margin-right:auto"></span>'}${e ? '<button type="button" class="btn danger edit-only" data-action="upkeep-delete">Delete</button>' : ''}`, 'Save', ro,
     e ? filesBlock(e, 'upkeep') : '');
     $('#modal [name="what"]')?.focus();
     return;
@@ -7541,7 +7557,7 @@ function renderAssetForm() {
       </div>
       <p class="meta" style="margin:0">${car ? 'Whichever comes first. ' : ''}Its task is due when the time${car ? ' or the distance' : ''} runs out; logging "${esc(p ? p.item : 'the job')}" in the upkeep (or ticking the task) starts the next round. A log entry counts when its item has the same name.</p>
       ${p ? '' : `<label class="field">Last done (optional)<input class="input" type="date" name="since" value=""></label>`}`,
-    `${f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}${p ? '<button type="button" class="btn danger edit-only" data-action="plan-delete">Take off the plan</button>' : ''}`);
+    `<span style="margin-right:auto"></span>${p ? '<button type="button" class="btn danger edit-only" data-action="plan-delete">Take off the plan</button>' : ''}`);
     $('#modal [name="what"]')?.focus();
     return;
   }
@@ -7553,7 +7569,7 @@ function renderAssetForm() {
       <div class="row">
         <label class="field">On<input class="input" type="date" name="date" value="${todayISO()}" required></label>
         <label class="field">Km<input class="input" ${amountAttrs('')} name="km" required></label>
-      </div>`, `${f.back ? `<button type="button" class="btn" data-action="open-asset" data-id="${esc(a.id)}" style="margin-right:auto">${ic('chevron-left', 'sm')}${esc(a.name)}</button>` : '<span style="margin-right:auto"></span>'}`);
+      </div>`, `<span style="margin-right:auto"></span>`);
     $('#modal [name="km"]')?.focus();
     return;
   }
@@ -7927,8 +7943,7 @@ function submitAssetForm(type, data) {
     Rentals.pay(r, { month: data.month, amount: data.amount, date: data.date, note: (data.note || '').trim(), writeOff: data.writeOff === 'on' });
     changed('rentals');
     toast(`Recorded rent for ${ymLabel(data.month)}. Owed now ${rupees(Math.max(0, Rentals.owed(r)))}`);
-    state.assetForm = { type: 'rental', id: r.id };
-    renderAssetForm();
+    returnToForm({ type: 'rental', id: r.id });
     render();
     return;
   } else if (type === 'rent-paste') {
@@ -7940,8 +7955,7 @@ function submitAssetForm(type, data) {
     changed('rentals');
     rentalTasks();
     toast(`Brought in ${plural(rows.length, 'month')}, ${ymLabel(rows[0].month)} to ${ymLabel(rows[rows.length - 1].month)}. Owed now ${rupees(Math.max(0, Rentals.owed(r)))}`);
-    state.assetForm = { type: 'rental', id: r.id };
-    renderAssetForm();
+    returnToForm({ type: 'rental', id: r.id });
     render();
     return;
   } else if (type === 'rent-renew') {
@@ -7953,8 +7967,7 @@ function submitAssetForm(type, data) {
     changed('rentals');
     rentalTasks();
     toast(`Renewed: ${rupees(Number(data.rent))} a month from ${fmtDate(data.start)}`);
-    state.assetForm = { type: 'rental', id: r.id };
-    renderAssetForm();
+    returnToForm({ type: 'rental', id: r.id });
     render();
     return;
   } else if (type === 'utility') {
@@ -8015,7 +8028,7 @@ function submitAssetForm(type, data) {
     const pics = [...($('#modal [data-pending-files]')?.files || [])]; // photos or the bill, picked with the rest
     if (pics.length) AT.add(e, pics, 'upkeep', true).then(() => { toast(`Added ${plural(pics.length, 'file')} to "${e.item}"`); render(); });
     if (e.asset !== STORE.id && !moved) toast(`Saved ${e.item}${e.cost ? `, ${rupees(e.cost)}` : ''}, on ${a.name}`);
-    upkeepReturn(f);
+    upkeepReturn();
     return;
   } else if (type === 'store-use') {
     const it = DB.upkeep.find((x) => x.id === f.id && x.asset === STORE.id);
@@ -8026,7 +8039,7 @@ function submitAssetForm(type, data) {
     changed('upkeep');
     upkeepTasks();
     toast(`${e.item} logged on ${car.name}${e.cost ? `, ${rupees(e.cost)}` : ''}`);
-    upkeepReturn(f);
+    upkeepReturn();
     return;
   } else if (type === 'plan') {
     const a = DB.assets.find((x) => x.id === f.asset);
@@ -8044,7 +8057,7 @@ function submitAssetForm(type, data) {
     if (orphans.length) PendingDelete.start(orphans);
     upkeepTasks();
     toast(`${data.what.trim()}: every ${Upkeep.every({ km, months })}`);
-    upkeepReturn(f);
+    upkeepReturn();
     return;
   } else if (type === 'reading') {
     const a = DB.assets.find((x) => x.id === f.asset);
@@ -8053,7 +8066,7 @@ function submitAssetForm(type, data) {
     changed('assets');
     upkeepTasks();
     toast(`Reading saved: ${fmtKm(Number(data.km))}, on ${a.name}`);
-    upkeepReturn(f);
+    upkeepReturn();
     return;
   } else if (type === 'import') {
     const who = Object.fromEntries(f.plan.names.map((n, i) => [n, data[`who-${i}`] || 'skip']));
@@ -9646,14 +9659,14 @@ document.addEventListener('click', (e) => {
       const orphans = Upkeep.orphanTasks(a);
       if (orphans.length) PendingDelete.start(orphans); // its open task goes too (with Undo)
       toast(`${p.item} is off the plan`);
-      upkeepReturn(f);
+      upkeepReturn();
       break;
     }
     case 'upkeep-delete': {
       const f = state.assetForm;
       const e = f && DB.upkeep.find((x) => x.id === f.id);
       if (!e) break;
-      upkeepReturn(f);
+      upkeepReturn();
       Trash.discard([['upkeep', e]], `"${e.item}"`);
       upkeepTasks();
       if (state.assetForm) renderAssetForm();
@@ -9685,7 +9698,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'open-asset': openAssetForm('asset', { id }); break;
-    case 'asset-cancel': closeAssetForm(); break;
+    case 'asset-cancel': case 'asset-back': closeAssetForm(); break;
     case 'asset-value-off': {
       const a = state.assetForm && DB.assets.find((x) => x.id === state.assetForm.id);
       if (a) { Assets.removeValue(a, btn.dataset.date); changed('assets'); renderAssetForm(); render(); }
