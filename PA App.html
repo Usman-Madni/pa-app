@@ -305,6 +305,7 @@ button:disabled { cursor: not-allowed; }
 .vault-actions { margin-bottom: 10px; flex-wrap: wrap; }
 .vault-pick { width: auto; max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .vault-mark { display: inline-flex; align-items: center; margin-right: 4px; }
+.area-buckets { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .file-to select { width: auto; max-width: 100%; margin-left: 6px; }
 .ledger-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 .ledger { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
@@ -1668,7 +1669,7 @@ const Zakat = {
       if (gone.has(id) || PendingDelete.has(id)) return null;
       let t = DB.tasks.find((x) => x.id === id);
       if (!t) {
-        t = normalizeTask({ id, title, due: `${due}T${ALL_DAY}`, people: [person], notes: note, created: Date.now(), bucket: ButlerTasks.bucket() });
+        t = normalizeTask({ id, title, due: `${due}T${ALL_DAY}`, people: [person], notes: note, created: Date.now(), bucket: ButlerTasks.bucketFor('zakat') });
         DB.tasks.push(t);
         changedAny = true;
       }
@@ -1763,7 +1764,7 @@ const Vault = {
       const people = People.of(d);
       if (!t) {
         DB.tasks.push(normalizeTask({
-          id: want, title, due: `${this.renewOn(d)}T${ALL_DAY}`, people, created: Date.now(), bucket: ButlerTasks.bucket(),
+          id: want, title, due: `${this.renewOn(d)}T${ALL_DAY}`, people, created: Date.now(), bucket: ButlerTasks.bucketFor('vault'),
           notes: `${d.type ? `${d.type}. ` : ''}Expires ${fmtDate(d.expires)}. Once renewed, open it in Butler's Vault and type the new expiry date.`,
           reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }],
         }));
@@ -1961,17 +1962,37 @@ const AutoRates = {
 };
 function autoRates() { AutoRates.fill().then((done) => { if (done) render(); }); }
 
-// ===================== Butler's own tasks =====================
-// The tasks Butler makes (zakat, Vault renewals, upkeep jobs) go in one bucket: the one marked for them (`butler: true`
-// on a bucket, set in Settings › Buckets), else one called "Repeating tasks". They repeat as Butler keeps them (the
-// next comes as soon as one is ticked), so they show the repeat sign with how often, not the repeat editor.
+// ===================== Butler's own tasks, and a bucket per area =====================
+// The tasks Butler makes or keeps (zakat, Vault renewals, upkeep jobs, rent and renewals, bills) go in their area's
+// bucket: Zakat, Vault, Vehicles (a car's upkeep), Upkeep (other assets'), Rentals, Utilities. A bucket knows its area
+// (`area` on it, set in Settings › Buckets), so renaming it is fine; one is made when an area first needs it. Butler's
+// own (zakat, renewals, upkeep) repeat as Butler keeps them, so they show the repeat sign with how often.
+const TASK_AREAS = [
+  { id: 'zakat', name: 'Zakat' }, { id: 'vault', name: 'Vault' }, { id: 'vehicles', name: 'Vehicles' }, { id: 'upkeep', name: 'Upkeep' },
+  { id: 'rentals', name: 'Rentals' }, { id: 'utilities', name: 'Utilities' },
+];
 const ButlerTasks = {
   is(t) { return /^(zk-(make|update|pay)-|doc-renew-|rent-renew-|up-)/.test(t?.id || ''); },
-  bucket() {
-    const marked = DB.buckets.find((b) => b.butler);
-    if (marked) return marked.id;
-    return DB.buckets.find((b) => sameName(b.name, 'Repeating tasks'))?.id || '';
+  // Which area a task belongs to (its bucket), or '' for your own.
+  areaOf(t) {
+    const id = t?.id || '';
+    if (id.startsWith('zk-')) return 'zakat';
+    if (id.startsWith('doc-renew-')) return 'vault';
+    if (id.startsWith('rent-renew-') || t.rental) return 'rentals';
+    if (t.utility) return 'utilities';
+    if (id.startsWith('up-')) { const a = DB.assets.find((x) => id.startsWith(`up-${x.id}-`)); return a && a.kind !== 'vehicle' ? 'upkeep' : 'vehicles'; }
+    return '';
   },
+  // An area's bucket: the one marked for it, else one of its name (now marked), else a new one (when make).
+  bucketFor(area, make = true) {
+    const def = TASK_AREAS.find((x) => x.id === area);
+    if (!def) return '';
+    let b = DB.buckets.find((x) => x.area === area) || DB.buckets.find((x) => !x.area && sameName(x.name, def.name));
+    if (!b && make && !state.readOnly) { addBucket(def.name); b = DB.buckets.find((x) => sameName(x.name, def.name)); }
+    if (b && b.area !== area && !state.readOnly) { b.area = area; changed('buckets'); }
+    return b ? b.id : '';
+  },
+  bucket(t) { return this.bucketFor(this.areaOf(t)); },
   // How often it comes back, in words.
   every(t) {
     const zk = t.id.match(/^zk-(make|update|pay)-(.+)-\d{4}$/);
@@ -1981,20 +2002,28 @@ const ButlerTasks = {
     const job = Upkeep.jobOfTask(t);
     return job ? `Every ${Upkeep.every(job.p)}` : 'Repeats with Butler';
   },
-  // Choose the bucket: open Butler tasks in the old one (or none) move to it.
-  setBucket(id) {
-    const old = this.bucket();
-    DB.buckets.forEach((b) => { if (b.id === id) b.butler = true; else delete b.butler; });
-    for (const t of DB.tasks) if (this.is(t) && !t.done && (t.bucket === old || !t.bucket)) t.bucket = id;
+  // Choose an area's bucket: its open tasks in the old one (or none) move to it.
+  setBucket(area, id) {
+    const old = this.bucketFor(area, false);
+    DB.buckets.forEach((b) => { if (b.id === id) b.area = area; else if (b.area === area) delete b.area; });
+    for (const t of DB.tasks) if (!t.done && this.areaOf(t) === area && (t.bucket === old || !t.bucket)) t.bucket = id;
     changed('buckets', 'tasks');
   },
-  // Once per device: open Butler tasks made before there was a bucket for them go in it.
+  // Once per device: open tasks of each area in no bucket, or in the one Butler's tasks all went in before, move to
+  // their area's bucket.
   placeOld() {
-    if (state.readOnly || device.get('butlerPlaced', false) || !this.bucket()) return false;
+    if (state.readOnly || device.get('areaPlaced', false)) return false;
+    const before = new Set(DB.buckets.filter((b) => b.butler || sameName(b.name, 'Repeating tasks')).map((b) => b.id));
     let n = 0;
-    for (const t of DB.tasks) if (this.is(t) && !t.done && !t.bucket) { t.bucket = this.bucket(); n++; }
-    device.set('butlerPlaced', true);
-    if (n) changed('tasks');
+    for (const t of DB.tasks) {
+      const area = !t.done && this.areaOf(t);
+      if (!area || (t.bucket && !before.has(t.bucket))) continue;
+      const to = this.bucketFor(area);
+      if (to && t.bucket !== to) { t.bucket = to; n++; }
+    }
+    DB.buckets.forEach((b) => { delete b.butler; });
+    device.set('areaPlaced', true);
+    if (n) changed('tasks', 'buckets');
     return n > 0;
   },
 };
@@ -2180,7 +2209,7 @@ const Upkeep = {
         const notes = `Every ${this.every(p)}. Last done ${fmtDate(n.last.date)}${n.last.km ? ` at ${fmtKm(n.last.km)}` : ''}.${n.km ? ` Due at ${fmtKm(n.km)}${n.estimated ? ` (about ${fmtDate(n.date)}, from the readings)` : ''}.` : ''} Tick it to log it in Butler.`;
         let t = DB.tasks.find((x) => x.id === want);
         if (!t) {
-          t = normalizeTask({ id: want, title, due: `${n.date}T${ALL_DAY}`, people: owners, notes, created: Date.now(), bucket: ButlerTasks.bucket(), reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+          t = normalizeTask({ id: want, title, due: `${n.date}T${ALL_DAY}`, people: owners, notes, created: Date.now(), bucket: ButlerTasks.bucketFor(a.kind === 'vehicle' ? 'vehicles' : 'upkeep'), reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
           DB.tasks.push(t);
           changedAny = true;
         } else if (!t.done) {
@@ -4970,7 +4999,7 @@ function manageCard() {
         <div class="manage-row"><span class="name">${esc(b.name)} <span class="meta">${plural(count((t) => t.bucket === b.id), 'task')}</span></span>
           <span class="edit-only"><button class="icon-btn" data-action="rename-bucket" data-id="${esc(b.id)}" title="Rename" aria-label="Rename"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button><button class="icon-btn" data-action="delete-bucket" data-id="${esc(b.id)}" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></span>
         </div>`).join('') || '<p class="sub">No buckets yet.</p>'}
-      ${DB.buckets.length ? `<label class="field" style="margin-top:10px">Butler's own tasks go in <span class="meta">(zakat, Vault renewals, upkeep jobs)</span><select class="input" data-butler-bucket ${state.readOnly ? 'disabled' : ''}><option value="">No bucket</option>${sortedBuckets().map((b) => `<option value="${esc(b.id)}" ${b.id === ButlerTasks.bucket() ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>` : ''}
+      ${DB.buckets.length ? `<div class="area-buckets"><p class="meta" style="margin:10px 0 4px">Butler's tasks go in their area's bucket:</p>${TASK_AREAS.map((x) => `<label class="field">${esc(x.name)}<select class="input" data-area-bucket="${x.id}" ${state.readOnly ? 'disabled' : ''}><option value="">Made when needed</option>${sortedBuckets().map((b) => `<option value="${esc(b.id)}" ${b.id === ButlerTasks.bucketFor(x.id, false) ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
       <form class="row edit-only" data-form="add-bucket" style="margin-top:8px"><input class="input grow" name="title" placeholder="New bucket, e.g. Home, Work, Bills" autocomplete="off" maxlength="40"><button class="btn small primary">Add</button></form>
       <h2 style="margin-top:18px">Labels</h2>
       ${DB.labels.map((l) => `
@@ -6800,11 +6829,7 @@ const Rentals = {
     if (t) Object.assign(t, { start: fields.start || t.start, months: Number(fields.months) || t.months, rent: Number(fields.rent) || t.rent, note: fields.note ?? t.note });
   },
   tasksOf(r) { return DB.tasks.filter((t) => t.rental === r.id); },
-  bucket() {
-    let b = DB.buckets.find((x) => sameName(x.name, 'Rentals'));
-    if (!b) { addBucket('Rentals'); b = DB.buckets.find((x) => sameName(x.name, 'Rentals')); }
-    return b ? b.id : '';
-  },
+  bucket() { return ButlerTasks.bucketFor('rentals'); },
   // The rent task: "Plaza lease Rent (Nov 26)", the month as its moving part, monthly on the due day, no reminder; its
   // files (receipts) go to the agreement's Vault folder.
   rentTitle(r) { return `${r.name} Rent`; },
@@ -6835,7 +6860,7 @@ const Rentals = {
       const title = `Renew rental agreement (${r.name})`;
       const t = DB.tasks.find((x) => x.id === want);
       if (!t) {
-        DB.tasks.push(normalizeTask({ id: want, title, due: `${toISO(addMonthsClamped(parseISO(end), -r.renewMonths))}T${ALL_DAY}`, people: People.of(r), created: Date.now(), bucket: ButlerTasks.bucket(),
+        DB.tasks.push(normalizeTask({ id: want, title, due: `${toISO(addMonthsClamped(parseISO(end), -r.renewMonths))}T${ALL_DAY}`, people: People.of(r), created: Date.now(), bucket: ButlerTasks.bucketFor('rentals'),
           rental: r.id, fileTo: this.folder(r), notes: `The agreement ends ${fmtDate(end)}. Once renewed, tick this to type the new rent.`,
           reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] }));
         any = true;
@@ -6902,11 +6927,7 @@ const Utilities = {
   },
   tasksOf(c) { return DB.tasks.filter((t) => t.utility === c.id); },
   openTask(c) { return this.tasksOf(c).filter((t) => !t.done && !PendingDelete.has(t.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'))[0] || null; },
-  bucket() {
-    let b = DB.buckets.find((x) => sameName(x.name, 'Utilities'));
-    if (!b) { addBucket('Utilities'); b = DB.buckets.find((x) => sameName(x.name, 'Utilities')); }
-    return b ? b.id : '';
-  },
+  bucket() { return ButlerTasks.bucketFor('utilities'); },
   // The bill day: a day of the month (1-31) or 'last' (the last day, whatever the month). A day past the month's end
   // is its last day.
   dayNum(day) { return day === 'last' ? 31 : Math.min(Math.max(Number(day) || 1, 1), 31); },
@@ -10752,7 +10773,7 @@ document.addEventListener('change', (e) => {
   }
   if (e.target.matches?.('[data-auto-rates]')) { device.set('autoRates', e.target.checked); if (e.target.checked) { device.remove('autoRatesDay'); autoRates(); } return; }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
-  if (e.target.matches?.('[data-butler-bucket]') && !state.readOnly) { ButlerTasks.setBucket(e.target.value); toast(e.target.value ? `Butler's tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}` : "Butler's tasks go in No bucket"); render(); return; }
+  if (e.target.matches?.('[data-area-bucket]') && !state.readOnly) { if (e.target.value) { ButlerTasks.setBucket(e.target.dataset.areaBucket, e.target.value); toast(`${TASK_AREAS.find((x) => x.id === e.target.dataset.areaBucket).name} tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}`); } render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
     const l = DB.labels.find((x) => x.id === e.target.dataset.labelColor);
