@@ -4198,6 +4198,7 @@ const Reminders = {
   },
   // The due date changed: those counting from it go off again; exact-time ones stay as they were.
   rearm(t) { t.reminders.forEach((r) => { if (r.kind !== 'at') r.fired = false; }); },
+  clear(t) { t.reminders = []; }, // no reminders at all (a task that needs none, like collecting rent)
   // For a new copy of a task: new ids, all ready again; exact-time ones move by shiftDays (a repeat's next copy), and
   // one whose time has already passed counts as gone off, so a copy never pops up a reminder the moment it's made.
   copy(list, shiftDays = 0, now = Date.now()) {
@@ -6637,6 +6638,7 @@ function musingEditor(m) {
 const ymOf = (iso) => String(iso || '').slice(0, 7);
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const ymLabel = (ym) => monthLabel(`${ym}-01`);
+const monthTag = (ym) => `${MONTHS_SHORT[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`; // a task's moving part: "Nov 26"
 const Rentals = {
   list() { return DB.rentals.filter((r) => People.shows(r)).sort((a, b) => a.name.localeCompare(b.name)); },
   forProperty(id) { return DB.rentals.filter((r) => (r.properties || []).includes(id) && !r.ended); },
@@ -6772,17 +6774,18 @@ const Rentals = {
     if (!b) { addBucket('Rentals'); b = DB.buckets.find((x) => sameName(x.name, 'Rentals')); }
     return b ? b.id : '';
   },
-  // Collect rent: monthly on its due day, a reminder at 9 am, its files (receipts) to the agreement's Vault folder.
+  // The rent task: "Plaza lease Rent (Nov 26)", the month as its moving part, monthly on the due day, no reminder; its
+  // files (receipts) go to the agreement's Vault folder.
+  rentTitle(r) { return `${r.name} Rent`; },
   makeCollect(r) {
     const d = Math.min(Math.max(r.dueDay || 1, 1), 31);
     const now = new Date();
     const on = (y, m) => new Date(y, m, Math.min(d, new Date(y, m + 1, 0).getDate()));
     let due = on(now.getFullYear(), now.getMonth());
     if (toISO(due) < todayISO()) due = on(now.getFullYear(), now.getMonth() + 1);
-    const t = addTask({ title: `Collect rent (${r.name})`, due: `${toISO(due)}T${ALL_DAY}`, people: People.of(r), bucket: this.bucket(),
-      reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+    const t = addTask({ title: this.rentTitle(r), due: `${toISO(due)}T${ALL_DAY}`, people: People.of(r), bucket: this.bucket(), reminders: [] });
     TaskEdit.setRepeat(t, { freq: 'monthly', interval: 1 });
-    Object.assign(t, { rental: r.id, rentKind: 'collect', fileTo: this.folder(r) });
+    Object.assign(t, { rental: r.id, rentKind: 'collect', fileTo: this.folder(r), period: monthTag(ymOf(toISO(due))) });
     Vault.keepFolder(Vault.topOf(r), t.fileTo);
     changed('tasks');
     return t;
@@ -6816,6 +6819,14 @@ const Rentals = {
     for (const r of DB.rentals) {
       const want = this.folder(r);
       const series = new Set();
+      for (const t of this.tasksOf(r).filter((x) => x.rentKind === 'collect')) {
+        if (t.title !== this.rentTitle(r)) {
+          const old = /^Collect rent \(/.test(t.title);
+          Series.quietly(t, 'title', this.rentTitle(r));
+          if (old && !t.done) { Reminders.clear(t); if (!t.period && t.due) t.period = monthTag(ymOf(t.due)); }
+          any = true;
+        }
+      }
       for (const t of this.tasksOf(r)) {
         series.add(Files.seriesOf(t) || t.id);
         if (t.fileTo !== want) { Series.quietly(t, 'fileTo', want); any = true; }
@@ -6871,7 +6882,7 @@ const Utilities = {
   dateIn(ym, day) { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(Math.min(this.dayNum(day), new Date(y, m, 0).getDate())).padStart(2, '0')}`; },
   // Which month a bill due in this month is for: the same, the month before (due the month after it) or after.
   forMonth(c, dueYm) { return ymAdd(dueYm, c.billFor === 'after' ? -1 : c.billFor === 'before' ? 1 : 0); },
-  periodOf(c, dueYm) { const ym = this.forMonth(c, dueYm); return `${MONTHS_SHORT[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`; },
+  periodOf(c, dueYm) { return monthTag(this.forMonth(c, dueYm)); },
   // Its bill task: monthly on its bill day, named for the month the bill is for ("Gas bill (Oct 26)", due 5 Nov), a
   // reminder at 9 am (it reaches To Do), its files to the Vault.
   makeTask(c, day = c.billDay) {

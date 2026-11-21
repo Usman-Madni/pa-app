@@ -44,6 +44,12 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check(modal() && modal().dataset.form === 'asset-rental' && modal().querySelector('.ledger'), 'it stays open, with its ledger');
   const collect = PA.DB.tasks.find((t) => t.rental === r.id && t.rentKind === 'collect');
   check(collect && collect.repeat?.freq === 'monthly' && Number(collect.due.slice(8, 10)) === 18 && collect.fileTo === 'Rentals/Plaza lease' && PA.DB.buckets.find((b) => b.id === collect.bucket)?.name === 'Rentals', 'a monthly Collect rent task on the 18th, in a Rentals bucket, its files to Vault › Rentals › Plaza lease');
+  check(PA.fullTitle(collect) === `Plaza lease Rent (${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(collect.due.slice(5, 7)) - 1]} ${collect.due.slice(2, 4)})` && !collect.reminders.length, 'named "Plaza lease Rent (Nov 26)", the month as its moving part, with no reminder');
+  const legacy = PA.normalizeTask({ id: 'legacy', title: 'Collect rent (Plaza lease)', due: collect.due, rental: r.id, rentKind: 'collect', reminders: [{ id: 'x', kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
+  PA.DB.tasks.push(legacy);
+  win.eval('rentalTasks')();
+  check(legacy.title === 'Plaza lease Rent' && !legacy.reminders.length && /^\w{3} \d{2}$/.test(legacy.period), 'an older "Collect rent (…)" task takes the new name and month, and loses its reminder');
+  PA.DB.tasks = PA.DB.tasks.filter((t) => t !== legacy);
   const renewTask = PA.DB.tasks.find((t) => t.id === `rent-renew-${r.id}-${monthsAgo(13)}`);
   check(renewTask && renewTask.due.slice(0, 10) === monthsAgo(3), 'a Renew task, a month before the term ends');
 
@@ -99,7 +105,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   // --- Its tasks ---
   open('rental', { id: r.id });
   const tasks = doc.querySelector('#modal .rental-tasks').textContent;
-  check(/Collect rent \(Plaza lease\)/.test(tasks) && /Renew rental agreement \(Plaza lease\)/.test(tasks), 'the agreement shows its Collect rent and Renew tasks');
+  check(/Plaza lease Rent \(\w{3} \d{2}\)/.test(tasks) &&/Renew rental agreement \(Plaza lease\)/.test(tasks), 'the agreement shows its Collect rent and Renew tasks');
   doc.querySelector('#modal .rental-tasks [data-action="files-go"]').click();
   check(PA.state.openTask && doc.body.classList.contains('drawer-over') && modal()?.dataset.form === 'asset-rental', 'opening a task from the agreement: its panel goes on top, the agreement stays under it');
   doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
