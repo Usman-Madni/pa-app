@@ -24,7 +24,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
 
   // --- The page ---
   doc.querySelector('[data-view="utilities"]').click();
-  check(tabs() === 'Overview,Electricity,Gas,Water,Phone,Internet' && /Nothing here yet/.test(main().textContent), 'a Utilities page: Overview and a tab per type');
+  check(tabs() === 'Overview,Electricity,Gas,Water,Phone,Internet,Fuel' && /Nothing here yet/.test(main().textContent), 'a Utilities page: Overview and a tab per type');
   const house = Assets.add({ kind: 'property', name: 'House', amount: '1000' });
   main().querySelector('[data-util-tab="Gas"]').click();
   main().querySelector('.page-actions [data-form-type="utility"]').click();
@@ -158,6 +158,35 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check(U.billFiles(bill).some((d) => d.attachments[0].file === t.attachments[0].file), 'the file on the task a bill was ticked from counts as that bill\'s');
   win.eval('openAssetForm')('bill', { utility: ph.id });
   check(!doc.querySelector('#modal form').elements.units && doc.querySelector('#modal [data-pending-files]'), 'a phone bill has no units; a new bill can pick its file as it\'s saved');
+  win.eval('closeAssetForm')(true);
+
+  // --- Fuel: the pump bills monthly; split by car ---
+  const civic = Assets.add({ kind: 'vehicle', name: 'Civic' });
+  const city = Assets.add({ kind: 'vehicle', name: 'City' });
+  win.eval('changed')('assets');
+  win.eval('openAssetForm')('utility', { kind: 'Fuel' });
+  const fform = doc.querySelector('#modal form');
+  check(fform.elements[`u-car-${civic.id}`] && fform.elements[`u-car-${city.id}`], 'a fuel connection asks which cars it fuels');
+  fform.elements[`u-car-${civic.id}`].checked = true;
+  fform.elements[`u-car-${city.id}`].checked = true;
+  submitForm(win, 'asset-utility', { name: 'The pump', provider: 'Pump' });
+  const pump = PA.DB.utilities.find((x) => x.name === 'The pump');
+  check(pump.cars.length === 2 && U.icon('Fuel') === 'gas-station', 'saved with its cars');
+  const fill = (month, date, a, b) => {
+    win.eval('openAssetForm')('bill', { utility: pump.id });
+    const f2 = doc.querySelector('#modal form');
+    check(f2.elements.units && /Litres/.test(f2.textContent) && f2.elements[`split-${civic.id}-litres`], '');
+    submitForm(win, 'asset-bill', { month, date, amount: '', units: '', [`split-${civic.id}-amount`]: a[0], [`split-${civic.id}-litres`]: a[1], [`split-${civic.id}-km`]: a[2], [`split-${city.id}-amount`]: b[0], [`split-${city.id}-litres`]: b[1], [`split-${city.id}-km`]: b[2] });
+  };
+  fill(`${y}-01`, `${y}-02-05`, ['30000', '100', '10000'], ['15000', '50', '']);
+  fill(`${y}-02`, `${y}-03-05`, ['36000', '120', '11200'], ['', '', '']);
+  const fb = PA.DB.bills.filter((b) => b.utility === pump.id);
+  check(fb.length === 2 && fb[0].amount === 45000 && fb[0].units === 150 && fb[0].split.length === 2 && fb[1].split.length === 1, 'left empty, the bill and litres are the cars\' added up; a car with nothing that month is left out');
+  const ff = U.fuelFigures(civic.id);
+  check(ff.year === 66000 && ff.litres === 220 && ff.kmpl === 10 && ff.perKm === 30, 'a car\'s fuel: this year, litres, km a litre (1,200 km on 120 litres) and fuel a km');
+  check(win.eval('Upkeep').latestKm(civic) === 11200, 'the readings count as the car\'s readings');
+  win.eval('openAssetForm')('asset', { id: civic.id });
+  check(/Fuel/.test(doc.querySelector('#modal').textContent) && /Km a litre\s*10/.test(doc.querySelector('#modal').textContent), 'the car\'s sheet shows its fuel');
   win.eval('closeAssetForm')(true);
 
   // --- Delete ---
