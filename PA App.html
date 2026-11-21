@@ -979,7 +979,7 @@ const fmtTime = (hhmm) => {
 // A day: 'Wed 4 Feb', with the year when it isn't this year's (tasks, My Day, the calendar).
 const fmtDay = (k) => { const d = parseISO(k); return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
 // A day always with its year, where records span years (zakat, assets, rates, the vault): 'Wed 4 Feb 2026'.
-const fmtDate = (k) => parseISO(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDate = (k) => parseISO(String(k).slice(0, 10)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const fmtClock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }; // 'HH:mm' for a time box
 const fmtStamp = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hour12: true }) : '—');
 
@@ -9534,7 +9534,7 @@ document.addEventListener('click', (e) => {
       renderDrawer();
       break;
     }
-    case 'asset-form': openAssetForm(btn.dataset.formType, { kind: btn.dataset.kind, id: btn.dataset.id, person: btn.dataset.person, hyear: btn.dataset.hyear, record: btn.dataset.record, asset: btn.dataset.asset, folder: btn.dataset.folder, top: btn.dataset.top }); break;
+    case 'asset-form': { const { action: _a, formType, ...opts } = btn.dataset; openAssetForm(formType, opts); break; } // everything the button carries (kind, id, month, utility…)
     case 'vault-folder-new': case 'vault-folder-rename': case 'vault-folder-delete': vaultFolderAction(action, { ...btn.dataset }); break;
     case 'open-doc': openAssetForm('doc', { id }); break;
     case 'files-go': filesGo(btn.dataset.key, id); break;

@@ -62,6 +62,9 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const L = R.ledger(r);
   check(L[0].balance === 0 && L[1].received === 99000 && L[1].balance === 1000 && L[2].balance === 0 && L[2].written === 1000 && /written off/.test(L[2].note), 'paid in full: 0; part paid: 1,000 owed; written off: cleared, and said');
   check(modal().dataset.form === 'asset-rental', 'saving goes back to the agreement');
+  doc.querySelector(`#modal .ledger tr[data-month="${ym(12)}"]`).click();
+  check(modal().dataset.form === 'asset-rent-pay' && modal().elements.month.value === ym(12), 'tapping a month in the ledger opens that month (not this one)');
+  open('rental', { id: r.id });
 
   // --- Renewing (a term that's already ended, to see it in the ledger) ---
   open('rent-renew', { id: r.id });

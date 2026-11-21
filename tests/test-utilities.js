@@ -77,6 +77,10 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   doc.querySelector('[data-view="utilities"]').click();
   main().querySelector('[data-util-tab="Gas"]').click();
   check(main().querySelectorAll('.utility-card').length === 2 && /Rs 4,500/.test(main().querySelector('.utility-card').textContent), 'the Gas tab: both connections, with their bills');
+  check(!/Invalid Date/.test(main().textContent) && /due .*\d{4}/.test(main().querySelector('.util-task').textContent), 'its bill task\'s due date reads as a date (not "Invalid Date")');
+  main().querySelector('.utility-card [data-form-type="bill"][data-utility]').click();
+  check(doc.querySelector('#modal form[data-form="asset-bill"]'), '"Add a bill" opens the bill pop-up');
+  doc.querySelector('#modal [data-action="asset-cancel"]').click();
   main().querySelector('[data-util-tab="overview"]').click();
   const ov = main().textContent;
   check(/Paid Rs 4,500/.test(ov) && /This year so far, against last year/.test(ov), 'Overview: paid this month, and this year against last');
