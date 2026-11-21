@@ -6945,6 +6945,21 @@ const Utilities = {
     return any;
   },
   monthOf(b) { return b.month || ymOf(b.date); },
+  billFiles(b) {
+    const t = b.task && DB.tasks.find((x) => x.id === b.task);
+    const fromTask = new Set(t ? t.attachments.map((a) => a.file) : []);
+    return DB.docs.filter((d) => d.bill === b.id || (fromTask.size && (d.attachments || []).some((a) => fromTask.has(a.file))));
+  },
+  async addBillFiles(b, files) {
+    const c = DB.utilities.find((x) => x.id === b.utility);
+    if (!c || !files.length || state.readOnly) return [];
+    const folder = this.folder(c);
+    Vault.keepFolder(Vault.topOf(c), folder);
+    const made = await Vault.addFiles(Vault.topOf(c), folder, files, '', `${c.type} bill ${ymLabel(this.monthOf(b))}`);
+    made.forEach((d) => { d.bill = b.id; });
+    if (made.length) changed('docs');
+    return made;
+  },
   // What a bill's units are called (none for phone and internet), and what its credit is.
   unitsLabel(type) { return sameName(type, 'Fuel') ? 'Litres' : ['Phone', 'Internet'].some((x) => sameName(type, x)) ? '' : 'Units'; },
   creditLabel(type) { return sameName(type, 'Electricity') ? 'Net metering credit' : 'Credit or refund'; },
@@ -7121,7 +7136,7 @@ function billsTable(c, limit = 0) {
   const u = Utilities.unitsLabel(c.type);
   const credit = all.some((b) => Number(b.credit));
   return `<div class="ledger-wrap"><table class="ledger bills"><thead><tr><th>Month</th>${u ? `<th>${esc(u)}</th>` : ''}<th>Bill</th>${credit ? `<th>${esc(Utilities.creditLabel(c.type).replace(' credit', ''))}</th>` : ''}${u ? '<th>Rate</th>' : ''}${credit ? `<th>Effective bill</th>${u ? '<th>Effective rate</th>' : ''}` : ''}<th>Paid on</th></tr></thead><tbody>
-    ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${(b.attachments || []).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${esc(shortDate(b.date))}</td></tr>`; }).join('')}
+    ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${Utilities.billFiles(b).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${esc(shortDate(b.date))}</td></tr>`; }).join('')}
     </tbody></table></div>${limit && all.length > limit ? `<button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">All ${all.length} bills</button>` : ''}`;
 }
 // Across the top of a connection's sheet: what it cost, and what you can do.
@@ -7684,8 +7699,10 @@ function drawAssetForm() {
       </div>
       <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
-      <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>`,
-    b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '');
+      <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>
+      ${b ? '' : `<label class="field">The bill itself <span class="meta">(optional: a scan or photo, kept in Vault › ${esc(Utilities.folder(c).split('/').join(' › '))})</span><input class="input" type="file" multiple accept="image/*,application/pdf" data-pending-files></label>`}`,
+    b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro,
+    b ? `<div class="value-history"><div class="meta">The bill itself</div>${Utilities.billFiles(b).map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><span></span></div>` : ''; }).join('')}<div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add file<input type="file" multiple data-input="bill-files" data-id="${esc(b.id)}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="bill-files" data-id="${esc(b.id)}" hidden></label>` : ''}</div></div>` : '');
     $('#modal input[name="amount"]')?.focus();
     return;
   }
@@ -8239,8 +8256,11 @@ function submitAssetForm(type, data) {
     if (!b && (data.amount === '' || data.amount == null)) { closeAssetForm(); return; } // skipped
     const month = data.month || ymOf(data.date || todayISO());
     const fields = { amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, date: data.date || todayISO(), month, period: ymLabel(month), note: (data.note || '').trim() };
-    if (b) Object.assign(b, fields); else Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
+    const pending = [...($('#modal [data-pending-files]')?.files || [])];
+    let saved = b;
+    if (b) Object.assign(b, fields); else saved = Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
+    if (pending.length) Utilities.addBillFiles(saved, pending).then((made) => { if (made.length) { toast(`Kept ${plural(made.length, 'file')} with the bill`); render(); } });
     toast(`Saved ${rupees(fields.amount - fields.credit)} for ${fields.period}`);
     closeAssetForm();
     render();
@@ -10519,6 +10539,13 @@ document.addEventListener('change', (e) => {
     const d = DB.docs.find((x) => x.id === docId);
     if (r && d && AT.link(r, key, (d.attachments || []).find((a) => a.id === attId))) { render(); renderDrawer(); if (state.assetForm) renderAssetForm(); }
     else e.target.value = '';
+    return;
+  }
+  if (e.target.dataset?.input === 'bill-files' && !state.readOnly) {
+    const files = [...(e.target.files || [])];
+    const b = DB.bills.find((x) => x.id === e.target.dataset.id);
+    e.target.value = '';
+    if (b && files.length) Utilities.addBillFiles(b, files).then((made) => { if (made.length) toast(`Added ${plural(made.length, 'file')} to the bill`); renderAssetForm(); render(); });
     return;
   }
   if (e.target.dataset?.input === 'rental-files' && !state.readOnly) {

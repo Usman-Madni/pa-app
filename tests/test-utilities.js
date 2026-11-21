@@ -146,8 +146,18 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const heads = [...sheet.querySelectorAll('.sheet-side .ledger th')].map((x) => x.textContent).join(',');
   check(sheet.classList.contains('sheet') && sheet.querySelector('details.sheet-details:not([open])') && heads === 'Month,Units,Bill,Net metering,Rate,Effective bill,Effective rate,Paid on', `a connection opens as a sheet, its bills a table like the sheet you kept (got ${heads})`);
   win.eval('closeAssetForm')(true);
+  // --- The bill itself: a file on the bill ---
+  win.eval('openAssetForm')('bill', { id: eb.id });
+  const bin = doc.querySelector('#modal input[data-input="bill-files"]');
+  Object.defineProperty(bin, 'files', { value: [new win.File(['x'], 'IMG_1.jpg', { type: 'image/jpeg' })], configurable: true });
+  bin.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick(40);
+  const bd = U.billFiles(eb)[0];
+  check(bd && bd.bill === eb.id && /^Me\/Vault\/Utilities\/Electricity\/Electricity bill \w+ \d{4}\.jpg$/.test(bd.attachments[0].file) && doc.querySelector('#modal').textContent.includes(bd.attachments[0].name), 'Add file on a bill: kept in Vault › Utilities › Electricity, named for the bill, listed on it');
+  win.eval('closeAssetForm')(true);
+  check(U.billFiles(bill).some((d) => d.attachments[0].file === t.attachments[0].file), 'the file on the task a bill was ticked from counts as that bill\'s');
   win.eval('openAssetForm')('bill', { utility: ph.id });
-  check(!doc.querySelector('#modal form').elements.units, 'a phone bill has no units');
+  check(!doc.querySelector('#modal form').elements.units && doc.querySelector('#modal [data-pending-files]'), 'a phone bill has no units; a new bill can pick its file as it\'s saved');
   win.eval('closeAssetForm')(true);
 
   // --- Delete ---
