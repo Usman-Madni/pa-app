@@ -146,6 +146,30 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const heads = [...sheet.querySelectorAll('.sheet-side .ledger th')].map((x) => x.textContent).join(',');
   check(sheet.classList.contains('sheet') && sheet.querySelector('details.sheet-details:not([open])') && heads === 'Month,Units,Bill,Net metering,Rate,Effective bill,Effective rate,Paid on', `a connection opens as a sheet, its bills a table like the sheet you kept (got ${heads})`);
   win.eval('closeAssetForm')(true);
+  // --- Add a bill: not paid yet; it stays open; its figures as you type; a file that can't be kept is said ---
+  win.eval('openAssetForm')('bill', { utility: el.id });
+  const nb = doc.querySelector('#modal form');
+  check(nb.elements.date.value === '', 'Add a bill: Paid on starts empty');
+  nb.elements.amount.value = '20,000';
+  nb.elements.units.value = '400';
+  nb.elements.credit.value = '5,000';
+  nb.elements.credit.dispatchEvent(new win.Event('input', { bubbles: true }));
+  check(/Rate Rs 50/.test(nb.querySelector('.bill-figures').textContent) && /Effective bill Rs 15,000/.test(nb.querySelector('.bill-figures').textContent) && /Effective rate Rs 38/.test(nb.querySelector('.bill-figures').textContent), 'its rate, effective bill and effective rate show as you type');
+  PA.AT.status = 'reconnect';
+  const pf = nb.querySelector('[data-pending-files]');
+  Object.defineProperty(pf, 'files', { value: [new win.File(['x'], 'b.jpg', { type: 'image/jpeg' })], configurable: true });
+  submitForm(win, 'asset-bill', { month: ymPrev, amount: '20,000', units: '400', credit: '5,000' });
+  await tick(30);
+  PA.AT.status = 'ok';
+  const unpaid = PA.DB.bills.find((b) => b.utility === el.id && b.month === ymPrev);
+  check(unpaid && unpaid.date === '' && doc.querySelector('#modal form')?.dataset.form === 'asset-bill' && win.eval('state').assetForm.id === unpaid.id, 'saved with Paid on empty: not paid yet, and the pop-up stays open on it');
+  check(/couldn't be kept: reconnect the attachments folder/.test(doc.querySelector('#toasts').textContent), 'a file that couldn\'t be kept is said (the folder needs reconnecting)');
+  win.eval('closeAssetForm')(true);
+  win.eval('openAssetForm')('utility', { id: el.id });
+  check(/Unpaid/.test(doc.querySelector('#modal .sheet-side').textContent), 'the bills table says Unpaid');
+  win.eval('closeAssetForm')(true);
+  check(U.status(el).state === 'unpaid', 'and the Overview counts it as unpaid');
+
   // --- Paste an electricity sheet ---
   win.eval('openAssetForm')('utility', { id: el.id });
   doc.querySelector('#modal .sheet-top [data-form-type="bill-paste"]').click();

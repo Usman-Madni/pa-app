@@ -1906,7 +1906,11 @@ const Vault = {
     for (let i = 0; i < made.length; i++) await AT.add(made[i], [files[i]], 'docs', true);
     // A file that couldn't be stored leaves nothing behind.
     const failed = made.filter((d) => !d.attachments.length);
-    if (failed.length) { DB.docs = DB.docs.filter((d) => !failed.includes(d)); changed('docs'); }
+    if (failed.length) {
+      DB.docs = DB.docs.filter((d) => !failed.includes(d));
+      changed('docs');
+      toast(`${plural(failed.length, 'file')} couldn't be kept: ${state.phone ? 'sign in to OneDrive (and be online)' : AT.status === 'ok' ? 'try again' : 'reconnect the attachments folder (Settings)'}, then add ${failed.length === 1 ? 'it' : 'them'} again`);
+    }
     return made.filter((d) => d.attachments.length);
   },
 };
@@ -5285,11 +5289,11 @@ function finishDonePrompt(data) {
   const job = Upkeep.jobOfTask(t);
   if (job) { closeTaskDrawer(); openAssetForm('upkeep', Upkeep.logFor(t)); }
   // Rent: how much came in; a renewal: the new term and rent.
-  if (t.rental && t.rentKind === 'collect' && DB.rentals.some((r) => r.id === t.rental)) { closeTaskDrawer(); openAssetForm('rent-pay', { id: t.rental, month: ymOf(t.due || data.date), date: data.date }); }
+  if (t.rental && t.rentKind === 'collect' && DB.rentals.some((r) => r.id === t.rental)) { closeTaskDrawer(); closeAssetForm(true); openAssetForm('rent-pay', { id: t.rental, month: ymOf(t.due || data.date), date: data.date }); }
   const rentRenew = t.id.match(/^rent-renew-(.+)-\d{4}-\d{2}-\d{2}$/);
   if (rentRenew && DB.rentals.some((r) => r.id === rentRenew[1])) { closeTaskDrawer(); openAssetForm('rent-renew', { id: rentRenew[1] }); }
   // A utility's bill: what did it come to (dated the day it was paid)?
-  if (t.utility && DB.utilities.some((c) => c.id === t.utility)) { closeTaskDrawer(); openAssetForm('bill', { utility: t.utility, task: t.id, date: data.date }); } // dated the day it was done, as chosen in "Done on"
+  if (t.utility && DB.utilities.some((c) => c.id === t.utility)) { closeTaskDrawer(); closeAssetForm(true); openAssetForm('bill', { utility: t.utility, task: t.id, date: data.date }); } // dated the day it was done, as chosen in "Done on"
 }
 
 
@@ -7036,7 +7040,7 @@ const Utilities = {
   bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => this.monthOf(b).localeCompare(this.monthOf(a)) || (b.date || '').localeCompare(a.date || '')); },
   addBill(data) {
     const month = data.month || ymOf(data.date || todayISO());
-    const b = { id: uid(), utility: data.utility, month, date: data.date || todayISO(), period: data.period || ymLabel(month), amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, split: data.split || [], task: data.task || '', note: data.note || '' };
+    const b = { id: uid(), utility: data.utility, month, date: data.date || '', period: data.period || ymLabel(month), amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, split: data.split || [], task: data.task || '', note: data.note || '' };
     DB.bills.push(b);
     return b;
   },
@@ -7058,7 +7062,9 @@ const Utilities = {
   },
   // This month for a connection: paid (a bill dated this month), due (its task this month or overdue), or nothing yet.
   status(c, today = todayISO()) {
-    const bill = this.bills(c).find((b) => b.date.slice(0, 7) === today.slice(0, 7));
+    const unpaid = this.bills(c).find((b) => !b.date);
+    if (unpaid) return { state: 'unpaid', bill: unpaid };
+    const bill = this.bills(c).find((b) => b.date && b.date.slice(0, 7) === today.slice(0, 7));
     if (bill) return { state: 'paid', bill };
     const t = this.openTask(c);
     if (t && t.due && t.due.slice(0, 7) <= today.slice(0, 7)) return { state: t.due.slice(0, 10) < today ? 'late' : 'due', task: t };
@@ -7189,6 +7195,13 @@ function utilityCard(c) {
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
 }
+// The bill pop-up's worked-out line: rate, effective bill, effective rate (as you type).
+function billFiguresText(c, v) {
+  const x = Utilities.figures(v);
+  if (!x.amount) return '';
+  const u = Utilities.unitsLabel(c.type);
+  return [u && x.units ? `Rate ${perUnit(x.rate)}` : '', x.credit ? `Effective bill ${rupees(x.eff)}` : '', u && x.units && x.credit ? `Effective rate ${perUnit(x.effRate)}` : ''].filter(Boolean).join(' · ');
+}
 const perUnit = (v) => (v == null ? '' : rupees(v)); // whole rupees, as a bill sheet shows them
 function billsTable(c, limit = 0) {
   const all = Utilities.bills(c);
@@ -7197,7 +7210,7 @@ function billsTable(c, limit = 0) {
   const u = Utilities.unitsLabel(c.type);
   const credit = all.some((b) => Number(b.credit));
   return `<div class="ledger-wrap"><table class="ledger bills"><thead><tr><th>Month</th>${u ? `<th>${esc(u)}</th>` : ''}<th>Bill</th>${credit ? `<th>${esc(Utilities.creditLabel(c.type).replace(' credit', ''))}</th>` : ''}${u ? '<th>Rate</th>' : ''}${credit ? `<th>Effective bill</th>${u ? '<th>Effective rate</th>' : ''}` : ''}<th>Paid on</th></tr></thead><tbody>
-    ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${Utilities.billFiles(b).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${esc(shortDate(b.date))}</td></tr>`; }).join('')}
+    ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${Utilities.billFiles(b).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${b.date ? esc(shortDate(b.date)) : '<span class="pill zk-left">Unpaid</span>'}</td></tr>`; }).join('')}
     </tbody></table></div>${limit && all.length > limit ? `<button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">All ${all.length} bills</button>` : ''}`;
 }
 // Across the top of a connection's sheet: what it cost, and what you can do.
@@ -7234,7 +7247,7 @@ function renderUtilities() {
   if (tab === 'overview') {
     const rows = all.map((c) => {
       const st = Utilities.status(c);
-      const pill = st.state === 'paid' ? `<span class="pill">Paid ${rupees(st.bill.amount)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
+      const pill = st.state === 'unpaid' ? `<span class="pill zk-left">Unpaid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'paid' ? `<span class="pill">Paid ${rupees(st.bill.amount)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
       return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(c.type))}</span><div class="body clickable" data-util-tab="${esc(c.type)}"><div class="title">${esc(c.name)} ${whoBadges(c)}</div><div class="meta"><span>${esc(c.type)}</span>${Utilities.bills(c)[0] ? `<span>Last ${rupees(Utilities.bills(c)[0].amount)}</span>` : ''}</div></div>${pill}</li>`;
     }).join('');
     const byType = types.map((t) => ({ t, cs: all.filter((c) => sameName(c.type, t)) })).filter((x) => x.cs.length);
@@ -7778,7 +7791,7 @@ function drawAssetForm() {
     if (!c) return closeAssetForm();
     const t = f.task && DB.tasks.find((x) => x.id === f.task);
     const last = Utilities.bills(c)[0];
-    const v = b ? { ...b, month: Utilities.monthOf(b) } : { date: f.date || todayISO(), month: t && t.due ? Utilities.forMonth(c, ymOf(t.due)) : ymOf(f.date || todayISO()), amount: '', note: '' };
+    const v = b ? { ...b, month: Utilities.monthOf(b) } : { date: f.date || '', month: t && t.due ? Utilities.forMonth(c, ymOf(t.due)) : ymOf(f.date || todayISO()), amount: '', note: '' };
     $('#modal').innerHTML = box(b ? `${c.name}: ${b.period}` : `What did the ${c.type.toLowerCase()} bill come to?`, `
       <p class="meta" style="margin:0">${esc(c.name)}${last && !b ? `. Last one: ${rupees(last.amount)} (${esc(last.period)})` : ''}</p>
       <div class="row">
@@ -7787,7 +7800,8 @@ function drawAssetForm() {
         <label class="field">${esc(Utilities.creditLabel(c.type))}<input class="input" ${amountAttrs(v.credit || '')} name="credit"></label>
       </div>
       ${Utilities.isFuel(c) && (c.cars || []).length ? `<fieldset class="owner-box"><legend>By car <span class="meta">(optional, as the pump's statement shows it)</span></legend>${(c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean).map((a) => { const x = (v.split || []).find((y) => y.car === a.id) || {}; return `<div class="split-row"><span class="split-car">${ic('car', 'sm')} ${esc(a.name)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="split-${esc(a.id)}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="split-${esc(a.id)}-litres"></label><label class="field">Reading (km)<input class="input" ${amountAttrs(x.km || '')} name="split-${esc(a.id)}-km"></label></div>`; }).join('')}<p class="meta" style="margin:0">Left empty above, the bill and litres are these added up.</p></fieldset>` : ''}
-      <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
+      <div class="meta bill-figures" aria-live="polite">${billFiguresText(c, v)}</div>
+      <label class="field">Paid on <span class="meta">(leave empty if it isn't paid yet)</span><input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
       <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>
       ${b ? '' : `<label class="field">The bill itself <span class="meta">(optional: a scan or photo, kept in Vault › ${esc(Utilities.folder(c).split('/').join(' › '))})</span><input class="input" type="file" multiple accept="image/*,application/pdf" data-pending-files></label>`}`,
@@ -8360,15 +8374,16 @@ function submitAssetForm(type, data) {
     if (!data.amount && split.length) { data.amount = split.reduce((t, x) => t + x.amount, 0); if (!data.units) data.units = split.reduce((t, x) => t + x.litres, 0); }
     if (!b && (data.amount === '' || data.amount == null || data.amount === 0)) { closeAssetForm(); return; } // skipped
     const month = data.month || ymOf(data.date || todayISO());
-    const fields = { split, amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, date: data.date || todayISO(), month, period: ymLabel(month), note: (data.note || '').trim() };
+    const fields = { split, amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, date: data.date || '', month, period: ymLabel(month), note: (data.note || '').trim() };
     const pending = [...($('#modal [data-pending-files]')?.files || [])];
     let saved = b;
     if (b) Object.assign(b, fields); else saved = Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
-    for (const x of split) { const car = DB.assets.find((a) => a.id === x.car); if (car && x.km) { Upkeep.addReading(car, fields.date, x.km); changed('assets'); } } // the reading counts for the car too
-    if (pending.length) Utilities.addBillFiles(saved, pending).then((made) => { if (made.length) { toast(`Kept ${plural(made.length, 'file')} with the bill`); render(); } });
-    toast(`Saved ${rupees(fields.amount - fields.credit)} for ${fields.period}`);
-    closeAssetForm();
+    for (const x of split) { const car = DB.assets.find((a) => a.id === x.car); if (car && x.km) { Upkeep.addReading(car, fields.date || todayISO(), x.km); changed('assets'); } } // the reading counts for the car too
+    const stay = () => { if (state.assetForm && state.assetForm.type === 'bill' && state.assetForm.id === saved.id) renderAssetForm(); };
+    if (pending.length) Utilities.addBillFiles(saved, pending).then((made) => { if (made.length) toast(`Kept ${plural(made.length, 'file')} with the bill`); stay(); render(); });
+    toast(`Saved ${rupees(fields.amount - fields.credit)} for ${fields.period}${fields.date ? '' : ', not paid yet'}`);
+    if (b) closeAssetForm(); else { state.assetForm = { type: 'bill', id: saved.id }; renderAssetForm(); } // a new one stays open: its file, or Add file
     render();
     return;
   } else if (type === 'doc') {
@@ -10247,6 +10262,15 @@ let taskTimer;
 let titleTyping = null;
 // The rent sheet being pasted: what it found, before bringing it in.
 document.addEventListener('input', (e) => {
+  const billForm = e.target.closest?.('form[data-form="asset-bill"]');
+  if (billForm && ['amount', 'units', 'credit'].includes(e.target.name)) {
+    const f = state.assetForm;
+    const c = f && DB.utilities.find((x) => x.id === (f.id ? DB.bills.find((b) => b.id === f.id)?.utility : f.utility));
+    const num = (n) => Number(String(billForm.elements[n]?.value || '').replace(/,/g, '')) || 0;
+    const out = billForm.querySelector('.bill-figures');
+    if (c && out) out.textContent = billFiguresText(c, { amount: num('amount'), units: num('units'), credit: num('credit') });
+    return;
+  }
   if (e.target.matches?.('[data-bill-paste]')) {
     const { rows, skipped } = Utilities.parseSheet(e.target.value);
     const out = $('#modal .bill-paste-preview');
