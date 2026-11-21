@@ -315,6 +315,7 @@ button:disabled { cursor: not-allowed; }
 .ledger tbody tr:hover { background: var(--panel-2); }
 .ledger tr.short td:nth-child(5) { color: var(--danger); }
 .ledger tfoot td { font-weight: 600; }
+.ledger.bills td:last-child { min-width: 0; white-space: nowrap; }
 .file-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; vertical-align: middle; }
 .file-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm); background: var(--panel-2); }
 .tl-mark:has(.file-mark) { width: 36px; }
@@ -6943,23 +6944,40 @@ const Utilities = {
     if (any) changed('tasks', 'docs');
     return any;
   },
-  monthOf(b) { return b.month || ymOf(b.date); }, // the month a bill is for (bills from before: the month paid)
+  monthOf(b) { return b.month || ymOf(b.date); },
+  // What a bill's units are called (none for phone and internet), and what its credit is.
+  unitsLabel(type) { return sameName(type, 'Fuel') ? 'Litres' : ['Phone', 'Internet'].some((x) => sameName(type, x)) ? '' : 'Units'; },
+  creditLabel(type) { return sameName(type, 'Electricity') ? 'Net metering credit' : 'Credit or refund'; },
+  // A bill's figures: the bill, what it worked out at per unit, the bill less any credit (what it really cost) and that
+  // per unit. Rates are null without units.
+  figures(b) {
+    const units = Number(b.units) || 0;
+    const amount = Number(b.amount) || 0;
+    const credit = Number(b.credit) || 0;
+    const eff = amount - credit;
+    return { units, amount, credit, eff, rate: units ? amount / units : null, effRate: units ? eff / units : null };
+  }, // the month a bill is for (bills from before: the month paid)
   bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => this.monthOf(b).localeCompare(this.monthOf(a)) || (b.date || '').localeCompare(a.date || '')); },
   addBill(data) {
     const month = data.month || ymOf(data.date || todayISO());
-    const b = { id: uid(), utility: data.utility, month, date: data.date || todayISO(), period: data.period || ymLabel(month), amount: Number(data.amount) || 0, task: data.task || '', note: data.note || '' };
+    const b = { id: uid(), utility: data.utility, month, date: data.date || todayISO(), period: data.period || ymLabel(month), amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, task: data.task || '', note: data.note || '' };
     DB.bills.push(b);
     return b;
   },
   // Spent on these connections in a year (up to a month, 1-12), and month by month.
   sum(cs, year, upto = 12) {
     const ids = new Set(cs.map((c) => c.id));
-    return DB.bills.filter((b) => ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto).reduce((t, b) => t + b.amount, 0);
+    return DB.bills.filter((b) => ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto).reduce((t, b) => t + this.figures(b).eff, 0);
+  },
+  // Units used in a year (up to a month), for the rate it worked out at.
+  units(cs, year, upto = 12) {
+    const ids = new Set(cs.map((c) => c.id));
+    return DB.bills.filter((b) => ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto).reduce((t, b) => t + (Number(b.units) || 0), 0);
   },
   months(cs, year) {
     const ids = new Set(cs.map((c) => c.id));
     const m = Array(12).fill(0);
-    for (const b of DB.bills) if (ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year) m[Number(this.monthOf(b).slice(5, 7)) - 1] += b.amount;
+    for (const b of DB.bills) if (ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year) m[Number(this.monthOf(b).slice(5, 7)) - 1] += this.figures(b).eff;
     return m;
   },
   // This month for a connection: paid (a bill dated this month), due (its task this month or overdue), or nothing yet.
@@ -7084,16 +7102,49 @@ function utilityCard(c) {
     <div class="card utility-card">
       <div class="row util-head">
         <span class="tl-mark">${ic(Utilities.icon(c.type))}</span>
-        <div class="grow"><div class="title"><b>${esc(c.name)}</b> ${whoBadges(c)}</div>
+        <div class="grow clickable" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}"><div class="title"><b>${esc(c.name)}</b> ${whoBadges(c)}</div>
           <div class="meta">${[c.provider, c.account ? `Account ${c.account}` : '', prop ? prop.name : ''].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
         <button type="button" class="icon-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}" aria-label="Edit ${esc(c.name)}" title="Edit">${ic('pencil', 'sm')}</button>
       </div>
       <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `, due ${esc(fmtDate(t.due))}` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
       <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill</span><b>${rupees(bills[0].amount)}</b></div>` : ''}</div>
-      ${bills.length ? `<div class="upkeep-log">${bills.slice(0, 12).map((b) => `<button type="button" class="upkeep-row" data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><span class="ur-ico">${ic('receipt', 'sm')}</span><span class="ur-main"><span>${esc(ymLabel(Utilities.monthOf(b)))}</span><span class="meta">Paid ${esc(fmtDate(b.date))}${b.note ? `, ${esc(b.note)}` : ''}</span></span><span class="ur-cost">${rupees(b.amount)}</span></button>`).join('')}</div>` : '<p class="meta" style="margin:0">No bills yet: ticking its bill task asks what it came to.</p>'}
+      <div class="value-history">${billsTable(c, 6)}</div>
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
+}
+const perUnit = (v) => (v == null ? '' : rupees(v)); // whole rupees, as a bill sheet shows them
+function billsTable(c, limit = 0) {
+  const all = Utilities.bills(c);
+  const bills = limit ? all.slice(0, limit) : all;
+  if (!bills.length) return '<p class="meta" style="margin:0">No bills yet: ticking its bill task asks what it came to, or Add a bill.</p>';
+  const u = Utilities.unitsLabel(c.type);
+  const credit = all.some((b) => Number(b.credit));
+  return `<div class="ledger-wrap"><table class="ledger bills"><thead><tr><th>Month</th>${u ? `<th>${esc(u)}</th>` : ''}<th>Bill</th>${credit ? `<th>${esc(Utilities.creditLabel(c.type).replace(' credit', ''))}</th>` : ''}${u ? '<th>Rate</th>' : ''}${credit ? `<th>Effective bill</th>${u ? '<th>Effective rate</th>' : ''}` : ''}<th>Paid on</th></tr></thead><tbody>
+    ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${(b.attachments || []).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${esc(shortDate(b.date))}</td></tr>`; }).join('')}
+    </tbody></table></div>${limit && all.length > limit ? `<button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">All ${all.length} bills</button>` : ''}`;
+}
+// Across the top of a connection's sheet: what it cost, and what you can do.
+function utilityTop(c) {
+  const y = new Date().getFullYear();
+  const bills = Utilities.bills(c);
+  const u = Utilities.unitsLabel(c.type);
+  const units = Utilities.units([c], y);
+  return `<div class="value-history sheet-top"><div class="upkeep-sum">
+      <div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div>
+      <div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>
+      ${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}
+      ${u && units ? `<div><span class="meta">${esc(u)} this year, rate</span><b>${units.toLocaleString('en-IN')}, ${perUnit(Utilities.sum([c], y) / units)}</b></div>` : ''}
+    </div>
+    <div class="row edit-only"><button type="button" class="btn small primary" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button>${Utilities.openTask(c) ? '' : `<button type="button" class="btn small" data-action="utility-task" data-id="${esc(c.id)}">${ic('repeat', 'sm')}Make its bill task</button>`}</div></div>`;
+}
+function utilityMain(c) {
+  const t = Utilities.openTask(c);
+  const prop = c.property && DB.assets.find((a) => a.id === c.property);
+  return `<div class="value-history"><div class="meta">About it</div>
+      ${[c.provider ? ['Provider', c.provider] : null, c.account ? ['Account', c.account] : null, prop ? ['For', prop.name] : null, c.billDay ? ['Bill due', `${c.billDay === 'last' ? 'the last day' : `the ${ordinal(c.billDay)}`}${c.billFor === 'after' ? ', for the month before' : c.billFor === 'before' ? ', for the month after' : ''}`] : null].filter(Boolean).map(([k, v]) => `<div class="vh-row"><span class="meta">${esc(k)}</span><span>${esc(v)}</span><span></span></div>`).join('')}
+    </div>
+    <div class="value-history"><div class="meta">Bill task</div>${t ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${ic('repeat', 'sm')} ${esc(fullTitle(t))}</button><span class="meta">Due ${esc(fmtDate(t.due))}</span><span></span></div>` : '<p class="meta" style="margin:0">No bill task.</p>'}</div>`;
 }
 function renderUtilities() {
   const all = Utilities.list();
@@ -7116,7 +7167,7 @@ function renderUtilities() {
     body = all.length ? `
       <h2 class="vault-h">This month</h2><div class="card"><ul class="list">${rows}</ul></div>
       <h2 class="vault-h">This year so far, against last year</h2>
-      <div class="card"><ul class="list">${byType.map(({ t, cs }) => { const now = Utilities.sum(cs, y, m); const was = Utilities.sum(cs, y - 1, m); return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(t))}</span><div class="body"><div class="title">${esc(t)}</div><div class="meta"><span>Last year to ${esc(MONTHS_SHORT[m - 1])}: ${rupees(was)}</span></div></div><b>${rupees(now)}</b>${was ? `<span class="pill ${now > was ? 'zk-left' : ''}">${now >= was ? '+' : ''}${Math.round(((now - was) / was) * 100)}%</span>` : ''}</li>`; }).join('')}</ul></div>
+      <div class="card"><ul class="list">${byType.map(({ t, cs }) => { const now = Utilities.sum(cs, y, m); const was = Utilities.sum(cs, y - 1, m); return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(t))}</span><div class="body"><div class="title">${esc(t)}</div><div class="meta"><span>Last year to ${esc(MONTHS_SHORT[m - 1])}: ${rupees(was)}</span>${Utilities.unitsLabel(t) && Utilities.units(cs, y, m) ? `<span>${Utilities.units(cs, y, m).toLocaleString('en-IN')} ${esc(Utilities.unitsLabel(t).toLowerCase())}, ${perUnit(now / Utilities.units(cs, y, m))} each</span>` : ''}</div></div><b>${rupees(now)}</b>${was ? `<span class="pill ${now > was ? 'zk-left' : ''}">${now >= was ? '+' : ''}${Math.round(((now - was) / was) * 100)}%</span>` : ''}</li>`; }).join('')}</ul></div>
       <h2 class="vault-h">Month by month, ${y}</h2>
       <div class="card"><div class="kind-bars">${months.map((v, i) => `<div class="kind-bar" title="${esc(MONTHS_SHORT[i])}: ${esc(rupees(v))}"><span class="kb-name">${esc(MONTHS_SHORT[i])}</span><span class="kb-track"><span class="kb-fill" style="width:${barPct(v, max)}%"></span></span><span class="kb-val">${v ? rupees(v) : ''}</span></div>`).join('')}</div></div>`
       : `<div class="card empty-state"><p><b>Nothing here yet.</b> Add your electricity, gas, water, phone and internet: each gets a bill task that reminds you every month, its bills go in the Vault, and here you see what they cost.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="Electricity">${ic('plus', 'sm')}Add a connection</button></div>`;
@@ -7612,8 +7663,9 @@ function drawAssetForm() {
         <label class="field grow">The bill due then is for<select class="input" name="billFor">${[['same', 'that month'], ['after', 'the month before (due the month after it)'], ['before', 'the month after (due the month before it)']].map(([k, l]) => `<option value="${k}" ${(v.billFor || 'same') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <label class="field">Notes<textarea class="input" name="notes" rows="2">${esc(v.notes)}</textarea></label>`,
-    c ? '<button type="button" class="btn danger edit-only" data-action="utility-delete" style="margin-right:auto">Delete</button>' : '');
-    $('#modal input[name="name"]')?.focus();
+    c ? '<button type="button" class="btn danger edit-only" data-action="utility-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro,
+    c ? utilityMain(c) : '', c ? { sheet: true, fold: true, top: utilityTop(c), side: `<div class="value-history"><div class="meta">Bills</div>${billsTable(c)}</div>` } : {});
+    if (!c) $('#modal input[name="name"]')?.focus();
     return;
   }
   if (f.type === 'bill') {
@@ -7626,9 +7678,11 @@ function drawAssetForm() {
     $('#modal').innerHTML = box(b ? `${c.name}: ${b.period}` : `What did the ${c.type.toLowerCase()} bill come to?`, `
       <p class="meta" style="margin:0">${esc(c.name)}${last && !b ? `. Last one: ${rupees(last.amount)} (${esc(last.period)})` : ''}</p>
       <div class="row">
-        <label class="field grow">Amount<input class="input" ${amountAttrs(v.amount)} name="amount" placeholder="Leave empty to skip"></label>
-        <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
+        <label class="field grow">Bill<input class="input" ${amountAttrs(v.amount)} name="amount" placeholder="Leave empty to skip"></label>
+        ${Utilities.unitsLabel(c.type) ? `<label class="field">${esc(Utilities.unitsLabel(c.type))}<input class="input" ${amountAttrs(v.units || '')} name="units"></label>` : ''}
+        <label class="field">${esc(Utilities.creditLabel(c.type))}<input class="input" ${amountAttrs(v.credit || '')} name="credit"></label>
       </div>
+      <label class="field">Paid on<input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
       <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>`,
     b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '');
@@ -8184,10 +8238,10 @@ function submitAssetForm(type, data) {
     const b = f.id ? DB.bills.find((x) => x.id === f.id) : null;
     if (!b && (data.amount === '' || data.amount == null)) { closeAssetForm(); return; } // skipped
     const month = data.month || ymOf(data.date || todayISO());
-    const fields = { amount: Number(data.amount) || 0, date: data.date || todayISO(), month, period: ymLabel(month), note: (data.note || '').trim() };
+    const fields = { amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, date: data.date || todayISO(), month, period: ymLabel(month), note: (data.note || '').trim() };
     if (b) Object.assign(b, fields); else Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
-    toast(`Saved ${rupees(fields.amount)} for ${fields.period}`);
+    toast(`Saved ${rupees(fields.amount - fields.credit)} for ${fields.period}`);
     closeAssetForm();
     render();
     return;

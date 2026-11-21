@@ -130,6 +130,26 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   U.addBill({ utility: ph.id, date: `${ymNow}-03`, amount: 500, month: ymPrev });
   check(U.months([ph], new Date().getFullYear())[new Date().getMonth()] === 1200 || ymPrev.slice(0, 4) !== ymNow.slice(0, 4), 'a bill paid this month for last month counts in last month');
 
+  // --- Units, a credit, and what it worked out at ---
+  win.eval('openAssetForm')('utility', {});
+  submitForm(win, 'asset-utility', { type: 'Electricity', name: 'Home power' });
+  const el = PA.DB.utilities.find((x) => x.name === 'Home power');
+  win.eval('openAssetForm')('bill', { utility: el.id });
+  check(doc.querySelector('#modal form').elements.units && /Net metering credit/.test(doc.querySelector('#modal form').textContent), 'an electricity bill asks its units and the net metering credit');
+  submitForm(win, 'asset-bill', { amount: '21,461', units: '345', credit: '12,156', month: ymNow });
+  const eb = PA.DB.bills.find((b) => b.utility === el.id);
+  const fig = U.figures(eb);
+  check(eb.units === 345 && eb.credit === 12156 && fig.eff === 9305 && Math.round(fig.rate) === 62 && Math.round(fig.effRate) === 27, 'it works out the rate (62), the effective bill (9,305) and the effective rate (27)');
+  check(U.sum([el], new Date().getFullYear()) === 9305, 'and costs count what it really cost (the bill less the credit)');
+  win.eval('openAssetForm')('utility', { id: el.id });
+  const sheet = doc.querySelector('#modal form');
+  const heads = [...sheet.querySelectorAll('.sheet-side .ledger th')].map((x) => x.textContent).join(',');
+  check(sheet.classList.contains('sheet') && sheet.querySelector('details.sheet-details:not([open])') && heads === 'Month,Units,Bill,Net metering,Rate,Effective bill,Effective rate,Paid on', `a connection opens as a sheet, its bills a table like the sheet you kept (got ${heads})`);
+  win.eval('closeAssetForm')(true);
+  win.eval('openAssetForm')('bill', { utility: ph.id });
+  check(!doc.querySelector('#modal form').elements.units, 'a phone bill has no units');
+  win.eval('closeAssetForm')(true);
+
   // --- Delete ---
   win.eval('openAssetForm')('utility', { id: c.id });
   doc.querySelector('#modal [data-action="utility-delete"]').click();
