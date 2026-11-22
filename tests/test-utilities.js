@@ -207,6 +207,11 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check(bd && bd.bill === eb.id && /^Me\/Vault\/Utilities\/Electricity\/Home power \w+ \d{4}\.jpg$/.test(bd.attachments[0].file) && doc.querySelector('#modal').textContent.includes(bd.attachments[0].name), 'Add file on a bill: kept in Vault › Utilities › Electricity, named "<name> Mmm yyyy", listed on it');
   win.eval('closeAssetForm')(true);
   check(U.billFiles(bill).some((d) => d.attachments[0].file === t.attachments[0].file), 'the file on the task a bill was ticked from counts as that bill\'s');
+  win.eval('openAssetForm')('utility', { id: el.id });
+  const foot = [...doc.querySelectorAll('#modal .sheet-side .ledger tfoot td')].map((x) => x.textContent);
+  check(foot[0] === 'Total' && foot.length === 8, `the bills table has a totals row: units, bill, credit, rate, effective bill, effective rate (got ${foot.join('|')})`);
+  check(/Net metering saved this year\s*Rs [\d,]+/.test(doc.querySelector('#modal .sheet-top').textContent), 'the sheet says what net metering saved this year');
+  win.eval('closeAssetForm')(true);
   win.eval('openAssetForm')('bill', { utility: ph.id });
   check(!doc.querySelector('#modal form').elements.units && doc.querySelector('#modal [data-pending-files]'), 'a phone bill has no units; a new bill can pick its file as it\'s saved');
   win.eval('closeAssetForm')(true);
@@ -215,8 +220,12 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const civic = Assets.add({ kind: 'vehicle', name: 'Civic' });
   const city = Assets.add({ kind: 'vehicle', name: 'City' });
   win.eval('changed')('assets');
+  const sold = Assets.add({ kind: 'vehicle', name: 'Old sold car' });
+  sold.closed = PA.toISO(new Date(Date.now() - 30 * 864e5));
+  win.eval('changed')('assets');
   win.eval('openAssetForm')('utility', { kind: 'Fuel' });
   const fform = doc.querySelector('#modal form');
+  check(!fform.elements[`u-car-${sold.id}`], 'a sold car isn\'t offered for fuel');
   check(fform.elements[`u-car-${civic.id}`] && fform.elements[`u-car-${city.id}`], 'a fuel connection asks which cars it fuels');
   fform.elements[`u-car-${civic.id}`].checked = true;
   fform.elements[`u-car-${city.id}`].checked = true;
