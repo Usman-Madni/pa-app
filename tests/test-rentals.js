@@ -45,6 +45,8 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const collect = PA.DB.tasks.find((t) => t.rental === r.id && t.rentKind === 'collect');
   check(collect && collect.repeat?.freq === 'monthly' && Number(collect.due.slice(8, 10)) === 18 && collect.fileTo === 'Rentals/Plaza lease' && PA.DB.buckets.find((b) => b.id === collect.bucket)?.name === 'Rentals', 'a monthly Collect rent task on the 18th, in a Rentals bucket, its files to Vault › Rentals › Plaza lease');
   check(PA.fullTitle(collect) === `Plaza lease Rent (${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(collect.due.slice(5, 7)) - 1]} ${collect.due.slice(2, 4)})` && !collect.reminders.length, 'named "Plaza lease Rent (Nov 26)", the month as its moving part, with no reminder');
+  await PA.AT.add(collect, [new win.File(['x'], 'IMG_9.jpg', { type: 'image/jpeg' })]);
+  check(collect.attachments[0].name === `Plaza lease Rent ${win.eval('ymLabel')(collect.due.slice(0, 7))}.jpg` && collect.attachments[0].file.startsWith('Me/Vault/Rentals/Plaza lease/'), 'a file on the rent task is named "Plaza lease Rent Mmm yyyy", in the agreement\'s folder');
   const legacy = PA.normalizeTask({ id: 'legacy', title: 'Collect rent (Plaza lease)', due: collect.due, rental: r.id, rentKind: 'collect', reminders: [{ id: 'x', kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
   PA.DB.tasks.push(legacy);
   win.eval('rentalTasks')();

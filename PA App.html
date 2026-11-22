@@ -3554,6 +3554,13 @@ const AT = {
   // "Phone bill Oct 26.pdf": the title and moving part; with no moving part, the year is added when the
   // title doesn't have one ("Elec bill 2026.pdf"). A document or asset uses its name.
   suggestName(task, original) {
+    const u = task.utility && DB.utilities.find((x) => x.id === task.utility);
+    const r = task.rental && task.rentKind === 'collect' && DB.rentals.find((x) => x.id === task.rental);
+    if ((u || r) && task.due) { // a bill's or the rent's: its name and the month it's for
+      const dot = original.lastIndexOf('.');
+      const ym = u ? Utilities.forMonth(u, ymOf(task.due)) : ymOf(task.due);
+      return `${u ? u.name : Rentals.rentTitle(r)} ${ymLabel(ym)}${dot > 0 ? original.slice(dot).toLowerCase() : ''}`;
+    }
     if (task.plain && task.named) { const dot = original.lastIndexOf('.'); return `${task.name}${dot > 0 ? original.slice(dot).toLowerCase() : ''}`; } // named for what it's for
     if (task.plain) return original; // a plain file in the Vault keeps its own name
     const dot = original.lastIndexOf('.');
@@ -6941,8 +6948,7 @@ const Utilities = {
     if (day) c.billDay = day === 'last' ? 'last' : this.dayNum(day);
     let due = this.dateIn(ymOf(todayISO()), c.billDay);
     if (due < todayISO()) due = this.dateIn(ymAdd(ymOf(todayISO()), 1), c.billDay);
-    const several = DB.utilities.filter((x) => sameName(x.type, c.type)).length > 1;
-    const t = addTask({ title: `${c.type} bill${several ? ` (${c.name})` : ''}`, due: `${due}T${ALL_DAY}`, people: People.of(c), bucket: this.bucket(),
+    const t = addTask({ title: c.name, due: `${due}T${ALL_DAY}`, people: People.of(c), bucket: this.bucket(),
       reminders: [{ id: uid(), kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
     TaskEdit.setRepeat(t, { freq: 'monthly', interval: 1 });
     t.repeat.anchorDay = this.dayNum(c.billDay);
@@ -6972,6 +6978,7 @@ const Utilities = {
       const want = this.folder(c);
       const series = new Set();
       for (const t of this.tasksOf(c)) {
+        if (t.title !== c.name) { Series.quietly(t, 'title', c.name); any = true; }
         series.add(Files.seriesOf(t) || t.id);
         if (t.fileTo !== want) { Series.quietly(t, 'fileTo', want); any = true; }
       }
@@ -7044,7 +7051,7 @@ const Utilities = {
     if (!c || !files.length || state.readOnly) return [];
     const folder = this.folder(c);
     Vault.keepFolder(Vault.topOf(c), folder);
-    const made = await Vault.addFiles(Vault.topOf(c), folder, files, '', `${c.type} bill ${ymLabel(this.monthOf(b))}`);
+    const made = await Vault.addFiles(Vault.topOf(c), folder, files, '', `${c.name} ${ymLabel(this.monthOf(b))}`);
     made.forEach((d) => { d.bill = b.id; });
     if (made.length) changed('docs');
     return made;
