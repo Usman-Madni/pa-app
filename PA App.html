@@ -5068,6 +5068,7 @@ function drawDrawer() {
         </form>
       </section>
 
+      ${taskSourceRow(t)}
       <section class="p-card">
         <button class="p-row p-click ${inMyDay(t) ? 'on' : ''}" data-action="toggle-myday" data-id="${esc(t.id)}">
           <span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></span><span class="p-text">${inMyDay(t) ? 'Added to My Day' : 'Add to My Day'}</span>${inMyDay(t) ? '<span class="meta edit-only">✕</span>' : ''}
@@ -5706,6 +5707,25 @@ const endModeOf = (r) => r.endMode || (r.until ? 'date' : 'never');
 
 // The repeat section of the drawer. The quick list sets the common ones; "Custom…" (and the box under
 // the list) sets every N days/weeks/months/years, weekdays, monthly by date or weekday, and how it ends.
+// Where a task came from (a connection's bill, an agreement's rent or renewal, a document's renewal, a car's upkeep job,
+// zakat), to go back to it; none for your own.
+function taskSource(t) {
+  const c = t.utility && DB.utilities.find((x) => x.id === t.utility);
+  if (c) return { label: c.name, icon: Utilities.icon(c.type), go: () => openAssetForm('utility', { id: c.id }) };
+  const r = t.rental && DB.rentals.find((x) => x.id === t.rental);
+  if (r) return { label: r.name, icon: 'home', go: () => openAssetForm('rental', { id: r.id }) };
+  const dm = t.id.match(/^doc-renew-(.+)-\d{4}-\d{2}-\d{2}$/);
+  const d = dm && DB.docs.find((x) => x.id === dm[1]);
+  if (d) return { label: d.name, icon: 'id', go: () => openAssetForm('doc', { id: d.id }) };
+  const a = t.id.startsWith('up-') && DB.assets.find((x) => t.id.startsWith(`up-${x.id}-`));
+  if (a) return { label: a.name, icon: Assets.kind(a.kind).icon, go: () => filesGo('assets', a.id) };
+  if (t.id.startsWith('zk-')) return { label: 'Zakat', icon: 'coins', go: () => setView('zakat') };
+  return null;
+}
+function taskSourceRow(t) {
+  const src = taskSource(t);
+  return src ? `<section class="p-card"><button class="p-row p-click task-source" data-action="task-source" data-id="${esc(t.id)}"><span class="p-ico">${ic(src.icon)}</span><span class="p-text"><span class="meta">From</span> ${esc(src.label)}</span>${ic('arrow-up-right', 'sm')}</button></section>` : '';
+}
 function repeatBlock(t) {
   if (ButlerTasks.is(t)) { // Butler keeps these going itself
     return `<div class="p-row"><span class="p-ico"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg></span><span class="p-text">${esc(ButlerTasks.every(t))}. Butler makes the next one as soon as this is ticked.</span></div>`;
@@ -10019,6 +10039,7 @@ document.addEventListener('click', (e) => {
     case 'vault-folder-new': case 'vault-folder-rename': case 'vault-folder-delete': vaultFolderAction(action, { ...btn.dataset }); break;
     case 'open-doc': openAssetForm('doc', { id }); break;
     case 'files-go': filesGo(btn.dataset.key, id); break;
+    case 'task-source': { const t = DB.tasks.find((x) => x.id === id); const src = t && taskSource(t); if (src) { closeTaskDrawer(); closeAssetForm(true); src.go(); } break; }
     case 'viewer-go': Viewer.close(); closeAssetForm(true); filesGo(btn.dataset.key, id); break;
     case 'utility-task': utilityMakeTask(id); break;
     case 'rental-delete': {

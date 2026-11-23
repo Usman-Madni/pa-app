@@ -108,6 +108,19 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   open('rental', { id: r.id });
   const tasks = doc.querySelector('#modal .rental-tasks').textContent;
   check(/Plaza lease Rent \(\w{3} \d{2}\)/.test(tasks) &&/Renew rental agreement \(Plaza lease\)/.test(tasks), 'the agreement shows its Collect rent and Renew tasks');
+  win.eval('closeAssetForm')(true);
+  PA.state.openTask = collect.id;
+  PA.renderDrawer();
+  const fromBtn = doc.querySelector('#drawer [data-action="task-source"]');
+  check(fromBtn && /From\s*Plaza lease/.test(fromBtn.textContent), 'the rent task says where it\'s from');
+  fromBtn.click();
+  check(!PA.state.openTask && modal()?.dataset.form === 'asset-rental', 'and From opens the agreement');
+  const own = PA.addTask({ title: 'Just mine' });
+  PA.state.openTask = own.id;
+  PA.renderDrawer();
+  check(!doc.querySelector('#drawer [data-action="task-source"]'), 'your own task has no From');
+  PA.state.openTask = null;
+  PA.renderDrawer();
   doc.querySelector('#modal .rental-tasks [data-action="files-go"]').click();
   check(PA.state.openTask && doc.body.classList.contains('drawer-over') && modal()?.dataset.form === 'asset-rental', 'opening a task from the agreement: its panel goes on top, the agreement stays under it');
   doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -127,7 +140,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   submitForm(win, 'asset-rental', { dueDay: '18' });
 
   // --- Ticking Collect rent asks what came in ---
-  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+  doc.querySelector('#modal [data-action="asset-cancel"]')?.click();
   doc.querySelector('[data-view="tasks"]').click();
   doc.querySelector(`#main [data-action="toggle-task"][data-id="${collect.id}"]`).click();
   confirmDone(win);
