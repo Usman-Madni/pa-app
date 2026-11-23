@@ -84,8 +84,26 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   doc.querySelector('#modal [data-action="asset-cancel"]').click();
   main().querySelector('[data-util-tab="overview"]').click();
   const ov = main().textContent;
-  check(/Paid Rs 4,500/.test(ov) && /This year so far, against last year/.test(ov), 'Overview: paid this month, and this year against last');
-  check(main().querySelectorAll('.kind-bar').length === 12, 'and month by month');
+  check(main().querySelectorAll('.util-stats .stat-card').length === 3 && /This month/.test(ov) && new RegExp(`${y} so far|${y}`).test(ov) && /Average a month/.test(ov), 'Overview: three headline numbers (this month, the year so far, the average a month)');
+  const gasGroup = [...main().querySelectorAll('.util-group')].find((g) => /Gas/.test(g.querySelector('.util-group-head').textContent));
+  check(gasGroup && gasGroup.querySelectorAll('.util-row:not(.util-head-row)').length === 2 && /Rs 4,500/.test(gasGroup.textContent) && /Paid/.test(gasGroup.textContent) && gasGroup.querySelectorAll('.util-spark').length === 2, 'a group per type: a row per connection with its last bill (Paid), its year and a 12-month trend');
+  check(/<polyline points="[\d, ]+"/.test(win.eval('sparkline')([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])) && /–/.test(win.eval('sparkline')(Array(12).fill(0))), 'the trend line: drawn from the 12 months, a dash when there\'s nothing');
+  check(main().querySelectorAll('.um-row').length === 12 && /against/.test(main().textContent), 'and month by month, this year against last');
+  // filters: a property; all time
+  const fsel = main().querySelector('[data-util-prop]');
+  fsel.value = house.id;
+  fsel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check([...main().querySelectorAll('.util-row:not(.util-head-row) .util-name')].map((x) => x.textContent).join('|').includes('Home') && !main().textContent.includes('Shop'), 'the property filter shows only its connections');
+  main().querySelector('[data-util-tab="Gas"]').click();
+  check(main().querySelector('[data-util-prop]').value === house.id && main().querySelectorAll('.utility-card').length === 1, 'and stays on a type\'s tab');
+  main().querySelector('[data-util-tab="overview"]').click();
+  const ysel = main().querySelector('[data-util-year]');
+  ysel.value = 'all';
+  ysel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  check(/All time/.test(main().querySelector('.util-stats').textContent) && !main().querySelector('.util-stats .pill') && /since/.test(main().querySelector('.util-stats').textContent), 'All time: totals since the first bill, with nothing to compare');
+  PA.device.set('utilProp', '');
+  PA.device.set('utilYear', y);
+  PA.render();
 
   // --- A property shows its utilities ---
   win.eval('openAssetForm')('asset', { id: house.id });

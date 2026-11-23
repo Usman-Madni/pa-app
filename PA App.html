@@ -327,6 +327,35 @@ button:disabled { cursor: not-allowed; }
 .share-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .share-pct { display: flex; align-items: center; gap: 4px; }
 .share-pct .input { width: 80px; }
+.util-filters { gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.util-filters .field { flex: 0 1 220px; }
+.util-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.util-stats .stat-card { display: flex; flex-direction: column; gap: 2px; }
+.util-stats .stat-card b { font-size: var(--t-lg); }
+.util-group { padding: 0; margin-bottom: 12px; overflow: hidden; }
+.util-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.util-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.7fr) 94px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border); }
+.util-head-row { border-top: 0; padding-top: 6px; padding-bottom: 2px; font-size: var(--t-xs); color: var(--muted); }
+.util-name { min-width: 0; overflow-wrap: anywhere; }
+.util-num { text-align: right; }
+.util-head-row span:nth-child(3), .util-head-row span:nth-child(4) { text-align: right; }
+.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.util-legend { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
+.util-legend .sw { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+.sw.now, .um-bar.now { background: var(--accent); }
+.sw.was, .um-bar.was { background: var(--border); }
+.util-months { display: flex; flex-direction: column; gap: 6px; }
+.um-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 110px; align-items: center; gap: 8px; }
+.um-bars { display: flex; flex-direction: column; gap: 2px; }
+.um-bar { height: 6px; border-radius: 3px; min-width: 0; }
+.um-row .kb-name { grid-column: 1; grid-row: 1; }
+.um-row .um-bars { grid-column: 2; grid-row: 1; }
+.um-row .kb-val { grid-column: 3; grid-row: 1; text-align: right; }
+@media (max-width: 700px) {
+  .util-stats { grid-template-columns: 1fr; }
+  .util-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .util-row .util-num:nth-of-type(4), .util-row .util-spark, .util-head-row { display: none; }
+}
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .split-row .field { margin: 0; }
 .split-car { display: flex; align-items: center; gap: 4px; padding-bottom: 10px; }
@@ -7129,6 +7158,21 @@ const Utilities = {
     const ids = new Set(cs.map((c) => c.id));
     return DB.bills.filter((b) => ids.has(b.utility) && Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto).reduce((t, b) => t + this.figures(b).eff, 0);
   },
+  billsFor(cs) { const ids = new Set(cs.map((c) => c.id)); return DB.bills.filter((b) => ids.has(b.utility)); },
+  // Over a year (up to a month), or all time ('all'): the effective cost, the bills, credits, units, and how many months
+  // had a bill.
+  over(cs, year, upto = 12) {
+    const bs = this.billsFor(cs).filter((b) => year === 'all' || (Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto));
+    const t = bs.reduce((a, b) => { const x = this.figures(b); return { eff: a.eff + x.eff, amount: a.amount + x.amount, credit: a.credit + x.credit, units: a.units + x.units }; }, { eff: 0, amount: 0, credit: 0, units: 0 });
+    t.months = new Set(bs.map((b) => this.monthOf(b))).size;
+    return t;
+  },
+  // The last 12 months' effective cost, oldest first (for a trend line).
+  last12(cs) {
+    const out = [];
+    for (let i = 11, ym = ymAdd(ymOf(todayISO()), -11); i >= 0; i--, ym = ymAdd(ym, 1)) out.push(this.billsFor(cs).filter((b) => this.monthOf(b) === ym).reduce((t, b) => t + this.figures(b).eff, 0));
+    return out;
+  },
   // What credits (net metering) took off the bills in a year (up to a month).
   credit(cs, year, upto = 12) {
     const ids = new Set(cs.map((c) => c.id));
@@ -7321,38 +7365,110 @@ function utilityMain(c) {
     </div>
     <div class="value-history"><div class="meta">Bill task</div>${t ? `<div class="vh-row"><button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${ic('repeat', 'sm')} ${esc(fullTitle(t))}</button><span class="meta">Due ${esc(fmtDate(t.due))}</span><span></span></div>` : '<p class="meta" style="margin:0">No bill task.</p>'}</div>`;
 }
+// The Utilities page's filters (this device, kept while you move between tabs): which property ('' all, 'none' not
+// linked to one, or a property) and which year (or 'all').
+function utilFilters() {
+  const props = DB.assets.filter((a) => a.kind === 'property').sort((a, b) => a.name.localeCompare(b.name));
+  let prop = device.get('utilProp', '');
+  if (prop && prop !== 'none' && !props.some((a) => a.id === prop)) prop = '';
+  const now = new Date().getFullYear();
+  const years = [...new Set([now, ...DB.bills.map((b) => Number(Utilities.monthOf(b).slice(0, 4))).filter(Boolean)])].sort((a, b) => b - a);
+  let year = device.get('utilYear', now);
+  if (year !== 'all' && !years.includes(Number(year))) year = now;
+  return { props, prop, years, year: year === 'all' ? 'all' : Number(year), match: (c) => !prop || (prop === 'none' ? !c.property : c.property === prop) };
+}
+function utilFilterRow(f) {
+  return `<div class="row util-filters">
+    ${f.props.length ? `<label class="field">Property<select class="input" data-util-prop><option value="">All properties</option>${f.props.map((a) => `<option value="${esc(a.id)}" ${a.id === f.prop ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}<option value="none" ${f.prop === 'none' ? 'selected' : ''}>Not linked to a property</option></select></label>` : ''}
+    <label class="field">Year<select class="input" data-util-year>${f.years.map((y) => `<option value="${y}" ${y === f.year ? 'selected' : ''}>${y}</option>`).join('')}<option value="all" ${f.year === 'all' ? 'selected' : ''}>All time</option></select></label>
+  </div>`;
+}
+// The period the figures cover, and the one they're compared with: this year so far against the same months last year;
+// a past year against the year before; all time with nothing to compare.
+function utilPeriod(year) {
+  const now = new Date();
+  if (year === 'all') return { label: 'All time', cur: (cs) => Utilities.over(cs, 'all'), prev: null };
+  const upto = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+  return { label: upto < 12 ? `${year} so far` : String(year), vsLabel: upto < 12 ? `Jan–${MONTHS_SHORT[upto - 1]} ${year - 1}` : String(year - 1),
+    cur: (cs) => Utilities.over(cs, year, upto), prev: (cs) => Utilities.over(cs, year - 1, upto) };
+}
+const pctChange = (now, was) => (was ? `<span class="pill ${now > was ? 'zk-left' : 'ok'}">${now >= was ? '+' : ''}${Math.round(((now - was) / was) * 100)}%</span>` : '');
+// A small trend line of the last 12 months.
+function sparkline(values) {
+  const max = Math.max(...values);
+  if (!max) return '<span class="meta">–</span>';
+  const pts = values.map((v, i) => `${Math.round((i / (values.length - 1)) * 88) + 1},${Math.round(25 - (v / max) * 22)}`).join(' ');
+  return `<svg class="spark" width="90" height="28" viewBox="0 0 90 28" aria-hidden="true"><polyline points="${pts}"/></svg>`;
+}
+// One type's group: its totals for the period, then a row per connection.
+function utilGroup(type, cs, per) {
+  const t = per.cur(cs);
+  const p = per.prev ? per.prev(cs) : null;
+  const u = Utilities.unitsLabel(type);
+  const elec = sameName(type, 'Electricity');
+  const bits = [plural(cs.length, 'connection'), `${rupees(t.eff)} ${per.label.toLowerCase()}`];
+  if (u && t.units) bits.push(`${t.units.toLocaleString('en-IN')} ${u.toLowerCase()}, ${perUnit(t.eff / t.units)} a ${u === 'Litres' ? 'litre' : 'unit'}`);
+  if (elec && t.credit) bits.push(`net metering saved ${rupees(t.credit)}`);
+  const rows = cs.map((c) => {
+    const last = Utilities.bills(c)[0];
+    const lx = last && Utilities.figures(last);
+    const ct = per.cur([c]);
+    const cp = per.prev ? per.prev([c]) : null;
+    const task = Utilities.openTask(c);
+    const prop = c.property && DB.assets.find((a) => a.id === c.property);
+    return `<div class="util-row">
+      <div class="util-name"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${esc(c.name)}</button> ${whoBadges(c)}
+        <div class="meta">${[prop ? prop.name : '', task?.due ? `next due ${shortDate(task.due)}` : '', elec && ct.credit ? `saved ${rupees(ct.credit)}` : ''].filter(Boolean).map(esc).join(' · ')}</div></div>
+      <div class="util-last">${last ? `${esc(ymLabel(Utilities.monthOf(last)))} · ${rupees(lx.eff)}<div>${last.date ? '<span class="pill">Paid</span>' : '<span class="pill zk-left">Unpaid</span>'}</div>` : '<span class="meta">No bills yet</span>'}</div>
+      <div class="util-num">${rupees(ct.eff)}</div>
+      <div class="util-num">${cp ? pctChange(ct.eff, cp.eff) || '<span class="meta">–</span>' : ''}</div>
+      <div class="util-spark">${sparkline(Utilities.last12([c]))}</div>
+    </div>`;
+  }).join('');
+  return `<div class="card util-group">
+    <div class="util-group-head">${ic(Utilities.icon(type))}<b>${esc(type)}</b><span class="meta">${bits.map(esc).join(' · ')}</span>${p ? pctChange(t.eff, p.eff) : ''}</div>
+    <div class="util-row util-head-row"><span>Connection</span><span>Last bill</span><span>${esc(per.label)}</span><span>${per.prev ? `vs ${esc(per.vsLabel)}` : ''}</span><span>12 months</span></div>
+    ${rows}
+  </div>`;
+}
 function renderUtilities() {
+  const f = utilFilters();
   const all = Utilities.list();
+  const shown = all.filter(f.match);
   const types = Utilities.types();
   let tab = device.get('utilTab', 'overview');
   if (tab !== 'overview' && !types.includes(tab)) tab = 'overview';
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
+  const per = utilPeriod(f.year);
+  const ym = ymOf(todayISO());
   let body;
-  if (tab === 'overview') {
-    const rows = all.map((c) => {
-      const st = Utilities.status(c);
-      const pill = st.state === 'unpaid' ? `<span class="pill zk-left">Unpaid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'paid' ? `<span class="pill">Paid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
-      return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(c.type))}</span><div class="body clickable" data-util-tab="${esc(c.type)}"><div class="title">${esc(c.name)} ${whoBadges(c)}</div><div class="meta"><span>${esc(c.type)}</span>${Utilities.bills(c)[0] ? `<span>Last ${rupees(Utilities.bills(c)[0].amount)}</span>` : ''}</div></div>${pill}</li>`;
-    }).join('');
-    const byType = types.map((t) => ({ t, cs: all.filter((c) => sameName(c.type, t)) })).filter((x) => x.cs.length);
-    const months = Utilities.months(all, y);
-    const max = Math.max(1, ...months);
-    body = all.length ? `
-      <h2 class="vault-h">This month</h2><div class="card"><ul class="list">${rows}</ul></div>
-      <h2 class="vault-h">This year so far, against last year</h2>
-      <div class="card"><ul class="list">${byType.map(({ t, cs }) => { const now = Utilities.sum(cs, y, m); const was = Utilities.sum(cs, y - 1, m); return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(t))}</span><div class="body"><div class="title">${esc(t)}</div><div class="meta"><span>Last year to ${esc(MONTHS_SHORT[m - 1])}: ${rupees(was)}</span>${Utilities.unitsLabel(t) && Utilities.units(cs, y, m) ? `<span>${Utilities.units(cs, y, m).toLocaleString('en-IN')} ${esc(Utilities.unitsLabel(t).toLowerCase())}, ${perUnit(now / Utilities.units(cs, y, m))} each</span>` : ''}${Utilities.credit(cs, y, m) ? `<span>${esc(Utilities.creditLabel(t).replace(' credit', ''))} saved ${rupees(Utilities.credit(cs, y, m))}</span>` : ''}</div></div><b>${rupees(now)}</b>${was ? `<span class="pill ${now > was ? 'zk-left' : ''}">${now >= was ? '+' : ''}${Math.round(((now - was) / was) * 100)}%</span>` : ''}</li>`; }).join('')}</ul></div>
-      <h2 class="vault-h">Month by month, ${y}</h2>
-      <div class="card"><div class="kind-bars">${months.map((v, i) => `<div class="kind-bar" title="${esc(MONTHS_SHORT[i])}: ${esc(rupees(v))}"><span class="kb-name">${esc(MONTHS_SHORT[i])}</span><span class="kb-track"><span class="kb-fill" style="width:${barPct(v, max)}%"></span></span><span class="kb-val">${v ? rupees(v) : ''}</span></div>`).join('')}</div></div>`
-      : `<div class="card empty-state"><p><b>Nothing here yet.</b> Add your electricity, gas, water, phone and internet: each gets a bill task that reminds you every month, its bills go in the Vault, and here you see what they cost.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="Electricity">${ic('plus', 'sm')}Add a connection</button></div>`;
+  if (!all.length) {
+    body = `<div class="card empty-state"><p><b>Nothing here yet.</b> Add your electricity, gas, water, phone, internet and fuel: each gets a bill task that reminds you every month, its bills go in your folder, and here you see what they cost.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab === 'overview' ? 'Electricity' : tab)}">${ic('plus', 'sm')}Add a connection</button></div>`;
+  } else if (tab === 'overview') {
+    const month = Utilities.billsFor(shown).filter((b) => Utilities.monthOf(b) === ym);
+    const unpaid = Utilities.billsFor(shown).filter((b) => !b.date);
+    const t = per.cur(shown);
+    const p = per.prev ? per.prev(shown) : null;
+    const byType = types.map((ty) => ({ ty, cs: shown.filter((c) => sameName(c.type, ty)) })).filter((x) => x.cs.length);
+    const chartYear = f.year === 'all' ? new Date().getFullYear() : f.year;
+    const now = Utilities.months(shown, chartYear);
+    const was = Utilities.months(shown, chartYear - 1);
+    const max = Math.max(1, ...now, ...was);
+    body = `${utilFilterRow(f)}
+      <div class="stat-row util-stats">
+        <div class="stat-card"><span class="meta">This month (${esc(ymLabel(ym))})</span><b>${rupees(month.reduce((a, b) => a + Utilities.figures(b).eff, 0))}</b><span class="meta ${unpaid.length ? 'late' : ''}">${unpaid.length ? `${plural(unpaid.length, 'bill')} unpaid · ${rupees(unpaid.reduce((a, b) => a + Utilities.figures(b).eff, 0))}` : 'Nothing unpaid'}</span></div>
+        <div class="stat-card"><span class="meta">${esc(per.label)}</span><b>${rupees(t.eff)}</b><span class="meta">${p ? `${rupees(p.eff)} in ${esc(per.vsLabel)} ${pctChange(t.eff, p.eff)}` : `since ${esc(ymLabel(Utilities.billsFor(shown).map((b) => Utilities.monthOf(b)).sort()[0] || ym))}`}</span></div>
+        <div class="stat-card"><span class="meta">Average a month</span><b>${rupees(t.months ? t.eff / t.months : 0)}</b><span class="meta">over ${plural(t.months, 'month')} with bills</span></div>
+      </div>
+      ${byType.map(({ ty, cs }) => utilGroup(ty, cs, per)).join('') || '<div class="card empty-state"><p>No connections for this property.</p></div>'}
+      <h2 class="vault-h">Month by month, ${chartYear} against ${chartYear - 1}</h2>
+      <div class="card"><p class="meta util-legend"><span class="sw now"></span>${chartYear} <span class="sw was"></span>${chartYear - 1}</p><div class="util-months">${now.map((v, i) => `<div class="um-row" title="${esc(MONTHS_SHORT[i])}: ${esc(rupees(v))} (${esc(rupees(was[i]))} in ${chartYear - 1})"><span class="kb-name">${esc(MONTHS_SHORT[i])}</span><span class="um-bars"><span class="um-bar now" style="width:${barPct(v, max)}%"></span><span class="um-bar was" style="width:${barPct(was[i], max)}%"></span></span><span class="kb-val">${v ? rupees(v) : ''}</span></div>`).join('')}</div></div>`;
   } else {
-    const cs = all.filter((c) => sameName(c.type, tab));
-    body = cs.length ? cs.map(utilityCard).join('') : `<div class="card empty-state"><p>No ${esc(tab.toLowerCase())} yet.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab)}">${ic('plus', 'sm')}Add ${esc(tab.toLowerCase())}</button></div>`;
+    const cs = shown.filter((c) => sameName(c.type, tab));
+    body = `${utilFilterRow(f)}${cs.length ? utilGroup(tab, cs, per) + cs.map(utilityCard).join('') : `<div class="card empty-state"><p>No ${esc(tab.toLowerCase())}${f.prop ? ' for this property' : ''} yet.</p><button class="btn primary edit-only" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab)}">${ic('plus', 'sm')}Add ${esc(tab.toLowerCase())}</button></div>`}`;
   }
   return `
     <div class="page-head">
-      <div><h1>Utilities</h1><p class="sub">${all.length ? plural(all.length, 'connection') : 'Electricity, gas, water, phone, internet'}</p></div>
+      <div><h1>Utilities</h1><p class="sub">${all.length ? plural(all.length, 'connection') : 'Electricity, gas, water, phone, internet, fuel'}</p></div>
       <div class="row edit-only page-actions"><button class="btn primary" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab === 'overview' ? 'Electricity' : tab)}">${ic('plus', 'sm')}Add a connection</button></div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${['overview', ...types].map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-util-tab="${esc(k)}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : esc(k)}</button>`).join('')}</div>
@@ -10786,6 +10902,8 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-doc-track]')) { $('#modal').querySelectorAll('.doc-full').forEach((x) => { x.style.display = e.target.checked ? '' : 'none'; }); return; }
+  if (e.target.matches?.('[data-util-prop]')) { device.set('utilProp', e.target.value); render(); return; }
+  if (e.target.matches?.('[data-util-year]')) { device.set('utilYear', e.target.value === 'all' ? 'all' : Number(e.target.value)); render(); return; }
   if (e.target.matches?.('[data-file-to]') && !state.readOnly) { taskFileTo(currentTask(), e.target.value); return; }
   if (e.target.matches?.('[data-vault-link]') && !state.readOnly) {
     const [docId, attId] = e.target.value.split(':');
