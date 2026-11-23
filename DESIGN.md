@@ -67,3 +67,6 @@ Something with a lot in it (a rental agreement, a car or other asset, a utility 
 rather than a small pop-up: `box(…, { sheet, fold, top, side })`. Its fields fold under **Details** once it exists, a
 summary row with its main buttons runs across the top, and its sections are cards; on a wide screen the long part
 (a ledger, upkeep, bills) sits in a column beside the rest. On a phone the sheet is full screen.
+
+## The Data page and SCHEMA
+`SCHEMA` (beside `DATA_KEYS`) describes every store: `kind` (entry: happens on a day; list: added to and picked from; system: bookkeeping, not shown), the pop-up a row opens (`open`), and its fields in order as `[field, heading, type, shown?]`. The Data page draws its tables from it, and every test checks on closing that each field a record has is listed there (`schemaCheck` in tests/helpers.js). A new field goes in SCHEMA in the same change.

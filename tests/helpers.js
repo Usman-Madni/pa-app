@@ -137,7 +137,8 @@ function loadApp(opts = {}) {
     },
   });
   const win = dom.window;
-  return { dom, win, doc: win.document, PA: win.PA, errors, close: () => win.close() };
+  open.push(win);
+  return { dom, win, doc: win.document, PA: win.PA, errors, close: () => { schemaCheck(win); open.splice(open.indexOf(win), 1); win.close(); } };
 }
 
 // Fill and submit a form in the app.
@@ -176,11 +177,28 @@ async function answer(win, yes = true, text) {
 }
 
 let failures = 0;
+// Every field a record has must be listed in the app's SCHEMA (the Data page and the description of the data). It's
+// checked on every app a test opens, when it closes, so a new field can't slip in unlisted.
+const open = [];
+function schemaCheck(win) {
+  let SCHEMA, ALWAYS, KEYS;
+  try { SCHEMA = win.eval('SCHEMA'); ALWAYS = win.eval('SCHEMA_ALWAYS'); KEYS = win.eval('DATA_KEYS'); } catch { return; }
+  const DB = win.PA && win.PA.DB;
+  if (!SCHEMA || !DB) return;
+  const missing = new Set();
+  for (const key of KEYS) {
+    if (!SCHEMA[key]) { missing.add(key + ' (no table)'); continue; }
+    const known = new Set([...SCHEMA[key].fields, ...ALWAYS].map((x) => x[0]));
+    for (const r of DB[key] || []) for (const k of Object.keys(r || {})) if (!known.has(k)) missing.add(key + '.' + k);
+  }
+  if (missing.size) { failures++; console.log('  FAIL every field is in SCHEMA (missing: ' + [...missing].join(', ') + ')'); }
+}
 function check(cond, label) {
   if (cond) console.log('  ok   ' + label);
   else { failures++; console.log('  FAIL ' + label); }
 }
 function done() {
+  for (const w of open.splice(0)) schemaCheck(w);
   if (failures) { console.log(`${failures} check(s) failed`); process.exit(1); }
   process.exit(0);
 }

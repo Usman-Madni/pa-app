@@ -334,6 +334,15 @@ button:disabled { cursor: not-allowed; }
 .util-stats .stat-card b { font-size: var(--t-lg); }
 .util-group { padding: 0; margin-bottom: 12px; overflow: hidden; }
 .util-scroll { overflow-x: auto; }
+.data-card { padding: 0; overflow: hidden; }
+.data-wrap { max-height: 70vh; }
+.data-table td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.data-table td:last-child { min-width: 0; white-space: nowrap; }
+.data-table .ut-n { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .dt-sys { color: var(--muted); font-size: var(--t-xs); }
+.data-table th .dt-sort { color: inherit; font: inherit; padding: 0; }
+.data-table tbody tr:not([data-action]) { cursor: default; }
+.tab-split { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--border); flex: none; }
 .util-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 .util-table th, .util-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
 .util-table tr:last-child td { border-bottom: 0; }
@@ -935,6 +944,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
     <button class="nav-btn more-item" data-view="musings" title="Musings (7)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat (8)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="Vault (9)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
+    <button class="nav-btn more-item" data-view="data" title="Data: everything as tables"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-table"/></svg></span><span>Data</span></button>
     <button class="nav-btn more-item" data-view="notices" title="Notifications (N)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
     <button class="nav-btn more-item" data-view="settings" title="Settings (0)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
@@ -1026,6 +1036,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
 <symbol id="i-alert-triangle" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/></symbol>
 <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M13.41 10.59l2.59 -2.59"/><path d="M7 12a5 5 0 0 1 5 -5"/></symbol>
 <symbol id="i-search" viewBox="0 0 24 24"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14z"/><path d="M3 10h18"/><path d="M10 3v18"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
 
@@ -2865,6 +2876,63 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // Every record above also gets `updated` (ms): when it last changed (see Stamps; notes already had it).
 const DATA_KEYS = ['tasks', 'notes', 'events', 'buckets', 'labels', 'notices', 'trash', 'people', 'assets', 'rates', 'zakat', 'zakatPay', 'docs', 'hijriFix', 'upkeep', 'musings', 'folders', 'utilities', 'bills', 'rentals', 'deleted'];
 const RECORD_KEYS = DATA_KEYS.filter((k) => k !== 'deleted'); // lists of records, merged record by record
+// The schema: every store Butler keeps, as a table. Each says what it is (an entry: something that happens on a day;
+// a list: things you add to and pick from; system: Butler's own bookkeeping, not shown on the Data page), the pop-up
+// a row opens, and its fields in order: [field, heading, type, shown?]. Types: text, date (YYYY-MM-DD), month (YYYY-MM), when (a due
+// date, maybe with a time), ms (a moment in milliseconds), money, num, bool, ref:<store> (one id), refs:<store>
+// (ids), people, list (how many), obj (worked out, shown as a summary). The Data page draws its columns from this,
+// and a test checks that every field a record has is listed here, so a new field can't slip in unseen.
+// shown: false leaves a field out of the table (it's still listed, and still in the data file).
+const SCHEMA = {
+  tasks: { label: 'Tasks', kind: 'entry', open: 'task', fields: [
+    ['title', 'Title', 'text'], ['period', 'Period', 'text'], ['due', 'Due', 'when'], ['start', 'Start', 'date'], ['done', 'Done', 'bool'], ['completedAt', 'Done on', 'ms'],
+    ['priority', 'Priority', 'text'], ['progress', 'Progress', 'text'], ['bucket', 'Bucket', 'ref:buckets'], ['labels', 'Labels', 'refs:labels'], ['people', 'Whose', 'people'],
+    ['repeat', 'Repeat', 'obj'], ['reminders', 'Reminders', 'list'], ['checklist', 'Checklist', 'list'], ['attachments', 'Files', 'list'], ['notes', 'Notes', 'text', false],
+    ['myDay', 'My Day', 'date', false], ['completedAllDay', 'Done on a day', 'bool', false], ['seriesId', 'Series', 'text', false], ['seriesIndex', 'Copy', 'num', false], ['spawnedNext', 'Next copy', 'text', false],
+    ['todo', 'To Do', 'obj', false], ['fileTo', 'Files go to', 'text', false], ['utility', 'Connection', 'ref:utilities', false], ['rental', 'Agreement', 'ref:rentals', false], ['rentKind', 'Rent task', 'text', false],
+    ['spawnSig', 'Next copy as made', 'obj', false], ['created', 'Added', 'ms', false]] },
+  events: { label: 'Events', kind: 'entry', fields: [['title', 'Title', 'text'], ['date', 'Date', 'date'], ['time', 'Time', 'text'], ['people', 'Whose', 'people']] },
+  notes: { label: 'Notes', kind: 'entry', fields: [['title', 'Title', 'text'], ['body', 'Text', 'text', false], ['people', 'Whose', 'people']] },
+  bills: { label: 'Bills', kind: 'entry', open: 'bill', fields: [
+    ['month', 'Month', 'month'], ['utility', 'Connection', 'ref:utilities'], ['units', 'Units', 'num'], ['amount', 'Amount', 'money'], ['credit', 'Credit', 'money'], ['date', 'Paid on', 'date'],
+    ['period', 'Period', 'text', false], ['split', 'Split by car', 'list'], ['task', 'Task', 'ref:tasks', false], ['note', 'Note', 'text'], ['attachments', 'Files', 'list']] },
+  upkeep: { label: 'Upkeep log', kind: 'entry', open: 'upkeep', fields: [
+    ['date', 'Date', 'date'], ['asset', 'For', 'ref:assets'], ['type', 'Type', 'text'], ['item', 'Item', 'text'], ['cost', 'Cost', 'money'], ['vendor', 'Vendor', 'text'], ['km', 'Km', 'num'],
+    ['qty', 'How many', 'num', false], ['notes', 'Notes', 'text', false], ['attachments', 'Files', 'list'], ['imported', 'Imported', 'bool', false], ['created', 'Added', 'ms', false]] },
+  rates: { label: 'Rates', kind: 'entry', open: 'rates', fields: [['date', 'Date', 'date'], ['gold', 'Gold a tola', 'obj'], ['silver', 'Silver a tola', 'money'], ['fx', 'Currencies', 'obj'], ['auto', 'Filled in by Butler', 'bool']] },
+  zakat: { label: 'Zakat years', kind: 'entry', open: 'zakat-record', fields: [
+    ['person', 'Whose', 'ref:people'], ['hyear', 'Islamic year', 'num'], ['date', 'Zakat day', 'date'], ['status', 'Status', 'text'], ['total', 'Counted', 'money'], ['nisab', 'Nisab', 'money'], ['due', 'Due', 'money'],
+    ['dueBy', 'Pay by', 'date'], ['items', 'Items', 'list'], ['rates', 'Rates used', 'obj', false], ['roundUp', 'Round up', 'num', false], ['excess', 'Extra paid', 'text', false], ['raw', 'Before rounding', 'money', false],
+    ['made', 'Made', 'ms', false], ['doneAt', 'Done', 'ms', false], ['imported', 'Imported', 'bool', false]] },
+  zakatPay: { label: 'Zakat paid', kind: 'entry', open: 'zakat-pay', fields: [['date', 'Date', 'date'], ['person', 'Whose', 'ref:people'], ['amount', 'Amount', 'money'], ['to', 'To', 'text'], ['record', 'For year', 'ref:zakat']] },
+  musings: { label: 'Musings', kind: 'entry', fields: [['title', 'Title', 'text'], ['written', 'Written', 'date'], ['status', 'Status', 'text'], ['collections', 'Collections', 'list'], ['people', 'Whose', 'people'],
+    ['body', 'Text', 'text', false], ['cover', 'Cover', 'text', false], ['attachments', 'Pictures', 'list'], ['created', 'Added', 'ms', false]] },
+  people: { label: 'People', kind: 'list', fields: [['name', 'Name', 'text'], ['zakat', 'Zakat day', 'obj'], ['color', 'Colour', 'text', false]] },
+  assets: { label: 'Assets', kind: 'list', open: 'asset', fields: [
+    ['name', 'Name', 'text'], ['kind', 'Kind', 'text'], ['karat', 'Karat', 'text'], ['grams', 'Grams', 'num'], ['unit', 'Typed in', 'text', false], ['currency', 'Currency', 'text'], ['values', 'Values', 'list'],
+    ['owners', 'Owners', 'obj'], ['zakat', 'Zakatable', 'bool', false], ['acquired', 'Acquired', 'date'], ['closed', 'Closed', 'date'], ['plan', 'Upkeep plan', 'list', false], ['car', 'Car', 'obj', false],
+    ['readings', 'Readings', 'list', false], ['attachments', 'Files', 'list'], ['notes', 'Notes', 'text', false], ['imported', 'Imported', 'bool', false], ['created', 'Added', 'ms', false]] },
+  docs: { label: 'Documents', kind: 'list', open: 'doc', fields: [
+    ['name', 'Name', 'text'], ['cat', 'Category', 'text'], ['type', 'Type', 'text'], ['number', 'Number', 'text'], ['issued', 'Issued', 'date'], ['expires', 'Expires', 'date'], ['renewMonths', 'Remind (months)', 'num'],
+    ['people', 'Whose', 'people'], ['assets', 'Assets', 'refs:assets'], ['folder', 'Folder', 'text'], ['plain', 'Plain file', 'bool'], ['attachments', 'Files', 'list'], ['notes', 'Notes', 'text', false],
+    ['place', 'Kept with', 'obj', false], ['named', 'Named after', 'obj', false], ['term', 'Agreement term', 'text', false], ['bill', 'Bill', 'ref:bills', false], ['rental', 'Agreement', 'ref:rentals', false],
+    ['fromTask', 'From task', 'ref:tasks', false], ['created', 'Added', 'ms', false]] },
+  utilities: { label: 'Connections', kind: 'list', open: 'utility', fields: [
+    ['name', 'Name', 'text'], ['type', 'Type', 'text'], ['provider', 'Provider', 'text'], ['account', 'Account', 'text'], ['property', 'Property', 'ref:assets'], ['billDay', 'Bill day', 'text'], ['billFor', 'Bill is for', 'text'],
+    ['cars', 'Cars', 'refs:assets'], ['people', 'Whose', 'people'], ['notes', 'Notes', 'text', false], ['created', 'Added', 'ms', false]] },
+  rentals: { label: 'Agreements', kind: 'list', open: 'rental', fields: [
+    ['name', 'Name', 'text'], ['properties', 'Properties', 'refs:assets'], ['tenant', 'Tenant', 'text'], ['phone', 'Phone', 'text'], ['deposit', 'Deposit', 'money'], ['dueDay', 'Rent day', 'num'], ['renewMonths', 'Remind (months)', 'num'],
+    ['terms', 'Terms', 'list'], ['payments', 'Payments', 'list'], ['shares', 'Shares', 'obj', false], ['ended', 'Ended', 'date'], ['people', 'Whose', 'people'], ['notes', 'Notes', 'text', false], ['created', 'Added', 'ms', false]] },
+  buckets: { label: 'Buckets', kind: 'list', fields: [['name', 'Name', 'text'], ['order', 'Order', 'num'], ['butler', "Butler's tasks", 'bool'], ['area', 'For', 'text']] },
+  labels: { label: 'Labels', kind: 'list', fields: [['name', 'Name', 'text'], ['color', 'Colour', 'text']] },
+  folders: { label: 'Folders', kind: 'list', fields: [['path', 'Folder', 'text'], ['top', 'Whose', 'text'], ['area', 'Area', 'text', false]] },
+  hijriFix: { label: 'Moon corrections', kind: 'list', fields: [['hyear', 'Islamic year', 'num'], ['month', 'Month', 'num'], ['shift', 'Shift (days)', 'num']] },
+  notices: { label: 'Notifications', kind: 'system', fields: [['at', 'When', 'ms'], ['text', 'Text', 'text'], ['task', 'Task', 'ref:tasks'], ['read', 'Read', 'bool']] },
+  trash: { label: 'Trash', kind: 'system', fields: [['kind', 'Kind', 'text'], ['item', 'Record', 'obj'], ['at', 'Deleted', 'ms']] },
+  deleted: { label: 'Deleted markers', kind: 'system', fields: [['key', 'Store', 'text'], ['at', 'When', 'ms']] },
+};
+// Every record also has these (shown last, faded): its id, and when it last changed (for the merge between devices).
+const SCHEMA_ALWAYS = [['id', 'ID', 'text'], ['updated', 'Changed', 'ms']];
 const REQUIRED_KEYS = ['tasks', 'notes', 'events']; // files from before buckets/labels have only these
 
 // Every task field with its default. Old tasks get the missing fields filled in on load.
@@ -3957,7 +4025,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, property: renderProperty, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
+  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, data: renderData, property: renderProperty, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -4117,7 +4185,7 @@ function renderSearch() {
 }
 
 // A filter box on each list page: rows whose text doesn't have every word typed are hidden (only on this screen).
-const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'property', 'utilities', 'zakat', 'vault', 'notices', 'trash'];
+const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'property', 'utilities', 'data', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
   for (const el of $$('#main li.item, #main .notice-row, #main .task-card, #main [data-find]')) {
@@ -7526,6 +7594,108 @@ function renderUtilities() {
     <div class="tabs asset-tabs" role="tablist">${['overview', ...types].map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-util-tab="${esc(k)}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : esc(k)}</button>`).join('')}</div>
     <div class="asset-body">${body}</div>`;
 }
+// The Data page: every store as a table, entries first, then lists (from SCHEMA). Sort by a column's heading, filter
+// with Filter this page, open a row's record, export the table. Shows only what the person picker shows.
+const DataView = {
+  keys(kind) { return Object.keys(SCHEMA).filter((k) => SCHEMA[k].kind === kind); },
+  tab() { const k = device.get('dataTab', 'tasks'); return SCHEMA[k] && SCHEMA[k].kind !== 'system' ? k : 'tasks'; },
+  fields(key, all) { return [...SCHEMA[key].fields.filter((f) => all || f[3] !== false), ...SCHEMA_ALWAYS]; },
+  rows(key) {
+    const list = DB[key] || [];
+    if (key === 'tasks') return list.filter((t) => !hiddenTask(t));
+    if (key === 'assets') { const ids = new Set(Assets.list(People.viewing()).map((a) => a.id)); return list.filter((a) => ids.has(a.id)); }
+    if (SCHEMA[key].fields.some((f) => f[2] === 'people')) return list.filter((r) => People.shows(r));
+    return list.slice();
+  },
+  nameOf(store, id) {
+    if (!id) return '';
+    if (store === 'people') return People.name(id);
+    const r = (DB[store] || []).find((x) => x.id === id);
+    return r ? String(r.name || r.title || r.path || (r.month ? ymLabel(r.month) : '') || r.date || id) : id;
+  },
+  // A value as plain text (for the table, the filter and the export).
+  text(v, type) {
+    if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '';
+    const [t, store] = type.split(':');
+    switch (t) {
+      case 'date': return /^\d{4}-\d{2}-\d{2}/.test(v) ? shortDate(v) : String(v);
+      case 'month': return /^\d{4}-\d{2}$/.test(v) ? ymLabel(v) : String(v);
+      case 'when': return /T\d/.test(v) ? `${shortDate(v)} ${String(v).slice(11, 16)}` : shortDate(v);
+      case 'ms': return Number(v) ? shortDate(toISO(new Date(Number(v)))) : '';
+      case 'money': return typeof v === 'number' ? rupees(v) : String(v);
+      case 'num': return typeof v === 'number' ? v.toLocaleString('en-IN') : String(v);
+      case 'bool': return v ? 'Yes' : '';
+      case 'ref': return this.nameOf(store, v);
+      case 'refs': return (Array.isArray(v) ? v : [v]).map((id) => this.nameOf(store, id)).join(', ');
+      case 'people': return (Array.isArray(v) ? v : [v]).map((id) => People.name(id)).join(', ');
+      case 'list': return Array.isArray(v) ? String(v.length) : '';
+      case 'obj': return this.summary(v);
+      default: return String(v);
+    }
+  },
+  summary(v) {
+    if (typeof v !== 'object') return String(v);
+    if (Array.isArray(v)) return String(v.length);
+    const bits = Object.entries(v).filter(([, x]) => x != null && x !== '' && typeof x !== 'object').map(([k, x]) => `${k} ${x}`);
+    const s = bits.join(', ');
+    return s.length > 60 ? s.slice(0, 59) + '…' : s;
+  },
+  // How a column sorts: dates and numbers by value, the rest as text.
+  sortVal(r, f) {
+    const v = r[f[0]];
+    if (['money', 'num', 'ms'].includes(f[2])) return Number(v) || 0;
+    if (['date', 'when', 'month'].includes(f[2])) return String(v || '');
+    return this.text(v, f[2]).toLowerCase();
+  },
+  sort(key) {
+    const s = device.get('dataSort', {})[key];
+    if (s && this.fields(key).some((f) => f[0] === s.f)) return s;
+    const first = SCHEMA[key].fields.find((f) => ['date', 'when', 'ms', 'month'].includes(f[2]));
+    return SCHEMA[key].kind === 'entry' && first ? { f: first[0], dir: -1 } : { f: SCHEMA[key].fields[0][0], dir: 1 };
+  },
+  sorted(key) {
+    const s = this.sort(key);
+    const f = this.fields(key).find((x) => x[0] === s.f);
+    return this.rows(key).map((r) => [this.sortVal(r, f), r]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0) * s.dir).map((x) => x[1]);
+  },
+  csv(key) {
+    const fields = this.fields(key, true);
+    const cell = (x) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
+    const lines = [fields.map((f) => cell(f[1])).join(',')];
+    for (const r of this.sorted(key)) lines.push(fields.map((f) => cell(['date', 'when', 'month'].includes(f[2]) ? String(r[f[0]] ?? '') : this.text(r[f[0]], f[2]))).join(','));
+    return lines.join('\r\n');
+  },
+  export(key) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + this.csv(key)], { type: 'text/csv' })); // the mark lets Excel read Rs and Urdu right
+    a.download = `Butler ${SCHEMA[key].label} ${todayISO()}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
+};
+function renderData() {
+  const key = DataView.tab();
+  const sc = SCHEMA[key];
+  const cols = DataView.fields(key);
+  const rows = DataView.sorted(key);
+  const s = DataView.sort(key);
+  const tabOf = (k) => `<button class="tab ${k === key ? 'active' : ''}" data-data-tab="${esc(k)}" data-kind="${SCHEMA[k].kind}" role="tab" aria-selected="${k === key}">${esc(SCHEMA[k].label)}</button>`;
+  const opener = (r) => (sc.open === 'task' ? `data-action="open-task" data-id="${esc(r.id)}"` : sc.open ? `data-action="asset-form" data-form-type="${esc(sc.open)}" data-id="${esc(r.id)}"` : '');
+  const body = rows.map((r) => {
+    const cells = cols.map((f) => { const v = DataView.text(r[f[0]], f[2]); return `<td class="${['money', 'num', 'list'].includes(f[2].split(':')[0]) ? 'ut-n' : ''}${SCHEMA_ALWAYS.includes(f) ? ' dt-sys' : ''}">${esc(v)}</td>`; });
+    return `<tr data-find="${esc(cols.map((f) => DataView.text(r[f[0]], f[2])).join(' '))}" ${opener(r)}>${cells.join('')}</tr>`;
+  }).join('');
+  return `
+    <div class="page-head">
+      <div><h1>Data</h1><p class="sub">Everything Butler keeps, as tables: ${DataView.keys('entry').length} kinds of entry, ${DataView.keys('list').length} lists</p></div>
+      <div class="row page-actions"><button class="btn act" data-action="data-export">${ic('download', 'sm')}Export ${esc(sc.label.toLowerCase())}</button></div>
+    </div>
+    <div class="tabs data-tabs" role="tablist">${DataView.keys('entry').map(tabOf).join('')}<span class="tab-split" aria-hidden="true"></span>${DataView.keys('list').map(tabOf).join('')}</div>
+    <div class="list-tools"><span class="meta">${esc(sc.kind === 'entry' ? 'Entries: things that happen on a day' : 'A list: things you add to and pick from')}</span><span class="meta" style="margin-left:auto">${plural(rows.length, 'row')}</span></div>
+    ${rows.length ? `<div class="card data-card"><div class="ledger-wrap data-wrap"><table class="ledger data-table">
+      <thead><tr>${cols.map((f) => `<th class="${['money', 'num', 'list'].includes(f[2].split(':')[0]) ? 'ut-n' : ''}"><button type="button" class="link-btn dt-sort" data-data-sort="${esc(f[0])}" aria-label="Sort by ${esc(f[1])}">${esc(f[1])}${s.f === f[0] ? (s.dir > 0 ? ' ↑' : ' ↓') : ''}</button></th>`).join('')}</tr></thead>
+      <tbody>${body}</tbody></table></div></div>` : `<div class="card empty-state"><p>No ${esc(sc.label.toLowerCase())} yet.</p></div>`}`;
+}
 // A car's fuel (from the pump's bills, split by car), in its sheet: this year, km a litre, cost a km, with its upkeep.
 function fuelBlock(a) {
   const f = Utilities.fuelFigures(a.id);
@@ -9983,6 +10153,16 @@ document.addEventListener('click', (e) => {
   if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
   if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', vehicleOpen.dataset.tabTo || 'overview'); state.moreOpen = false; return setView('vehicles'); }
+  const dataTab = e.target.closest('[data-data-tab]');
+  if (dataTab) { device.set('dataTab', dataTab.dataset.dataTab); return render(); }
+  const dataSort = e.target.closest('[data-data-sort]');
+  if (dataSort) { // a heading: sort by it; again: the other way
+    const key = DataView.tab();
+    const was = DataView.sort(key);
+    const f = dataSort.dataset.dataSort;
+    device.set('dataSort', { ...device.get('dataSort', {}), [key]: { f, dir: was.f === f ? -was.dir : 1 } });
+    return render();
+  }
   const utilTab = e.target.closest('[data-util-tab]');
   if (utilTab) { device.set('utilTab', utilTab.dataset.utilTab); return render(); }
   const propertyTab = e.target.closest('[data-property-tab]');
@@ -10488,6 +10668,7 @@ document.addEventListener('click', (e) => {
       TD.sync(); render(); break;
     case 'td-disconnect': ask('Stop sending tasks to Microsoft To Do on this computer?', { yes: 'Disconnect', danger: true }).then((yes) => { if (yes) TD.disconnect(); }); break;
     case 'cycle-theme': cycleTheme(); break;
+    case 'data-export': DataView.export(DataView.tab()); break;
     case 'enable-notifications': askNotifications(); break;
     case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
     case 'export': exportData(); break;
