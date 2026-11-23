@@ -437,7 +437,8 @@ button:disabled { cursor: not-allowed; }
 #main > .page-head { position: sticky; top: 0; z-index: 16; background: var(--bg); margin: -32px -36px 18px; padding: 24px 36px 14px; min-height: var(--topbar-h); border-bottom: 1px solid var(--border); }
 .main.fill #main > .page-head { position: static; }
 /* Under a banner (or the phone's people row) the top bar starts below it, not over it. */
-#banner:not(:empty) ~ #main > .page-head, #who-bar:not(:empty) ~ #main > .page-head { margin-top: 0; }
+#banner:not(:empty) ~ #main > .page-head, #who-bar:not(:empty) ~ #main > .page-head,
+#banner:not(:empty) ~ #main > .sticky-top, #who-bar:not(:empty) ~ #main > .sticky-top { margin-top: 0; } /* Tasks: its header block */
 .page-head .bell-btn, .page-head .act-toggle { flex: none; }
 .bell-btn { position: relative; }
 .bell-count { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
@@ -466,7 +467,6 @@ button.bell-row:hover { background: var(--panel-2); }
 .act-group.act-list { border-left-color: var(--text); }
 .act-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: inherit; font-size: var(--t-sm); text-align: left; text-decoration: none; cursor: pointer; }
 .act-item:hover, .act-item:focus-visible { background: var(--panel-2); }
-.act-export { align-self: flex-start; margin: 2px 0 6px; }
 .act-item .meta { margin-left: auto; font-size: var(--t-xs); }
 .page-more { position: relative; display: none; }
 .page-more > summary { list-style: none; cursor: pointer; }
@@ -4096,7 +4096,7 @@ const ActMenu = {
       return its.length || first ? `<div class="act-group act-${g}"><p class="act-h">${head}</p>${first}${its.map(([x, i]) => `<button type="button" class="act-item" data-act-go="${i}">${x.icon ? ic(x.icon, 'sm') : ''}<span>${esc(x.label)}</span><span class="meta">${esc(title(x.view))}</span></button>`).join('')}</div>` : '';
     };
     return `<div class="act-top"><b>Menu</b><button type="button" class="icon-btn" data-action="act-close" aria-label="Close the menu">${ic('x', 'sm')}</button></div>
-      ${group('act', 'Actions', `<button type="button" class="btn act act-export" data-act-export>${ic('download', 'sm')}Export</button>`)}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
+      ${group('act', 'Actions', `<button type="button" class="act-item" data-act-export>${ic('download', 'sm')}<span>Export</span><span class="meta">Data</span></button>`)}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
       <div class="act-group"><p class="act-h">Butler</p>
         <button type="button" class="act-item" data-act-view="data">${ic('table', 'sm')}<span>Data</span></button>
         <a class="act-item" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}<span>Guide</span></a>

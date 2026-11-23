@@ -50,6 +50,7 @@ const { loadApp, check, done } = require('./helpers');
   check(/\.sidebar \{[^}]*overflow-y: auto/.test(css), 'the sidebar scrolls on its own, so a long one never makes the page taller than the window');
   check(/#main > \.page-head \{[^}]*position: sticky; top: 0/.test(css), 'the title row is a top bar that stays put as the page scrolls');
   check(/#banner:not\(:empty\) ~ #main > \.page-head[^{]*\{ margin-top: 0; \}/.test(css), 'under a banner (Phone reminders are paused…) the top bar starts below it, not over it');
+  check(/#banner:not\(:empty\) ~ #main > \.sticky-top[^{]*\{ margin-top: 0; \}/.test(css), 'and so does the Tasks page\'s header block');
   check(/html\.board-lock, html\.board-lock body \{ overflow: hidden/.test(css), 'on the Board the window itself can\'t scroll (only the board does)');
   PA.device.set('taskLayout', 'board');
   win.eval('setView')('tasks');
