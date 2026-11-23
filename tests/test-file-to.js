@@ -40,14 +40,14 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await PA.AT.add(t, [file('scan.pdf')]);
   const att = t.attachments[1];
   const plainDoc = PA.DB.docs.find((d) => d.plain && d.attachments[0].file === att.file);
-  check(att.file === 'Me/Vault/Bills/Electricity/Elec bill 2026.pdf' && folder.at(att.file) && att.vault, 'a new file is saved in the Vault folder, marked as from the Vault');
+  check(att.file === 'Me/Bills/Electricity/Elec bill 2026.pdf' && folder.at(att.file) && att.vault, 'a new file is saved in the Vault folder, marked as from the Vault');
   check(plainDoc && plainDoc.folder === 'Bills/Electricity' && plainDoc.name === 'Elec bill 2026', 'and shows there as a plain file, the same file');
   check(Vault.contents('me', 'Bills/Electricity').items.includes(plainDoc), 'in that folder of the Vault');
 
   // --- The next copy goes there too ---
   const next = PA.Series.tick(t).next;
   await PA.AT.add(next, [file('nov.pdf')]);
-  check(next.fileTo === 'Bills/Electricity' && next.attachments.at(-1).file.startsWith('Me/Vault/Bills/Electricity/') && PA.DB.docs.filter((d) => d.plain).length === 2, 'the next copy\'s files go there too');
+  check(next.fileTo === 'Bills/Electricity' && next.attachments.at(-1).file.startsWith('Me/Bills/Electricity/') && PA.DB.docs.filter((d) => d.plain).length === 2, 'the next copy\'s files go there too');
 
   // --- Changing it again: move what's there, and the one left in Tasks ---
   PA.state.openTask = next.id;
@@ -58,13 +58,13 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await tick(60);
   check(/Move the 3 files/.test(q2) && t.fileTo === 'Bills' && next.fileTo === 'Bills', 'another folder: every copy, and it offers to move all 3');
   check(PA.DB.docs.filter((d) => d.plain).every((d) => d.folder === 'Bills') && PA.DB.docs.filter((d) => d.plain).length === 3, 'Yes: the files it put in the Vault move, and the one left in Tasks joins them');
-  check([...t.attachments, ...next.attachments].every((a) => a.file.startsWith('Me/Vault/Bills/') && !a.file.startsWith('Me/Vault/Bills/Electricity/') && folder.at(a.file) && a.vault), 'their files move on disk too, and all show as from the Vault');
+  check([...t.attachments, ...next.attachments].every((a) => a.file.startsWith('Me/Bills/') && !a.file.startsWith('Me/Bills/Electricity/') && folder.at(a.file) && a.vault), 'their files move on disk too, and all show as from the Vault');
 
   // --- Back to Tasks ---
   sel().value = '';
   sel().dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(40);
-  check(!next.fileTo && next.attachments.every((a) => a.file.startsWith('Me/Vault/Bills/')) && /stay there/.test(doc.querySelector('#toasts').textContent), 'back to Tasks: what\'s in the Vault stays there');
+  check(!next.fileTo && next.attachments.every((a) => a.file.startsWith('Me/Bills/')) && /stay there/.test(doc.querySelector('#toasts').textContent), 'back to Tasks: what\'s in the Vault stays there');
   await PA.AT.add(next, [file('dec.pdf')]);
   check(next.attachments.at(-1).file.startsWith('Me/Tasks/Elec bill/') && !next.attachments.at(-1).vault, 'and new files go to its Tasks folder again');
 

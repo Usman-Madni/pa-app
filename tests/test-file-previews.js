@@ -42,7 +42,7 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   doc.querySelector('[data-view="vault"]').click();
   doc.querySelector('#main [data-vault-tab="folders"]').click();
   const go = (name) => [...doc.querySelectorAll('#main [data-vault-go]')].find((b) => b.textContent.trim().startsWith(name)).click();
-  go('Vault');
+  go('Documents');
   await tick(20);
   check(doc.querySelector('#main .item .tl-mark img.file-thumb')?.getAttribute('src') === 'blob:pic', 'the Vault\'s plain files: previews');
   doc.querySelector('[data-vault-go=""]').click();

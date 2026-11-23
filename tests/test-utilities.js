@@ -40,7 +40,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   await PA.AT.add(t, [new win.File(['%PDF'], 'scan.pdf', { type: 'application/pdf' })]);
   const att = t.attachments[0];
   check(att.name === `Home ${win.eval("ymLabel")(t.due.slice(0, 7))}.pdf`, `a file on the bill task is named for the connection and the month (got ${att.name})`);
-  check(att.file.startsWith('Me/Vault/Utilities/Gas/') && PA.DB.docs.some((d) => d.plain && d.folder === 'Utilities/Gas'), 'its file lands in Vault › Utilities › Gas, shown there too');
+  check(att.file.startsWith('Me/Utilities/Gas/') && PA.DB.docs.some((d) => d.plain && d.folder === 'Utilities/Gas'), 'its file lands in Vault › Utilities › Gas, shown there too');
 
   // --- A second gas connection: a folder each ---
   win.eval('openAssetForm')('utility', { kind: 'Gas' });
@@ -48,7 +48,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   await tick(40);
   const shop = PA.DB.utilities.find((x) => x.name === 'Shop');
   check(shop && !U.openTask(shop), 'no day: no bill task');
-  check(t.fileTo === 'Utilities/Gas/Home' && PA.DB.docs.find((d) => d.plain).folder === 'Utilities/Gas/Home' && t.attachments[0].file.startsWith('Me/Vault/Utilities/Gas/Home/') && folder.at(t.attachments[0].file), 'two gas connections: Home\'s bills move to Utilities › Gas › Home, files too');
+  check(t.fileTo === 'Utilities/Gas/Home' && PA.DB.docs.find((d) => d.plain).folder === 'Utilities/Gas/Home' && t.attachments[0].file.startsWith('Me/Utilities/Gas/Home/') && folder.at(t.attachments[0].file), 'two gas connections: Home\'s bills move to Utilities › Gas › Home, files too');
   PA.render();
   main().querySelector(`[data-action="utility-task"][data-id="${shop.id}"]`).click();
   await require('./helpers').answer(win, true, '3');
@@ -208,7 +208,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   bin.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(40);
   const bd = U.billFiles(eb)[0];
-  check(bd && bd.bill === eb.id && /^Me\/Vault\/Utilities\/Electricity\/Home power \w+ \d{4}\.jpg$/.test(bd.attachments[0].file) && doc.querySelector('#modal').textContent.includes(bd.attachments[0].name), 'Add file on a bill: kept in Vault › Utilities › Electricity, named "<name> Mmm yyyy", listed on it');
+  check(bd && bd.bill === eb.id && /^Me\/Utilities\/Electricity\/Home power \w+ \d{4}\.jpg$/.test(bd.attachments[0].file) && doc.querySelector('#modal').textContent.includes(bd.attachments[0].name), 'Add file on a bill: kept in Vault › Utilities › Electricity, named "<name> Mmm yyyy", listed on it');
   win.eval('closeAssetForm')(true);
   check(U.billFiles(bill).some((d) => d.attachments[0].file === t.attachments[0].file), 'the file on the task a bill was ticked from counts as that bill\'s');
   win.eval('openAssetForm')('utility', { id: el.id });

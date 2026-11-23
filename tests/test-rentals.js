@@ -46,7 +46,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check(collect && collect.repeat?.freq === 'monthly' && Number(collect.due.slice(8, 10)) === 18 && collect.fileTo === 'Rentals/Plaza lease' && PA.DB.buckets.find((b) => b.id === collect.bucket)?.name === 'Rentals', 'a monthly Collect rent task on the 18th, in a Rentals bucket, its files to Vault › Rentals › Plaza lease');
   check(PA.fullTitle(collect) === `Plaza lease Rent (${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(collect.due.slice(5, 7)) - 1]} ${collect.due.slice(2, 4)})` && !collect.reminders.length, 'named "Plaza lease Rent (Nov 26)", the month as its moving part, with no reminder');
   await PA.AT.add(collect, [new win.File(['x'], 'IMG_9.jpg', { type: 'image/jpeg' })]);
-  check(collect.attachments[0].name === `Plaza lease Rent ${win.eval('ymLabel')(collect.due.slice(0, 7))}.jpg` && collect.attachments[0].file.startsWith('Me/Vault/Rentals/Plaza lease/'), 'a file on the rent task is named "Plaza lease Rent Mmm yyyy", in the agreement\'s folder');
+  check(collect.attachments[0].name === `Plaza lease Rent ${win.eval('ymLabel')(collect.due.slice(0, 7))}.jpg` && collect.attachments[0].file.startsWith('Me/Rentals/Plaza lease/'), 'a file on the rent task is named "Plaza lease Rent Mmm yyyy", in the agreement\'s folder');
   const legacy = PA.normalizeTask({ id: 'legacy', title: 'Collect rent (Plaza lease)', due: collect.due, rental: r.id, rentKind: 'collect', reminders: [{ id: 'x', kind: 'dayof', daysBefore: 0, time: '09:00', fired: false }] });
   PA.DB.tasks.push(legacy);
   win.eval('rentalTasks')();
@@ -95,7 +95,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   tin.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(40);
   const tf = PA.DB.docs.find((x) => x.term === r.terms[0].id);
-  check(tf && tf.attachments[0].file === `Me/Vault/Rentals/Plaza lease/${R.termLabel(r, r.terms[0])}.pdf` && /^Plaza lease \w+ \d{4} – \w+ \d{4}$/.test(tf.name), 'its agreement is named after the term, in the agreement\'s folder');
+  check(tf && tf.attachments[0].file === `Me/Rentals/Plaza lease/${R.termLabel(r, r.terms[0])}.pdf` && /^Plaza lease \w+ \d{4} – \w+ \d{4}$/.test(tf.name), 'its agreement is named after the term, in the agreement\'s folder');
   check(doc.querySelector('#modal').textContent.includes(tf.attachments[0].name), 'and listed on the term');
   submitForm(win, 'asset-rent-term', { rent: '99,000' });
   check(modal().dataset.form === 'asset-rental' && R.ledger(r)[0].due === 99000, 'changing its rent: the ledger follows, and it goes back to the agreement');
@@ -175,7 +175,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   input.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(40);
   const d = PA.DB.docs.find((x) => x.rental === r.id && !x.term);
-  check(d && d.folder === 'Rentals/Plaza lease' && d.attachments[0].file === 'Me/Vault/Rentals/Plaza lease/Agreement 2026.pdf' && doc.querySelector('#modal').textContent.includes('Agreement 2026.pdf'), 'Add files: into Vault › Rentals › Plaza lease, listed on the agreement');
+  check(d && d.folder === 'Rentals/Plaza lease' && d.attachments[0].file === 'Me/Rentals/Plaza lease/Agreement 2026.pdf' && doc.querySelector('#modal').textContent.includes('Agreement 2026.pdf'), 'Add files: into Vault › Rentals › Plaza lease, listed on the agreement');
 
   // --- Paste history from a sheet ---
   doc.querySelector('#modal [data-action="asset-cancel"]')?.click();

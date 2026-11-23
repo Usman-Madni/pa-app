@@ -27,28 +27,27 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   // --- The Folders tab ---
   doc.querySelector('[data-view="vault"]').click();
   main().querySelector('[data-vault-tab="folders"]').click();
-  check(main().querySelector('[data-vault-tab="folders"].active') && [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent).join() === 'Vault', 'a Folders tab: your folder, as on disk (just you: no level of people), with its Vault');
-  go('Vault');
-  check(/Nothing in this folder yet/.test(main().textContent), 'the Vault is empty to start');
+  check(main().querySelector('[data-vault-tab="folders"].active') && [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent).join() === 'Documents', 'a Folders tab: your folder, as on disk (just you: no level of people): Documents to start (no Vault folder)');
+  check(main().querySelector('[data-action="vault-folder-new"][data-path=""]'), 'New folder right in your folder');
   main().querySelector('[data-action="vault-folder-new"]').click();
   await answer(win, true, 'Car');
-  check(main().querySelector('.vault-folder') && /Car/.test(main().querySelector('.vault-folder').textContent) && /Empty/.test(main().querySelector('.vault-folder').textContent), 'New folder: "Car" is there, empty');
+  const carRow = [...main().querySelectorAll('.vault-folder')].find((x) => /Car/.test(x.textContent));
+  check(carRow && /Empty/.test(carRow.textContent), 'New folder: "Car" is there, empty, beside Documents');
   go('Car');
   main().querySelector('[data-action="vault-folder-new"]').click();
   await answer(win, true, 'Insurance');
   go('Insurance');
-  check(/Files\s*›\s*Vault\s*›\s*Car\s*›\s*Insurance/.test(main().querySelector('.vault-crumbs').textContent), 'folders inside folders, with the way back');
+  check(/Files\s*›\s*Car\s*›\s*Insurance/.test(main().querySelector('.vault-crumbs').textContent), 'folders inside folders, with the way back');
 
   // --- Plain files ---
   await pick([new win.File(['%PDF'], 'Policy 2026.pdf', { type: 'application/pdf' }), new win.File(['x'], 'receipt.jpg', { type: 'image/jpeg' })]);
   const policy = PA.DB.docs.find((d) => d.name === 'Policy 2026');
   check(policy && policy.plain && policy.folder === 'Car/Insurance' && PA.DB.docs.find((d) => d.name === 'receipt')?.plain, 'Add files: each file is its own plain file in this folder, named after it');
-  check(policy.attachments[0].file === 'Me/Vault/Car/Insurance/Policy 2026.pdf' && folder.at('Me/Vault/Car/Insurance/Policy 2026.pdf'), 'its file keeps its own name, in the same folders on disk');
+  check(policy.attachments[0].file === 'Me/Car/Insurance/Policy 2026.pdf' && folder.at('Me/Car/Insurance/Policy 2026.pdf'), 'its file keeps its own name, in the same folders on disk');
   check(main().querySelectorAll('[data-action="rec-file-open"]').length === 2 && /2 files/.test(main().querySelector('.page-head').textContent), 'listed in the folder; the page counts files apart from documents');
   check(!main().querySelector('[data-vault-tab="file"]'), 'plain files make no tab of their own');
   doc.querySelector('[data-vault-go=""]').click();
-  go('Vault');
-  check(/2 things/.test(main().querySelector('.vault-folder').textContent), 'a folder says how many things are inside it, all the way down');
+  check(/2 things/.test([...main().querySelectorAll('.vault-folder')].find((x) => /Car/.test(x.textContent)).textContent), 'a folder says how many things are inside it, all the way down');
 
   // --- Details: move it, or make it a document ---
   PA.state.assetForm = null;
@@ -57,7 +56,7 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   check(form().elements.track && form().querySelector('.doc-full').style.display === 'none' && form().elements.folder.value === 'Car/Insurance', 'a plain file\'s details: no dates until asked for; its folder');
   submitForm(win, 'asset-doc', { folder: 'Car' });
   await tick(40);
-  check(policy.folder === 'Car' && policy.plain && policy.attachments[0].file === 'Me/Vault/Car/Policy 2026.pdf' && folder.at('Me/Vault/Car/Policy 2026.pdf'), 'moved to Car: its file moves too');
+  check(policy.folder === 'Car' && policy.plain && policy.attachments[0].file === 'Me/Car/Policy 2026.pdf' && folder.at('Me/Car/Policy 2026.pdf'), 'moved to Car: its file moves too');
   const rec = PA.DB.docs.find((d) => d.name === 'receipt');
   win.eval('openAssetForm')('doc', { id: rec.id });
   form().elements.track.checked = true;
@@ -79,15 +78,16 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
 
   // --- Rename and delete a folder ---
   doc.querySelector('[data-vault-go=""]').click();
-  go('Vault');
-  main().querySelector('[data-action="vault-folder-rename"]').click();
+  const rowOf = (name) => [...main().querySelectorAll('.vault-folder')].find((x) => x.querySelector('.title').textContent === name);
+  check(!rowOf('Documents').querySelector('[data-action="vault-folder-rename"]'), 'Documents is kept as it is (no rename or delete)');
+  rowOf('Car').querySelector('[data-action="vault-folder-rename"]').click();
   await answer(win, true, 'Vehicle papers');
   await tick(40);
-  check(policy.folder === 'Vehicle papers' && PA.DB.folders.some((f) => f.path === 'Vehicle papers/Insurance') && folder.at('Me/Vault/Vehicle papers/Policy 2026.pdf') && !folder.dirs.Me.dirs.Vault.dirs.Car, 'rename: everything inside follows, its files too');
-  main().querySelector('[data-action="vault-folder-delete"]').click();
+  check(policy.folder === 'Vehicle papers' && PA.DB.folders.some((f) => f.path === 'Vehicle papers/Insurance') && folder.at('Me/Vehicle papers/Policy 2026.pdf') && !folder.dirs.Me.dirs.Car, 'rename: everything inside follows, its files too');
+  rowOf('Vehicle papers').querySelector('[data-action="vault-folder-delete"]').click();
   const q = await answer(win, false);
   check(/Delete the Vehicle papers folder and the 2 things in it\?/.test(q) && PA.DB.docs.includes(policy), 'delete asks first, saying what\'s inside; No keeps it');
-  main().querySelector('[data-action="vault-folder-delete"]').click();
+  rowOf('Vehicle papers').querySelector('[data-action="vault-folder-delete"]').click();
   await answer(win, true);
   check(!PA.DB.docs.includes(policy) && !PA.DB.docs.includes(rec) && PA.DB.trash.filter((e) => e.kind === 'docs').length === 2 && !PA.DB.folders.length, 'Yes: what\'s inside goes to the Trash, the folder goes');
   check(!PA.DB.tasks.some((t) => t.id.startsWith(`doc-renew-${rec.id}-`) && !t.done), 'with its renew reminder');
@@ -103,17 +103,16 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   const tops = [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent);
   check(tops.join(',') === 'Me,Robin,Shared', `with everyone shown: a folder per person and Shared (got ${tops.join(',')})`);
   go('Robin');
-  go('Vault');
-  check(main().textContent.includes('Robin ID') && /Files\s*›\s*Robin\s*›\s*Vault/.test(main().querySelector('.vault-crumbs').textContent), 'a person\'s folder holds their things');
+  go('Documents');
+  check(main().textContent.includes('Robin ID') && /Files\s*›\s*Robin\s*›\s*Documents/.test(main().querySelector('.vault-crumbs').textContent), 'a person\'s folder holds their things');
   People.view(robin.id);
   doc.querySelector('[data-vault-go=""]').click();
   const rob = [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent);
-  check(rob.join(',') === 'Shared,Vault', `Robin shown: it opens on Robin's folder, with Shared as a folder (got ${rob.join(',')})`);
-  go('Vault');
-  check(main().textContent.includes('Robin ID'), 'Robin\'s Vault holds Robin\'s things');
+  check(rob.join(',') === 'Shared,Documents', `Robin shown: it opens on Robin's folder, with Shared as a folder (got ${rob.join(',')})`);
+  go('Documents');
+  check(main().textContent.includes('Robin ID'), 'Robin\'s Documents hold Robin\'s documents');
   doc.querySelector('[data-vault-go=""]').click();
   go('Shared');
-  go('Vault');
   go('House');
   check(main().textContent.includes('Joint deed'), 'Shared holds what\'s on more than one person');
   People.view('all');

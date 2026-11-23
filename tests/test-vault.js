@@ -111,7 +111,7 @@ const { loadApp, fakeFolder, check, done, answer, submitForm, confirmDone, tick 
   Object.defineProperty(input, 'files', { value: [new win.File(['%PDF'], 'scan.pdf', { type: 'application/pdf' })], configurable: true });
   input.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(20);
-  check(pass.attachments.length === 1 && folder.at(pass.attachments[0].file) && /^Me\/Vault\/Passport \d{4}\.pdf$/.test(pass.attachments[0].file), 'a scan is copied into the attachments folder, named after the document');
+  check(pass.attachments.length === 1 && folder.at(pass.attachments[0].file) && /^Me\/Documents\/Passport \d{4}\.pdf$/.test(pass.attachments[0].file), 'a scan is copied into the attachments folder, named after the document');
   check(doc.querySelector('#modal [data-action="rec-file-open"]') && JSON.parse(win.localStorage.getItem('pa_docs')).find((d) => d.id === pass.id).attachments.length === 1, 'listed and saved');
   doc.querySelector('#modal [data-action="rec-file-remove"]').click();
   await answer(win, true);

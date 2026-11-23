@@ -1,4 +1,4 @@
-// Attached files in folders by person and area: "Me/Tasks/…", "Robin/Vault/…", "Shared/…" for things on more than one
+// Attached files in folders by person and area: "Me/Tasks/…", "Robin/Documents/…", "Shared/…" for things on more than one
 // person, assets by kind (a vehicle its own folder), upkeep by vehicle. When a person, owner or name changes, the
 // files follow on their own (empty folders left behind go); files from before folders move only with "Move files
 // into folders", which asks first. A file shared by a Vault document and a task stays with the document. The phone
@@ -43,7 +43,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(entry.attachments[0].file.startsWith('Me/Upkeep/Civic/'), 'upkeep: by vehicle');
   const doc1 = win.eval('Vault').add({ cat: 'id', name: 'Passport', people: [robin.id] });
   await PA.AT.add(doc1, [file('p.pdf')], 'docs', true);
-  check(doc1.attachments[0].file === 'Robin/Vault/Passport 2026.pdf', 'a document: the person\'s Vault folder');
+  check(doc1.attachments[0].file === 'Robin/Documents/Passport 2026.pdf', 'a document: the person\'s Vault folder');
 
   // --- Changes: the files follow on their own ---
   t.people = [robin.id];
@@ -57,7 +57,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(!folder.dirs.Me.dirs.Assets.dirs.Gold, 'the folder it left empty goes');
   People.rename(robin.id, 'Robin Hood');
   await tick(40);
-  check(rt.attachments[0].file.startsWith('Robin Hood/Tasks/') && doc1.attachments[0].file === 'Robin Hood/Vault/Passport 2026.pdf' && !folder.dirs.Robin, 'renaming a person renames their folder (the files move, the old folder goes)');
+  check(rt.attachments[0].file.startsWith('Robin Hood/Tasks/') && doc1.attachments[0].file === 'Robin Hood/Documents/Passport 2026.pdf' && !folder.dirs.Robin, 'renaming a person renames their folder (the files move, the old folder goes)');
   check(doc1.attachments[0].name === 'Passport 2026.pdf', 'the name shown is the file\'s own name');
 
   // --- Repeating tasks: a folder each, under Tasks ---
@@ -105,11 +105,25 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await answer(win, true);
   await tick(60);
   check(old.attachments[0].file === 'Me/Tasks/old bill.pdf' && folder.at('Me/Tasks/old bill.pdf') && !folder.files['old bill.pdf'], 'Yes: each file moves to its folder');
-  check(lic.attachments[0].file === 'Me/Vault/licence.pdf' && linked.attachments[0].file === 'Me/Vault/licence.pdf', 'a file a document and a task share goes with the document, and both point to it');
+  check(lic.attachments[0].file === 'Me/Documents/licence.pdf' && linked.attachments[0].file === 'Me/Documents/licence.pdf', 'a file a document and a task share goes with the document, and both point to it');
   check(PA.DB.trash.find((e) => e.id === 'tr').item.attachments[0].file === 'Me/Tasks/old bill.pdf', 'a task in the Trash points to the moved file too (restoring it still works)');
   check(gone.attachments[0].file === 'missing.pdf' && /couldn't be found or moved/.test(doc.querySelector('#toasts').textContent), 'a file that isn\'t there stays as it was, and it says so');
   const saved = JSON.parse(win.localStorage.getItem('pa_tasks')).find((x) => x.id === old.id);
   check(saved.attachments[0].file === 'Me/Tasks/old bill.pdf', 'saved (through changed)');
+
+  // --- No Vault folder: files from when there was one move out on their own ---
+  const vaultDir = await (await folder.getDirectoryHandle('Me', { create: true })).getDirectoryHandle('Vault', { create: true });
+  await (await vaultDir.getDirectoryHandle('Car', { create: true })).getFileHandle('policy.pdf', { create: true });
+  await vaultDir.getFileHandle('id.pdf', { create: true });
+  const carDoc = win.eval('Vault').add({ cat: 'file', name: 'policy' });
+  Object.assign(carDoc, { plain: true, folder: 'Car' });
+  carDoc.attachments.push({ id: 'p1', name: 'policy.pdf', file: 'Me/Vault/Car/policy.pdf' });
+  const idDoc = win.eval('Vault').add({ cat: 'id', name: 'ID' });
+  idDoc.attachments.push({ id: 'i1', name: 'id.pdf', file: 'Me/Vault/id.pdf' });
+  changed('docs');
+  await tick(60);
+  check(carDoc.attachments[0].file === 'Me/Car/policy.pdf' && folder.at('Me/Car/policy.pdf') && idDoc.attachments[0].file === 'Me/Documents/id.pdf' && folder.at('Me/Documents/id.pdf') && !folder.dirs.Me.dirs.Vault, 'files in the old Vault folder move to the person\'s own folders (one with none to Documents), and the Vault folder goes');
+  check(!win.eval('Vault').addFolder('me', '', 'assets') && !win.eval('Vault').addFolder('me', 'Assets', 'Receipts') && /Butler's own folder/.test(doc.querySelector('#toasts').textContent), 'a folder of yours can\'t take Butler\'s names or go inside its folders');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
 
   // --- Read-only moves nothing ---

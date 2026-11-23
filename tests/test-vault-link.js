@@ -27,18 +27,18 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   const pickIn = (root) => root.querySelector('select[data-vault-link]');
   const sel = pickIn(doc.querySelector('#drawer'));
   const groups = [...sel.querySelectorAll('optgroup')].map((g) => g.label);
-  check(sel && groups.join(',') === 'Bills,Vault' && sel.textContent.includes('Electricity Oct.pdf') && sel.textContent.includes('Passport: Passport 2026.jpg'), `the task offers From Vault, by folder (got ${groups.join(',')})`);
+  check(sel && groups.join(',') === 'Bills,Documents' && sel.textContent.includes('Electricity Oct.pdf') && sel.textContent.includes('Passport: Passport 2026.jpg'), `the task offers From Vault, by folder (got ${groups.join(',')})`);
   sel.value = `${bill.id}:${bill.attachments[0].id}`;
   sel.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(30);
   const linked = t.attachments[0];
-  check(linked && linked.file === 'Me/Vault/Bills/Electricity Oct.pdf' && linked.vault && folder.paths().length === before, 'choosing one points to the same file: nothing copied');
+  check(linked && linked.file === 'Me/Bills/Electricity Oct.pdf' && linked.vault && folder.paths().length === before, 'choosing one points to the same file: nothing copied');
   check(doc.querySelector('#drawer .vault-mark') && !pickIn(doc.querySelector('#drawer')).textContent.includes('Electricity Oct.pdf'), 'it shows as from the Vault, and isn\'t offered again');
   check(bill.attachments[0].file === linked.file && folder.at(linked.file), 'the file stays in its Vault folder');
 
   // --- Rename from the task: the Vault follows ---
   await PA.AT.rename(t, linked.id, 'Electricity October');
-  check(linked.file === 'Me/Vault/Bills/Electricity October.pdf' && bill.attachments[0].file === linked.file && folder.at(linked.file) && !folder.at('Me/Vault/Bills/Electricity Oct.pdf'), 'renaming it from the task renames it in the Vault too');
+  check(linked.file === 'Me/Bills/Electricity October.pdf' && bill.attachments[0].file === linked.file && folder.at(linked.file) && !folder.at('Me/Bills/Electricity Oct.pdf'), 'renaming it from the task renames it in the Vault too');
 
   // --- Remove from the task: it stays in the Vault ---
   const removing = PA.AT.remove(t, linked.id);
@@ -55,7 +55,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   s2.value = `${pass.id}:${pass.attachments[0].id}`;
   s2.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick(30);
-  check(car.attachments.length === 1 && car.attachments[0].file === pass.attachments[0].file && car.attachments[0].file.startsWith('Me/Vault/'), 'linked to the asset; the file stays in the Vault (not moved to Assets)');
+  check(car.attachments.length === 1 && car.attachments[0].file === pass.attachments[0].file && car.attachments[0].file.startsWith('Me/Documents/'), 'linked to the asset; the file stays in the Vault (not moved to Assets)');
   check(doc.querySelector('#modal .vault-mark'), 'marked as from the Vault there too');
   win.eval('closeAssetForm')();
   win.eval('openAssetForm')('doc', { id: pass.id });

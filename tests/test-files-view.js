@@ -41,7 +41,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
 
   doc.querySelector('[data-view="vault"]').click();
   main().querySelector('[data-vault-tab="folders"]').click();
-  check(names() === 'Vault,Tasks,Assets', `your folder shows the areas as on disk (got ${names()})`);
+  check(names() === 'Documents,Assets,Tasks', `your folder shows your folders, then Butler's, as on disk (got ${names()})`);
   go('Tasks');
   const rows = [...main().querySelectorAll('.item .title')].map((x) => x.textContent);
   check(rows.join(',') === 'Passport photos 2026.jpg' && /On Passport photos/.test(main().textContent), 'Tasks: its files, each saying what it\'s on (a file linked from the Vault shows only in the Vault)');
@@ -77,8 +77,8 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check([...main().querySelectorAll('.item .title')].some((x) => x.textContent.includes('valuation')), 'it shows in that folder');
   check(!Vault.list().includes(kept) && !Vault.inTop('me').includes(kept), 'and stays out of the Vault\'s own lists');
   top();
-  check(/1 thing/.test([...main().querySelectorAll('.vault-folder')].find((x) => x.textContent.includes('Vault')).textContent), 'the Vault counts only its own things');
-  check(!main().querySelector('[data-action="vault-folder-new"]') && !main().querySelector('input[data-input="area-files"]'), 'no new folders or files at the top of a person\'s folder');
+  check(/1 thing/.test([...main().querySelectorAll('.vault-folder')].find((x) => x.textContent.includes('Documents')).textContent), 'Documents counts only its own things');
+  check(main().querySelector('[data-action="vault-folder-new"][data-path=""]') && !main().querySelector('input[data-input="area-files"]'), 'a person\'s folder: New folder, but no loose files');
   go('Assets');
   check(!main().querySelector('[data-action="vault-folder-new"]') && main().querySelector('input[data-input="area-files"]'), 'outside the Vault: files can be added, folders can\'t be made');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
