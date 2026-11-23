@@ -81,6 +81,20 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   check(main().querySelector('[data-action="vault-folder-new"][data-path=""]') && !main().querySelector('input[data-input="area-files"]'), 'a person\'s folder: New folder, but no loose files');
   go('Assets');
   check(!main().querySelector('[data-action="vault-folder-new"]') && main().querySelector('input[data-input="area-files"]'), 'outside the Vault: files can be added, folders can\'t be made');
+  // --- Removing files ---
+  top();
+  go('Tasks');
+  main().querySelector('[data-action="rec-file-remove"]').click();
+  const rq = await answer(win, true);
+  await tick(20);
+  check(/Remove "Passport photos 2026.jpg" from this task\?/.test(rq) && !t.attachments.length, 'a file in Butler\'s folders: ✕ takes it off what it\'s on, after asking');
+  top();
+  go('Assets');
+  go('Gold');
+  main().querySelector(`[data-action="plain-remove"][data-id="${kept.id}"]`).click();
+  const pq = await answer(win, true);
+  await tick(20);
+  check(/Delete "valuation.pdf"\? It goes to the Trash/.test(pq) && !PA.DB.docs.includes(kept) && PA.DB.trash.some((e) => e.kind === 'docs' && e.item.id === kept.id), 'a plain file: ✕ sends it to the Trash, after asking');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
   done();
