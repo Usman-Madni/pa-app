@@ -920,13 +920,13 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
     <button class="nav-btn" data-view="tasks" title="Tasks (2)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-list-check"/></svg></span><span>Tasks</span></button>
     <button class="nav-btn" data-view="calendar" title="Calendar (3)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><span>Calendar</span></button>
     <button class="nav-btn" data-view="notes" title="Notes (4)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-notes"/></svg></span><span>Notes</span></button>
-    <button class="nav-btn" data-view="assets" title="Assets"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
-    <button class="nav-btn more-item" data-view="utilities" title="Utilities"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><span>Utilities</span></button>
-    <button class="nav-btn more-item" data-view="musings" title="Musings"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
-    <button class="nav-btn more-item" data-view="zakat" title="Zakat"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
-    <button class="nav-btn more-item" data-view="vault" title="Vault"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
-    <button class="nav-btn more-item" data-view="notices" title="Notifications (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
-    <button class="nav-btn more-item" data-view="settings" title="Settings (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
+    <button class="nav-btn" data-view="assets" title="Assets (5)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><span>Assets</span></button>
+    <button class="nav-btn more-item" data-view="utilities" title="Utilities (6)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><span>Utilities</span></button>
+    <button class="nav-btn more-item" data-view="musings" title="Musings (7)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
+    <button class="nav-btn more-item" data-view="zakat" title="Zakat (8)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
+    <button class="nav-btn more-item" data-view="vault" title="Vault (9)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
+    <button class="nav-btn more-item" data-view="notices" title="Notifications (N)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
+    <button class="nav-btn more-item" data-view="settings" title="Settings (0)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
     <div class="side-foot">
       <button class="nav-btn trash-nav" data-view="trash" title="Deleted things, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
@@ -10565,23 +10565,29 @@ document.addEventListener('keydown', (e) => {
   if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
   if (Selection.on() && !state.openTask) { Selection.stop(); return; }
   if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return; }
-  if (state.openTask) closeTaskDrawer();
+  if (state.openTask) { closeTaskDrawer(); return; }
+  if (PARENT_OF[state.view] && !e.target.closest?.('input, textarea, select')) setView(PARENT_OF[state.view]); // a sub-page: back to its parent
 });
-// Keyboard shortcuts, for when you're not typing in a box: 1 to 6 switch screens, N puts the cursor in quick add
-// (on Tasks if this screen has none), ? lists them.
-const SHORTCUT_VIEWS = ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings'];
+// Keyboard shortcuts, for when you're not typing in a box: 1 to 9 and 0 the screens in the sidebar's order, N
+// Notifications, Q W E R T Y U I O P the open screen's buttons in order (Add asset, Add rates…), A S D F G H J K L its
+// tabs in order, / search, ? lists them. (Esc, above, closes or steps back.)
+const SHORTCUT_VIEWS = ['today', 'tasks', 'calendar', 'notes', 'assets', 'utilities', 'musings', 'zakat', 'vault'];
+const BUTTON_KEYS = 'qwertyuiop';
+const TAB_KEYS = 'asdfghjkl';
+const shown = (el) => !!el && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none';
+// The open screen's own buttons (at the top, in order) and its tabs (every row of them, in order).
+const pageButtons = () => $$('#main .page-head .page-actions > button, #main .page-head .page-actions > label').filter((b) => !(state.readOnly && b.closest('.edit-only')) && shown(b));
+const pageTabs = () => $$('#main [role="tablist"] .tab');
 function shortcut(e) {
-  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false; // (assetForm: any Assets, Zakat or Vault pop-up)
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false; // (assetForm: any pop-up)
   if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return false;
-  const n = SHORTCUT_VIEWS[Number(e.key) - 1];
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (k === '0') { setView('settings'); return true; }
+  const n = SHORTCUT_VIEWS[Number(k) - 1];
   if (n) { setView(n); return true; }
-  if (e.key === 'n' || e.key === 'N') {
-    if (state.readOnly) return false;
-    let box = $('#main form.quick-add [data-qa]');
-    if (!box) { setView('tasks'); box = $('#main form.quick-add [data-qa]'); }
-    if (box) box.focus();
-    return !!box;
-  }
+  if (k === 'n') { setView('notices'); return true; }
+  if (BUTTON_KEYS.includes(k)) { const b = pageButtons()[BUTTON_KEYS.indexOf(k)]; if (!b) return false; b.click(); return true; }
+  if (TAB_KEYS.includes(k)) { const t = pageTabs()[TAB_KEYS.indexOf(k)]; if (!t) return false; t.click(); return true; }
   if (e.key === '/') { // search: the sidebar box on the laptop, the Search page's on the phone
     const side = $('#side-search');
     if (side && !state.phone && getComputedStyle(side.parentElement).display !== 'none') { side.focus(); side.select(); return true; }
@@ -10589,7 +10595,7 @@ function shortcut(e) {
     $('#main [data-input="global-search"]')?.focus();
     return true;
   }
-  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Notifications, 6 Settings. N: add a task. /: search. Esc: close.'); return true; }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Settings, N Notifications. Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });

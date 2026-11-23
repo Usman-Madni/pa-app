@@ -1,5 +1,6 @@
-// Redesign stage 5: keyboard shortcuts for daily use (1 to 6 switch screens, N puts the cursor in quick add, ? lists
-// them), never while typing in a box or while a question is open; Notes' editor and Settings' one clear first step.
+// Keyboard shortcuts: 1 to 9 and 0 the screens in the sidebar's order, N Notifications, Q W E R T… the open screen's
+// buttons in order, A S D F G… its tabs in order, Esc back from a sub-page, ? lists them; never while typing in a box,
+// with Ctrl, or while a question or pop-up is open. Notes' editor and Settings' one clear first step.
 const { loadApp, check, done, answer } = require('./helpers');
 
 (async () => {
@@ -11,23 +12,41 @@ const { loadApp, check, done, answer } = require('./helpers');
     return e;
   };
 
-  // --- 1 to 6 switch screens ---
-  const views = ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings'];
+  // --- 1 to 9 and 0: the screens, in the sidebar's order; N: Notifications ---
+  const views = ['today', 'tasks', 'calendar', 'notes', 'assets', 'utilities', 'musings', 'zakat', 'vault'];
   views.forEach((v, i) => { key(String(i + 1)); check(PA.state.view === v, `${i + 1} opens ${v}`); });
-  check(doc.querySelector('.nav-btn[data-view="tasks"]').title === 'Tasks (2)', 'each screen\'s button says its key');
-
-  // --- N: the cursor in quick add (on Tasks when this screen has none) ---
-  key('6');
-  const n = key('n');
-  check(n.defaultPrevented && PA.state.view === 'tasks' && doc.activeElement && doc.activeElement.matches('form.quick-add [data-qa]'), 'N on Settings goes to Tasks with the cursor in quick add');
-  key('1', doc.body);
+  key('0');
+  check(PA.state.view === 'settings', '0 opens Settings');
   key('n');
-  check(PA.state.view === 'today' && doc.activeElement.matches('form.quick-add[data-ctx="today"] [data-qa]'), 'N on My Day uses My Day\'s own quick add');
+  check(PA.state.view === 'notices', 'N opens Notifications');
+  check(doc.querySelector('.nav-btn[data-view="assets"]').title === 'Assets (5)' && doc.querySelector('.nav-btn[data-view="notices"]').title === 'Notifications (N)', 'each screen\'s button says its key');
+
+  // --- Q W E…: the screen's buttons in order; A S D…: its tabs ---
+  key('5');
+  key('w');
+  check(doc.querySelector('#modal form[data-form="asset-rates"]'), 'on Assets, W is its second button (Add rates)');
+  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+  key('q');
+  check(doc.querySelector('#modal form[data-form="asset-asset"]'), 'and Q its first (Add asset)');
+  key('3');
+  check(PA.state.view === 'assets', 'with a pop-up open, keys don\'t switch screens');
+  doc.querySelector('#modal [data-action="asset-cancel"]').click();
+  const tabs = [...doc.querySelectorAll('#main [role="tablist"] .tab')];
+  key('s');
+  check(tabs[1]?.dataset.assetTab === 'property' && PA.state.view === 'property', 'S presses its second tab (Property, which opens its page)');
+
+  // --- Esc: back from a sub-page ---
+  key('Escape');
+  check(PA.state.view === 'assets', 'Esc on a sub-page (Property) goes back to Assets');
 
   // --- Not while typing, not with Ctrl, not while a question is open ---
-  const box = doc.activeElement;
+  key('1');
+  const box = doc.querySelector('#main form.quick-add [data-qa]');
+  box.focus();
   const typed = key('2', box);
   check(!typed.defaultPrevented && PA.state.view === 'today', 'typing "2" in a box types it: the screen stays');
+  const typedQ = key('q', box);
+  check(!typedQ.defaultPrevented && !doc.querySelector('#modal form'), 'and "q" types too');
   key('2', doc.body, { ctrlKey: true });
   check(PA.state.view === 'today', 'Ctrl+2 is left to the browser');
   const asked = win.eval('ask')('Sure?');
@@ -38,7 +57,7 @@ const { loadApp, check, done, answer } = require('./helpers');
 
   // --- ? lists them ---
   key('?');
-  check(/1 My Day, 2 Tasks/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
+  check(/1 My Day, 2 Tasks.*0 Settings, N Notifications.*Q W E R T/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
 
   // --- Notes: delete is an icon at the top of the note, not a red button in the corner ---
   key('4');
@@ -48,17 +67,19 @@ const { loadApp, check, done, answer } = require('./helpers');
   check(/saved as you type/.test(doc.querySelector('#main .sub').textContent), 'Notes says it saves as you type');
 
   // --- Settings: two columns, and only the data file card has a filled button ---
-  key('6');
+  doc.body.focus();
+  win.eval('setView')('settings');
   const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('');
   check(doc.querySelector('.settings-grid') && /\.settings-grid \.card:not\(#df-card\) \.btn\.primary\s*\{[^}]*background:\s*transparent/.test(css), 'Settings: one filled button (the data file\'s), the rest outlined');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
 
-  // --- Read-only: N does nothing, screens still switch ---
+  // --- Read-only: buttons that change things aren't pressed; screens still switch ---
   const ro = loadApp({ fsa: false });
-  const e = new ro.win.KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true });
+  ro.win.eval('setView')('assets');
+  const e = new ro.win.KeyboardEvent('keydown', { key: 'q', bubbles: true, cancelable: true });
   ro.doc.body.dispatchEvent(e);
-  check(!e.defaultPrevented && !ro.doc.activeElement.matches?.('[data-qa]'), 'read-only: N does nothing');
+  check(!e.defaultPrevented && !ro.doc.querySelector('#modal form'), 'read-only: Q (Add asset) does nothing');
   ro.doc.body.dispatchEvent(new ro.win.KeyboardEvent('keydown', { key: '3', bubbles: true, cancelable: true }));
   check(ro.PA.state.view === 'calendar', 'read-only: screens still switch');
   ro.close();
