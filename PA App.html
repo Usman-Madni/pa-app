@@ -436,6 +436,8 @@ button:disabled { cursor: not-allowed; }
 /* The top bar: the title row stays at the top as the page scrolls, as tall as Butler's name and date beside it. */
 #main > .page-head { position: sticky; top: 0; z-index: 16; background: var(--bg); margin: -32px -36px 18px; padding: 24px 36px 14px; min-height: var(--topbar-h); border-bottom: 1px solid var(--border); }
 .main.fill #main > .page-head { position: static; }
+/* Under a banner (or the phone's people row) the top bar starts below it, not over it. */
+#banner:not(:empty) ~ #main > .page-head, #who-bar:not(:empty) ~ #main > .page-head { margin-top: 0; }
 .page-head .bell-btn, .page-head .act-toggle { flex: none; }
 .bell-btn { position: relative; }
 .bell-count { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
@@ -464,6 +466,7 @@ button.bell-row:hover { background: var(--panel-2); }
 .act-group.act-list { border-left-color: var(--text); }
 .act-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: inherit; font-size: var(--t-sm); text-align: left; text-decoration: none; cursor: pointer; }
 .act-item:hover, .act-item:focus-visible { background: var(--panel-2); }
+.act-export { align-self: flex-start; margin: 2px 0 6px; }
 .act-item .meta { margin-left: auto; font-size: var(--t-xs); }
 .page-more { position: relative; display: none; }
 .page-more > summary { list-style: none; cursor: pointer; }
@@ -661,6 +664,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .main.fill #main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .main.fill .sticky-top { position: static; }
 .main.fill .board { flex: 1; min-height: 0; overflow: auto; }
+@media (min-width: 681px) { html.board-lock, html.board-lock body { overflow: hidden; height: 100%; } }
 .board-head { position: sticky; top: -10px; z-index: 2; background: var(--panel-2); padding: 10px 0 6px; margin-top: -10px; }
 .group-h { margin: 18px 4px 2px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); display: flex; gap: 8px; }
 .group-h:first-child { margin-top: 0; }
@@ -987,7 +991,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
     <button class="nav-btn more-item" data-view="musings" title="Musings (7)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></span><span>Musings</span></button>
     <button class="nav-btn more-item" data-view="zakat" title="Zakat (8)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="Vault (9)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
-    <button class="nav-btn more-item" data-view="data" title="Data: everything as tables"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-table"/></svg></span><span>Data</span></button>
+    <button class="nav-btn more-item" data-view="data" title="Data (0)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-table"/></svg></span><span>Data</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
     <div class="side-foot">
       <div class="df-badge" id="df-badge"></div>
@@ -1145,7 +1149,7 @@ function toast(msg, task) {
 // nothing (the data file, the other device, To Do) sees a deletion that might be taken back. Leaving the page, or
 // the screen going to the background on a phone, carries it out at once.
 // One delete can hold several tasks (deleting a selection): one message, one Undo for all of them. Notes use it too
-// (kind 'notes'). Once it happens, what was deleted goes to the Trash for 30 days.
+// (kind 'notes'). Once it happens, what was deleted goes to the Bin for 30 days.
 const PendingDelete = {
   UNDO_MS: 6000,
   groups: new Map(), // group id → { kind, ids: Set of record ids, timer, toast }
@@ -2003,7 +2007,7 @@ const Vault = {
     changed('docs', 'folders');
     return to;
   },
-  // A folder and its folders go from the list (what's inside is the caller's: into the Trash).
+  // A folder and its folders go from the list (what's inside is the caller's: into the Bin).
   dropFolder(top, path) {
     DB.folders = DB.folders.filter((f) => !(f.area === 'vault' && f.top === top && this.under(path)(f.path)));
     changed('folders');
@@ -2734,11 +2738,11 @@ const fmtTola = (n) => `${(Math.round(n * 100) / 100).toLocaleString('en-IN')} t
 const fmtGrams = (g) => `${(Math.round(g * 100) / 100).toLocaleString('en-IN')} g`;
 const fmtWeight = (a) => (a.unit === 'tola' ? `${fmtTola(Assets.tola(a))} (${fmtGrams(a.grams)})` : `${fmtGrams(a.grams)} (${fmtTola(Assets.tola(a))})`);
 
-// The Trash: deleted things, kept 30 days, newest first: tasks and notes (after their Undo runs out, PendingDelete),
+// The Bin: deleted things, kept 30 days, newest first: tasks and notes (after their Undo runs out, PendingDelete),
 // and assets, documents, rates, zakat records and payments (straight away, with an Undo that takes them back out,
 // `discard`). Restore puts one back as it was (a task's link to To Do is cleared: To Do links it again if its copy is
-// still there, or gets a new one); Delete forever and Empty Trash remove them for good; anything older than 30 days
-// goes by itself. The Trash is shared data (both devices see it).
+// still there, or gets a new one); Delete forever and Empty Bin remove them for good; anything older than 30 days
+// goes by itself. The Bin is shared data (both devices see it).
 const TRASH_KINDS = {
   tasks: { name: 'Task', icon: 'list-check' }, notes: { name: 'Note', icon: 'notes' }, assets: { name: 'Asset', icon: 'wallet' },
   docs: { name: 'Document', icon: 'id' }, rates: { name: 'Rates', icon: 'coins' }, zakat: { name: 'Zakat record', icon: 'calendar-event' },
@@ -2763,7 +2767,7 @@ const Trash = {
       default: return r.name || TRASH_KINDS[e.kind]?.name || 'Something';
     }
   },
-  // Delete now, into the Trash, with an Undo message that takes it all back. groups: [[kind, records], …], so a
+  // Delete now, into the Bin, with an Undo message that takes it all back. groups: [[kind, records], …], so a
   // document and its renew task go (and come back) together. what: how the message names it.
   discard(groups, what) {
     const entries = [];
@@ -2783,7 +2787,7 @@ const Trash = {
     el.innerHTML = `<span>Deleted ${esc(what)}</span><button type="button" class="toast-btn" data-action="trash-undo" data-id="${esc(entries.map((e) => e.id).join(','))}">Undo</button>`;
     $('#toasts').append(el);
     setTimeout(() => el.remove(), PendingDelete.UNDO_MS);
-    Notices.add(`Deleted ${what} (it's in the Trash for 30 days)`);
+    Notices.add(`Deleted ${what} (it's in the Bin for 30 days)`);
     render();
   },
   restore(id) {
@@ -2800,7 +2804,7 @@ const Trash = {
   },
   forget(id) { DB.trash = DB.trash.filter((x) => x.id !== id); changed('trash'); },
   empty() { DB.trash = []; changed('trash'); },
-  // Drop what's been in the Trash over 30 days (only where this device may change data).
+  // Drop what's been in the Bin over 30 days (only where this device may change data).
   prune(now = Date.now()) {
     if (state.readOnly) return;
     const keep = DB.trash.filter((e) => e.at > now - this.KEEP_MS);
@@ -2968,7 +2972,7 @@ const SCHEMA = {
   folders: { label: 'Folders', kind: 'list', fields: [['path', 'Folder', 'text'], ['top', 'Whose', 'text'], ['area', 'Area', 'text', false]] },
   hijriFix: { label: 'Moon corrections', kind: 'list', fields: [['hyear', 'Islamic year', 'num'], ['month', 'Month', 'num'], ['shift', 'Shift (days)', 'num']] },
   notices: { label: 'Notifications', kind: 'system', fields: [['at', 'When', 'ms'], ['text', 'Text', 'text'], ['task', 'Task', 'ref:tasks'], ['read', 'Read', 'bool']] },
-  trash: { label: 'Trash', kind: 'system', fields: [['kind', 'Kind', 'text'], ['item', 'Record', 'obj'], ['at', 'Deleted', 'ms']] },
+  trash: { label: 'Bin', kind: 'system', fields: [['kind', 'Kind', 'text'], ['item', 'Record', 'obj'], ['at', 'Deleted', 'ms']] },
   deleted: { label: 'Deleted markers', kind: 'system', fields: [['key', 'Store', 'text'], ['at', 'When', 'ms']] },
 };
 // Every record also has these (shown last, faded): its id, and when it last changed (for the merge between devices).
@@ -3633,7 +3637,7 @@ const Files = {
     return out;
   },
   looseCount() { return new Set(this.KEYS.flatMap((k) => (DB[k] || []).flatMap((r) => (r.attachments || []).map((a) => a.file).filter((f) => f && this.loose(f))))).size; },
-  // A file moved or renamed: every record that used the old path (ones in the Trash too) uses the new one. Gives the
+  // A file moved or renamed: every record that used the old path (ones in the Bin too) uses the new one. Gives the
   // data keys changed.
   repoint(from, to) {
     const keys = new Set();
@@ -4087,19 +4091,18 @@ const ActMenu = {
   html() {
     this.list = this.collect();
     const title = (v) => (document.querySelector(`.nav-btn[data-view="${v}"] span:not(.ico):not(.nav-count)`)?.textContent || v[0].toUpperCase() + v.slice(1));
-    const group = (g, head) => {
+    const group = (g, head, first = '') => {
       const its = this.list.map((x, i) => [x, i]).filter(([x]) => x.group === g);
-      return its.length ? `<div class="act-group act-${g}"><p class="act-h">${head}</p>${its.map(([x, i]) => `<button type="button" class="act-item" data-act-go="${i}">${x.icon ? ic(x.icon, 'sm') : ''}<span>${esc(x.label)}</span><span class="meta">${esc(title(x.view))}</span></button>`).join('')}</div>` : '';
+      return its.length || first ? `<div class="act-group act-${g}"><p class="act-h">${head}</p>${first}${its.map(([x, i]) => `<button type="button" class="act-item" data-act-go="${i}">${x.icon ? ic(x.icon, 'sm') : ''}<span>${esc(x.label)}</span><span class="meta">${esc(title(x.view))}</span></button>`).join('')}</div>` : '';
     };
     return `<div class="act-top"><b>Menu</b><button type="button" class="icon-btn" data-action="act-close" aria-label="Close the menu">${ic('x', 'sm')}</button></div>
-      ${group('act', 'Actions')}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
+      ${group('act', 'Actions', `<button type="button" class="btn act act-export" data-act-export>${ic('download', 'sm')}Export</button>`)}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
       <div class="act-group"><p class="act-h">Butler</p>
         <button type="button" class="act-item" data-act-view="data">${ic('table', 'sm')}<span>Data</span></button>
-        <button type="button" class="act-item" data-act-export>${ic('download', 'sm')}<span>Export</span></button>
         <a class="act-item" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}<span>Guide</span></a>
         <button type="button" class="act-item" data-action="cycle-theme">${ic('sun-moon', 'sm')}<span>Light or dark</span></button>
         <button type="button" class="act-item" data-act-view="settings">${ic('settings', 'sm')}<span>Settings</span></button>
-        <button type="button" class="act-item" data-act-view="trash">${ic('trash', 'sm')}<span>Trash</span>${DB.trash.length ? `<span class="nav-count muted">${DB.trash.length}</span>` : ''}</button>
+        <button type="button" class="act-item" data-act-view="trash">${ic('trash', 'sm')}<span>Bin</span>${DB.trash.length ? `<span class="nav-count muted">${DB.trash.length}</span>` : ''}</button>
       </div>`;
   },
   open() {
@@ -4204,6 +4207,11 @@ function render() {
   $('.main').classList.toggle('wide', state.view === 'tasks' && taskLayout() === 'board');
   // Board: the page fits the window and only the board scrolls, so the top stays put and column names stick.
   $('.main').classList.toggle('fill', state.view === 'tasks' && taskLayout() === 'board');
+  // The Board fills the window and only the board scrolls: the window itself is locked (laptop), so nothing can ever
+  // make it scroll on into blank space below.
+  const lock = state.view === 'tasks' && taskLayout() === 'board';
+  if (lock && !document.documentElement.classList.contains('board-lock')) try { window.scrollTo(0, 0); } catch { /* not in tests */ }
+  document.documentElement.classList.toggle('board-lock', lock);
   drawCharts();
   loadThumbs();
   addPageFilter();
@@ -6359,7 +6367,7 @@ function renderCalendar() {
     </div>`;
 }
 
-// The Trash: deleted tasks and notes, newest first, each with when it goes for good.
+// The Bin: deleted tasks and notes, newest first, each with when it goes for good.
 function renderTrash() {
   const list = [...DB.trash].sort((a, b) => b.at - a.at);
   const daysLeft = (e) => Math.max(1, Math.ceil((e.at + Trash.KEEP_MS - Date.now()) / 864e5));
@@ -6377,11 +6385,11 @@ function renderTrash() {
     </li>`).join('');
   return `
     <div class="page-head">
-      <div><h1>Trash</h1><p class="sub">${list.length ? `${plural(list.length, 'thing')} deleted in the last 30 days. Restore puts one back as it was.` : 'Deleted tasks, notes, assets, documents, rates and zakat records wait here for 30 days.'}</p></div>
-      ${list.length ? '<button class="btn danger edit-only" data-action="trash-empty">Empty Trash</button>' : ''}
+      <div><h1>Bin</h1><p class="sub">${list.length ? `${plural(list.length, 'thing')} deleted in the last 30 days. Restore puts one back as it was.` : 'Deleted tasks, notes, assets, documents, rates and zakat records wait here for 30 days.'}</p></div>
+      ${list.length ? '<button class="btn danger edit-only" data-action="trash-empty">Empty Bin</button>' : ''}
     </div>
     <div class="card trash-card">
-      <ul class="list">${rows || '<li class="empty">The Trash is empty</li>'}</ul>
+      <ul class="list">${rows || '<li class="empty">The Bin is empty</li>'}</ul>
     </div>`;
 }
 
@@ -7840,11 +7848,11 @@ const DataView = {
   },
   chooser() {
     const picked = new Set(this.picked());
-    const box = (k) => `<label class="check"><input type="checkbox" data-export-key="${esc(k)}" ${picked.has(k) ? 'checked' : ''}> ${esc(SCHEMA[k].label)}</label>`;
+    const box = (k) => `<label><input type="checkbox" data-export-key="${esc(k)}" ${picked.has(k) ? 'checked' : ''}> ${esc(SCHEMA[k].label)}</label>`;
     return `<div class="card data-export">
       <div class="row" style="justify-content:space-between"><b>Export</b><span class="meta">One CSV file per table, every field; Excel opens them.</span></div>
-      <p class="meta" style="margin:6px 0 2px">Entries</p><div class="data-export-list">${this.keys('entry').map(box).join('')}</div>
-      <p class="meta" style="margin:8px 0 2px">Lists</p><div class="data-export-list">${this.keys('list').map(box).join('')}</div>
+      <p class="meta" style="margin:6px 0 2px">Entries</p><div class="check-row data-export-list">${this.keys('entry').map(box).join('')}</div>
+      <p class="meta" style="margin:8px 0 2px">Lists</p><div class="check-row data-export-list">${this.keys('list').map(box).join('')}</div>
       <div class="row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="btn small" data-action="data-export-all">All</button><button type="button" class="btn small" data-action="data-export-none">None</button>
         <button type="button" class="btn act" data-action="data-export-go" ${picked.size ? '' : 'disabled'}>${ic('download', 'sm')}Export ${plural(picked.size, 'table')}</button>
         <button type="button" class="btn" data-action="data-export-close">Close</button></div>
@@ -8057,11 +8065,11 @@ async function areaAddFiles(top, path, files) {
   }
   render();
 }
-// Delete a plain file (a bill's scan, an agreement, a file in your folders): into the Trash for 30 days, after asking.
+// Delete a plain file (a bill's scan, an agreement, a file in your folders): into the Bin for 30 days, after asking.
 async function plainRemove(id) {
   const d = DB.docs.find((x) => x.id === id);
   if (!d || state.readOnly) return;
-  if (!(await ask(`Delete "${d.attachments[0]?.name || d.name}"? It goes to the Trash for 30 days.`, { yes: 'Delete', danger: true }))) return;
+  if (!(await ask(`Delete "${d.attachments[0]?.name || d.name}"? It goes to the Bin for 30 days.`, { yes: 'Delete', danger: true }))) return;
   Trash.discard([['docs', d]], `"${d.name}"`);
   if (state.assetForm) renderAssetForm();
 }
@@ -8076,7 +8084,7 @@ function filesGo(key, id) {
   if (key === 'assets') { openAssetForm('asset', { id }); return; }
   openAssetForm('doc', { id });
 }
-// New folder, Rename and Delete on the Folders tab. Deleting a folder with things in it asks; they go to the Trash.
+// New folder, Rename and Delete on the Folders tab. Deleting a folder with things in it asks; they go to the Bin.
 async function vaultFolderAction(action, { top, path }) {
   if (action === 'vault-folder-new') {
     const name = await askText('New folder', '', { yes: 'Make folder' });
@@ -8095,7 +8103,7 @@ async function vaultFolderAction(action, { top, path }) {
     return;
   }
   const inside = Vault.within(top, path);
-  if (inside.length && !(await ask(`Delete the ${Files.base(path)} folder and the ${plural(inside.length, 'thing')} in it? ${inside.length === 1 ? 'It goes' : 'They go'} to the Trash for 30 days.`, { yes: 'Delete', danger: true }))) return;
+  if (inside.length && !(await ask(`Delete the ${Files.base(path)} folder and the ${plural(inside.length, 'thing')} in it? ${inside.length === 1 ? 'It goes' : 'They go'} to the Bin for 30 days.`, { yes: 'Delete', danger: true }))) return;
   Vault.dropFolder(top, path);
   if (inside.length) Trash.discard([['docs', inside], ['tasks', inside.flatMap((d) => Vault.openTasks(d))]], `the ${Files.base(path)} folder`);
   else toast(`Deleted the ${Files.base(path)} folder`);
@@ -9313,9 +9321,9 @@ function renderSettings() {
             <button class="btn" data-action="export">${ic('download', 'sm')}Export backup</button>
             <label class="btn">${ic('upload', 'sm')}Import backup<input type="file" accept="application/json" data-input="import" hidden></label>
           </div>
-          <h2>Trash</h2>
-          <p class="sub">Deleted tasks and notes wait ${DB.trash.length ? `here (${plural(DB.trash.length, 'thing')} now)` : 'in the Trash'} for 30 days, ready to restore.</p>
-          <div class="row"><button class="btn" data-view="trash">${ic('trash', 'sm')}Open Trash</button></div>
+          <h2>Bin</h2>
+          <p class="sub">Deleted tasks and notes wait ${DB.trash.length ? `here (${plural(DB.trash.length, 'thing')} now)` : 'in the Bin'} for 30 days, ready to restore.</p>
+          <div class="row"><button class="btn" data-view="trash">${ic('trash', 'sm')}Open Bin</button></div>
         </div>
       </div>
     </section>
@@ -10712,10 +10720,10 @@ document.addEventListener('click', (e) => {
     case 'upkeep-entry': openAssetForm('upkeep', { id, asset: btn.dataset.asset, choose: !!btn.dataset.choose }); break;
     case 'upkeep-log-ticked': { const t = DB.tasks.find((x) => x.id === id); const o = t && Upkeep.logFor(t); if (o) openAssetForm('upkeep', o); break; }
     case 'upkeep-skip': { const t = DB.tasks.find((x) => x.id === id); if (t && Upkeep.skip(t)) { changed('assets'); toast('Not logged: it won\'t ask again'); render(); if (state.assetForm) renderAssetForm(); } break; }
-    case 'not-a-car': { // a 'car' that was a place for supplies: its entries go to the store, it goes to the Trash
+    case 'not-a-car': { // a 'car' that was a place for supplies: its entries go to the store, it goes to the Bin
       const a = DB.assets.find((x) => x.id === id);
       if (!a) break;
-      ask(`Move ${a.name}'s log to the store and delete ${a.name}? Its entries become store items (one of each); ${a.name} goes to the Trash.`, { yes: 'Move and delete' }).then((yes) => {
+      ask(`Move ${a.name}'s log to the store and delete ${a.name}? Its entries become store items (one of each); ${a.name} goes to the Bin.`, { yes: 'Move and delete' }).then((yes) => {
         if (!yes) return;
         const n = Upkeep.toStore(a);
         changed('upkeep');
@@ -10817,7 +10825,7 @@ document.addEventListener('click', (e) => {
         .then((yes) => { if (yes) { People.remove(id); render(); renderDrawer(); } });
       break;
     }
-    case 'clear-done': PendingDelete.start(DB.tasks.filter((x) => x.done && !hiddenTask(x))); break; // Undo, then the Trash
+    case 'clear-done': PendingDelete.start(DB.tasks.filter((x) => x.done && !hiddenTask(x))); break; // Undo, then the Bin
     case 'delete-event': DB.events = DB.events.filter((x) => x.id !== id); changed('events'); render(); break;
     case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
     case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
@@ -10825,7 +10833,7 @@ document.addEventListener('click', (e) => {
     case 'new-note': newNote(); break;
     case 'delete-note': {
       const n = DB.notes.find((x) => x.id === state.activeNote);
-      if (n) PendingDelete.start(n, 'notes'); // Undo for a few seconds, then into the Trash
+      if (n) PendingDelete.start(n, 'notes'); // Undo for a few seconds, then into the Bin
       break;
     }
     case 'trash-restore': {
@@ -10835,7 +10843,7 @@ document.addEventListener('click', (e) => {
       render();
       break;
     }
-    case 'trash-undo': { // the Undo on a delete that went straight to the Trash
+    case 'trash-undo': { // the Undo on a delete that went straight to the Bin
       const back = id.split(',').map((x) => Trash.restore(x)).filter(Boolean);
       btn.closest('.toast')?.remove();
       afterRestore(back);
@@ -10850,7 +10858,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'trash-empty':
-      ask(`Empty the Trash? ${plural(DB.trash.length, 'thing')} will be deleted forever.`, { yes: 'Empty Trash', danger: true }).then((yes) => { if (yes) { Trash.empty(); render(); } });
+      ask(`Empty the Bin? ${plural(DB.trash.length, 'thing')} will be deleted forever.`, { yes: 'Empty Bin', danger: true }).then((yes) => { if (yes) { Trash.empty(); render(); } });
       break;
     case 'df-create': DF.createNew().then(render); break;
     case 'df-open': DF.openExisting().then(render); break;
@@ -11001,8 +11009,8 @@ document.addEventListener('keydown', (e) => {
   if (state.openTask) { closeTaskDrawer(); return; }
   if (PARENT_OF[state.view] && !e.target.closest?.('input, textarea, select')) setView(PARENT_OF[state.view]); // a sub-page: back to its parent
 });
-// Keyboard shortcuts, for when you're not typing in a box: 1 to 9 and 0 the screens in the sidebar's order, N
-// Notifications, Q W E R T Y U I O P the open screen's buttons in order (Add asset, Add rates…), A S D F G H J K L its
+// Keyboard shortcuts, for when you're not typing in a box: 1 to 9 the screens in the sidebar's order and 0 Data, N
+// the bell, M the ⋮ menu, B the Bin, Q W E R T Y U I O P the open screen's buttons in order (Add asset, Add rates…), A S D F G H J K L its
 // tabs in order, / search, ? lists them. (Esc, above, closes or steps back.)
 const SHORTCUT_VIEWS = ['today', 'tasks', 'calendar', 'notes', 'assets', 'utilities', 'musings', 'zakat', 'vault'];
 const BUTTON_KEYS = 'qwertyuiop';
@@ -11015,10 +11023,12 @@ function shortcut(e) {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false; // (assetForm: any pop-up)
   if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return false;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (k === '0') { setView('settings'); return true; }
+  if (k === '0') { setView('data'); return true; }
   const n = SHORTCUT_VIEWS[Number(k) - 1];
   if (n) { setView(n); return true; }
   if (k === 'n') { Bell.toggle(); return true; }
+  if (k === 'm') { Bell.close(); ActMenu.toggle(); return true; }
+  if (k === 'b') { setView('trash'); return true; }
   if (BUTTON_KEYS.includes(k)) { const b = pageButtons()[BUTTON_KEYS.indexOf(k)]; if (!b) return false; b.click(); return true; }
   if (TAB_KEYS.includes(k)) { const t = pageTabs()[TAB_KEYS.indexOf(k)]; if (!t) return false; t.click(); return true; }
   if (e.key === '/') { // search: the sidebar box on the laptop, the Search page's on the phone
@@ -11028,7 +11038,7 @@ function shortcut(e) {
     $('#main [data-input="global-search"]')?.focus();
     return true;
   }
-  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Settings, N Notifications (the bell). Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Data, N Notifications (the bell), M the ⋮ menu, B the Bin. Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });
@@ -11475,7 +11485,7 @@ applyTheme();
 if (signInPopup) document.body.textContent = 'Signing in…';
 else {
   if (state.phone) RO.boot(); else DB.load();
-  Trash.prune(); // anything in the Trash over 30 days goes
+  Trash.prune(); // anything in the Bin over 30 days goes
   zakatTasks(); // this year's zakat tasks, for each person with a zakat day
   vaultTasks(); // a renew task for each document that expires
   upkeepTasks(); // a task for each repeating upkeep job

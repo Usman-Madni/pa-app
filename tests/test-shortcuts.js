@@ -16,9 +16,15 @@ const { loadApp, check, done, answer } = require('./helpers');
   const views = ['today', 'tasks', 'calendar', 'notes', 'assets', 'utilities', 'musings', 'zakat', 'vault'];
   views.forEach((v, i) => { key(String(i + 1)); check(PA.state.view === v, `${i + 1} opens ${v}`); });
   key('0');
-  check(PA.state.view === 'settings', '0 opens Settings');
+  check(PA.state.view === 'data', '0 opens Data');
+  key('b');
+  check(PA.state.view === 'trash', 'B opens the Bin');
+  key('m');
+  check(doc.body.classList.contains('act-open'), 'M opens the ⋮ menu');
+  key('m');
+  check(!doc.body.classList.contains('act-open'), 'and again closes it');
   key('n');
-  check(doc.querySelector('#bell-pop') && PA.state.view === 'settings', 'N opens the bell\'s window (the page stays)');
+  check(doc.querySelector('#bell-pop') && PA.state.view === 'trash', 'N opens the bell\'s window (the page stays)');
   key('Escape');
   check(!doc.querySelector('#bell-pop'), 'Esc closes it');
   check(doc.querySelector('.nav-btn[data-view="assets"]').title === 'Assets (5)' && doc.querySelector('#main .bell-btn').title === 'Notifications (N)', 'each screen\'s button says its key');
@@ -59,7 +65,7 @@ const { loadApp, check, done, answer } = require('./helpers');
 
   // --- ? lists them ---
   key('?');
-  check(/1 My Day, 2 Tasks.*0 Settings, N Notifications \(the bell\).*Q W E R T/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
+  check(/1 My Day, 2 Tasks.*0 Data, N Notifications \(the bell\), M the ⋮ menu, B the Bin.*Q W E R T/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
 
   // --- Notes: delete is an icon at the top of the note, not a red button in the corner ---
   key('4');

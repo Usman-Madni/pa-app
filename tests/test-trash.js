@@ -25,7 +25,7 @@ const { loadApp, tick, check, done, answer } = require('./helpers');
   const e = PA.DB.trash.find((x) => x.item.id === t.id);
   check(e && e.kind === 'tasks' && e.item.title === 'Pay rent' && !PA.DB.tasks.some((x) => x.id === t.id), 'then it\'s in the Trash, as it was, and gone from Tasks');
   doc.querySelector('#main .act-toggle').click();
-  check(/Trash\s*1/.test(doc.querySelector('#act-panel [data-act-view="trash"]').textContent), 'Trash, in the ⋮ menu, shows how many');
+  check(/Bin\s*1/.test(doc.querySelector('#act-panel [data-act-view="trash"]').textContent), 'the Bin (it was the Trash), in the ⋮ menu, shows how many');
   doc.querySelector('#main .act-toggle').click();
 
   // --- Notes: Undo, then the Trash ---
@@ -63,7 +63,7 @@ const { loadApp, tick, check, done, answer } = require('./helpers');
   check(/forever/.test(q) && !PA.DB.trash.some((x) => x.id === noteEntry.id), 'Delete forever asks, then removes it');
   doc.querySelector('[data-action="trash-empty"]').click();
   await answer(win, true);
-  check(!PA.DB.trash.length && /The Trash is empty/.test(doc.querySelector('#main').textContent), 'Empty Trash asks, then clears it');
+  check(!PA.DB.trash.length && /The Bin is empty/.test(doc.querySelector('#main').textContent), 'Empty Bin asks, then clears it');
 
   // --- Restoring twice never makes two ---
   Trash.add('tasks', [back]);
@@ -90,7 +90,7 @@ const { loadApp, tick, check, done, answer } = require('./helpers');
   await ro.PA.RO.open({ name: 'd.json', text: async () => JSON.stringify({ app: 'PA App', version: 2, saveToken: 't', data: { tasks: [], notes: [], events: [] } }) });
   check(Array.isArray(ro.PA.DB.trash) && ro.PA.DB.trash.length === 0, 'a data file from before the Trash loads (an empty Trash)');
   ro.doc.defaultView.eval('setView')('trash');
-  check(/The Trash is empty/.test(ro.doc.querySelector('#main').textContent), 'read-only can open the Trash');
+  check(/The Bin is empty/.test(ro.doc.querySelector('#main').textContent) && /<h1>Bin<\/h1>/.test(ro.doc.querySelector('#main').innerHTML), 'read-only can open the Bin (its name, not Trash)');
   check(['trash-restore', 'trash-forget', 'trash-empty'].every((a) => ro.win.eval('EDIT_ACTIONS').has(a)), 'restoring and deleting forever are edit-only');
   ro.close();
   done();

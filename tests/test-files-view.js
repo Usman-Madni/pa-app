@@ -94,7 +94,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   main().querySelector(`[data-action="plain-remove"][data-id="${kept.id}"]`).click();
   const pq = await answer(win, true);
   await tick(20);
-  check(/Delete "valuation.pdf"\? It goes to the Trash/.test(pq) && !PA.DB.docs.includes(kept) && PA.DB.trash.some((e) => e.kind === 'docs' && e.item.id === kept.id), 'a plain file: ✕ sends it to the Trash, after asking');
+  check(/Delete "valuation.pdf"\? It goes to the Bin/.test(pq) && !PA.DB.docs.includes(kept) && PA.DB.trash.some((e) => e.kind === 'docs' && e.item.id === kept.id), 'a plain file: ✕ sends it to the Trash, after asking');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
   done();

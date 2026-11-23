@@ -172,3 +172,16 @@ _Avoid_: viewer, mobile mode
 **Phone reminders**:
 The copy of every open task in a "PA App" list in Microsoft To Do, which does the notifying on the phone and sends ticks and edits back.
 _Avoid_: To Do sync (in conversation), push notifications
+
+## Around the app
+
+**Bin**:
+Where deleted things wait 30 days to be restored (in the ⋮ menu; B opens it). In the code and the data it is still `trash` / `Trash`.
+_Avoid_: Trash (the old name on screen), recycle bin
+
+**Top bar**:
+A page's title row, which stays at the top as the page scrolls, with its buttons, the bell and ⋮.
+
+**The ⋮ menu**:
+The panel down the right edge with every page's buttons, grouped by colour, and Butler's own (Data, Guide, Light or dark, Settings, Bin).
+_Avoid_: More menu (the phone's bottom-bar list of pages is More)

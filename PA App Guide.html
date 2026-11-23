@@ -168,7 +168,7 @@ ol.key li { margin: 4px 0; }
             <li><b>Gold buttons do something:</b> Transfer, Select, Paste history, Export, Import.</li>
             <li><b>Teal buttons add an entry</b>, something that happens on a day: + Task, + Rates, + Zakat record, + Bill.</li>
             <li><b>Outlined buttons add to a list</b> you pick from later: + Asset, + Car, + Connection, + Document. (Red ones delete.) They always come in this order: gold, teal, outlined; the keys <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… press them left to right.</li>
-            <li><b>The bell</b> shows how many notifications are unread and opens the latest under it; <b>⋮ opens the menu</b> down the right edge: every page's buttons in one place, grouped by these colours, then Data, Export, the Guide, Light or dark, Settings and the Trash. The sidebar keeps just the pages.</li>
+            <li><b>The bell</b> shows how many notifications are unread and opens the latest under it; <b>⋮ opens the menu</b> down the right edge: every page's buttons in one place, grouped by these colours, then Data, Export, the Guide, Light or dark, Settings and the Bin. The sidebar keeps just the pages.</li>
             <li><b>The tabs</b> of the page (<kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>… open them).</li>
             <li><b>Filter this page</b> narrows what's listed to what has every word you type.</li>
           </ol>
@@ -223,8 +223,10 @@ ol.key li { margin: 4px 0; }
           <p>On the laptop, when you're not typing in a box:</p>
           <table>
             <tr><th>Key</th><th>Does</th></tr>
-            <tr><td><kbd>1</kbd> to <kbd>9</kbd>, <kbd>0</kbd></td><td>The screens in the sidebar's order: My Day, Tasks, Calendar, Notes, Assets, Utilities, Musings, Zakat, Vault; <kbd>0</kbd> Settings (pointing at a screen's name shows its key)</td></tr>
+            <tr><td><kbd>1</kbd> to <kbd>9</kbd>, <kbd>0</kbd></td><td>The screens in the sidebar's order: My Day, Tasks, Calendar, Notes, Assets, Utilities, Musings, Zakat, Vault; <kbd>0</kbd> Data (pointing at a screen's name shows its key)</td></tr>
             <tr><td><kbd>N</kbd></td><td>Notifications: opens the bell's window</td></tr>
+            <tr><td><kbd>M</kbd></td><td>The ⋮ menu (again closes it)</td></tr>
+            <tr><td><kbd>B</kbd></td><td>The Bin: deleted things, kept 30 days</td></tr>
             <tr><td><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd> …</td><td>The open screen's buttons at the top, in order: on Assets, <kbd>Q</kbd> is the first (+ Rates) and <kbd>W</kbd> the next</td></tr>
             <tr><td><kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> …</td><td>The open screen's tabs, in order</td></tr>
             <tr><td><kbd>/</kbd></td><td>Search across Butler</td></tr>
@@ -236,9 +238,9 @@ ol.key li { margin: 4px 0; }
         <section id="search" data-title="Search">
           <h3>Search</h3>
           <p>The <b>Search</b> box at the top of the sidebar (on the phone, the magnifying glass above the page) looks through everything: tasks (and their notes and steps), notes, events, assets, documents (by name, type or number), zakat records and payments. Type a few words; each one must be there, in any order. Results are grouped by kind; click one to open it. With the person picker on one person, it searches only theirs.</p>
-          <p><b>Filter this page:</b> Tasks, Assets, Utilities, Zakat, the Vault, Notifications and the Trash each have their own box, which narrows that page's list as you type.</p>
+          <p><b>Filter this page:</b> Tasks, Assets, Utilities, Zakat, the Vault, Notifications and the Bin each have their own box, which narrows that page's list as you type.</p>
           <p><b>Button colours:</b> <b>gold</b> buttons do something (Transfer, Select, Paste history, Export); <b>teal</b> ones add an entry, something that happens on a day (+ Task, + Rates, + Zakat record); <b>outlined</b> ones add to a list (+ Asset, + Connection, + Document); <b>red</b> ones delete. On a page they go gold, then teal, then outlined, left to right, and the add buttons say what they add.</p>
-          <p><b>The ⋮ menu</b> at the end of every page's buttons opens a panel down the right edge with every page's buttons in one place: <b>Actions</b> (the gold ones), <b>Add an entry</b> (teal) and <b>Add to a list</b> (outlined), each with the page it's on, then Data, Export, the Guide, Light or dark, Settings and the Trash. Pick one and Butler goes to that page and presses it. Esc, × or a tap outside closes it.</p>
+          <p><b>The ⋮ menu</b> at the end of every page's buttons opens a panel down the right edge with every page's buttons in one place: <b>Actions</b> (the gold ones), <b>Add an entry</b> (teal) and <b>Add to a list</b> (outlined), each with the page it's on, then Data, Export, the Guide, Light or dark, Settings and the Bin. Pick one and Butler goes to that page and presses it. Esc, × or a tap outside closes it.</p>
           <p><b>Every page is laid out the same:</b> its name with its buttons on the right and <b>⋮</b> at the end (on a phone, the first teal button and <b>⋮</b>), then the tabs with <b>Filter this page</b> beside them, then the list's Group by and Sort, with how many and their total on the right.</p>
         </section>
         <section id="photos" data-title="Photos">
@@ -301,7 +303,7 @@ ol.key li { margin: 4px 0; }
             <li><b>Paste history</b> brings in a rent sheet you kept in Excel: select its rows (Month, Due, Received, Payment date, Balance, Comments), copy, and paste. Before you bring it in, it says how many months it found, the rent changes, and what was due, received and short, so you can check it against the sheet's Total; lines it doesn't understand are named and left out. Each month the rent changed becomes a new term (and is marked "Renewed, x% increase"), what came in each month becomes a payment with its date, and your own comments are kept. Pasting again replaces those months, so nothing doubles.</li>
             <li><b>Files</b> (the agreement, receipts) go to <code>Rentals › &lt;name&gt;</code> in your folder, from <b>Add files</b> on the agreement or attached to its tasks.</li>
             <li><b>Several properties in one agreement:</b> each property's pop-up shows the agreement's rent "for both" (or for all of them) and names the others. To split it, give each property its <b>share</b> (%) in the agreement's Details, adding up to 100: each property then shows its share of the rent and of what's owed. The ledger stays the agreement's.</li>
-            <li><b>Ended on</b>, when the tenant leaves, stops the ledger and the renew reminders. Deleting an agreement sends it and its open tasks to the Trash.</li>
+            <li><b>Ended on</b>, when the tenant leaves, stops the ledger and the renew reminders. Deleting an agreement sends it and its open tasks to the Bin.</li>
           </ul>
         </section>
         <section id="upkeep" data-title="Upkeep: cars and other assets">
@@ -356,7 +358,7 @@ ol.key li { margin: 4px 0; }
             <li><b>Overview:</b> pick a <b>Property</b> (or all, or those not linked to one) and a <b>Year</b> (or All time), beside <b>Filter this page</b>; the choice stays as you move between tabs. Filter this page finds a connection by its name, property, provider or account number. At the top: this month (with what's unpaid), the year so far against the same months last year, and the average a month. Then a table per type: the column heads at the top, a shaded first row with the type's totals, then a numbered row per connection. The columns: its last bill (Paid or Unpaid), the type's own figures (units, rate and net metering for electricity; units and rate for gas and water; litres and price a litre for fuel), the year so far, the change against last year, a 12-month trend line and when the next bill is due. On a phone the table scrolls sideways inside its card. At the bottom, month by month against last year. Each type's tab shows its group above its connections' cards.</li>
             <li><b>Fuel:</b> the pump that bills you monthly is a <b>Fuel</b> connection; tick the cars it fuels (sold ones aren't offered). Each month's bill has its amount and litres, and can be split <b>by car</b> (amount, litres and the reading), as the pump's statement shows it; left empty, the bill and litres are the cars' added up. Each car's sheet then shows its fuel: this year's cost and litres, km a litre and fuel a km (from the readings), and what it cost with its upkeep. The readings count as the car's readings too.</li>
             <li><b>A property</b> lists its utilities and what they cost this year in its pop-up.</li>
-            <li>Deleting a connection sends it, its bills and its open bill task to the Trash.</li>
+            <li>Deleting a connection sends it, its bills and its open bill task to the Bin.</li>
           </ul>
         </section>
         <section id="vault" data-title="Vault">
@@ -375,9 +377,9 @@ ol.key li { margin: 4px 0; }
           <ul>
             <li><b>Where it opens:</b> with everyone shown in the person picker, on a folder for each person, and <b>Shared</b> for things on more than one person. With one person picked, on theirs, with Shared as a folder at the top.</li>
             <li><b>Outside the Vault</b> the folders follow the things in them (a car, a repeating task). Tap a file to open it; the arrow opens what it's on. <b>Add files</b> in a thing's own folder (a car's) attaches them to it; in a folder of many things (Gold, Tasks) it asks which one, or <b>Just keep it here</b> as a plain file in that folder. New folders can't go inside Butler's folders, and a folder of yours can't take their names.</li>
-            <li><b>New folder</b> makes one where you are, right in a person's folder or inside one of yours; folders can sit inside folders. The path at the top takes you back up. <b>✎</b> renames a folder (everything inside follows, its files on disk too) and the bin deletes it: if anything is inside, it asks first, and those things go to the Trash for 30 days.</li>
+            <li><b>New folder</b> makes one where you are, right in a person's folder or inside one of yours; folders can sit inside folders. The path at the top takes you back up. <b>✎</b> renames a folder (everything inside follows, its files on disk too) and the bin deletes it: if anything is inside, it asks first, and those things go to the Bin for 30 days.</li>
             <li><b>Add files</b> (on the phone also <b>Take photo</b>) puts plain files in the folder: bills, agreements, anything without dates. Each keeps its own name. Tap one to open it; <b>✎</b> shows its details, where you can rename it, move it to another folder or give it to someone else.</li>
-            <li><b>Removing a file:</b> ✕ beside a file, wherever it's listed, asks first. A file on a task, asset or entry comes off it (and is deleted only when nothing else uses it); a plain file (a bill's scan, an agreement, a file in your folders) goes to the Trash for 30 days.</li>
+            <li><b>Removing a file:</b> ✕ beside a file, wherever it's listed, asks first. A file on a task, asset or entry comes off it (and is deleted only when nothing else uses it); a plain file (a bill's scan, an agreement, a file in your folders) goes to the Bin for 30 days.</li>
             <li><b>A plain file can become a document:</b> in its details, tick <b>Keep its dates and number</b> and fill them in; anything that expires then gets its renew reminder.</li>
             <li><b>+ Document</b> in a folder puts the new document there. Any document's details have a <b>Folder</b> to move it.</li>
             <li><b>From Vault:</b> a task, an asset or an upkeep entry can use a file that's already in the Vault: pick it under <b>From Vault…</b> beside its files. It's the same file, not a copy (it shows a small ID mark), so renaming it anywhere renames it everywhere, and removing it from the task leaves it in the Vault.</li>
@@ -444,8 +446,8 @@ ol.key li { margin: 4px 0; }
           <p>At the bottom: <b>Duplicate</b> makes "Title (copy)", not started, with steps unticked. <b>Delete</b> asks first if the task has notes, steps or files.</p>
           <p><b>Several at once:</b> on Tasks, press <b>Select</b>, then tap the tasks you want (List or Board, laptop or phone). The bar above them can <b>Mark done</b>, <b>Move to</b> a bucket, or <b>Delete</b> them all (one Undo brings them all back). <b>Select all</b> picks every task shown; <b>Cancel</b> or <kbd>Esc</kbd> stops selecting.</p>
           <p><b>Changed your mind?</b> After a delete, a message says <b>Deleted "…"</b> with <b>Undo</b> for about 6 seconds. Until then the task is only hidden, so nothing else (the data file, your other device, To Do) is told. Leaving the app, or switching away on the phone, deletes it straight away. In a list, the delete <b>×</b> shows when you point at a row (on the phone it's always there). Deleting a note works the same way.</p>
-          <p><b>The Trash:</b> once it's really deleted, a task or note goes to the <b>Trash</b> (in the <b>⋮</b> menu, with how many are in it) for 30 days. <b>Restore</b> puts it back as it was; <b>×</b> deletes one for good, <b>Empty Trash</b> all of them. After 30 days things leave the Trash by themselves. Both devices share it.</p>
-          <p><b>Assets, documents, rates, zakat records and payments</b> are deleted the same way, without a question: they go to the Trash straight away, with an <b>Undo</b> for a few seconds (a document's renew task goes and comes back with it). Removing a person still asks first.</p>
+          <p><b>The Bin:</b> once it's really deleted, a task or note goes to the <b>Bin</b> (in the <b>⋮</b> menu, with how many are in it) for 30 days. <b>Restore</b> puts it back as it was; <b>×</b> deletes one for good, <b>Empty Bin</b> all of them. After 30 days things leave the Bin by themselves. Both devices share it.</p>
+          <p><b>Assets, documents, rates, zakat records and payments</b> are deleted the same way, without a question: they go to the Bin straight away, with an <b>Undo</b> for a few seconds (a document's renew task goes and comes back with it). Removing a person still asks first.</p>
         </section>
         <section id="done" data-title="Ticking a task off">
           <h3>Ticking a task off</h3>

@@ -83,8 +83,9 @@ const { loadApp, check, done } = require('./helpers');
   main().querySelector('[data-action="data-export-close"]').click();
   check(!main().querySelector('.data-export'), 'Close hides it');
   doc.querySelector('#main .act-toggle').click();
-  const actItems = [...doc.querySelectorAll('#act-panel .act-item')].map((x) => x.textContent.trim());
-  check(actItems.includes('Export') && !actItems.some((x) => /^Export \w/.test(x)), 'the ⋮ menu has one Export, not one per table');
+  const actItems = [...doc.querySelectorAll('#act-panel .act-item, #act-panel .btn')].map((x) => x.textContent.trim());
+  const exp = doc.querySelector('#act-panel .act-group.act-act [data-act-export]');
+  check(exp && exp.classList.contains('act') && actItems.filter((x) => /^Export/.test(x)).length === 1, 'the ⋮ menu has one Export, a gold button at the top of Actions');
   doc.querySelector('#act-panel [data-act-export]').click();
   check(PA.state.view === 'data' && main().querySelector('.data-export'), 'it opens the Data page with the tables to choose');
 
