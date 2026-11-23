@@ -129,6 +129,18 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   check(g.files['Me/Tasks/November bill.pdf'], 'a file another task still uses is kept');
   await tick(100);
 
+  // --- The data read again while a photo uploads (back from the camera): the photo still lands on the record ---
+  const realFetch = win.fetch;
+  win.fetch = async (url, o = {}) => {
+    if ((o.method || '').toUpperCase() === 'PUT' && /Attachments/.test(url)) PA.DB.tasks = JSON.parse(JSON.stringify(PA.DB.tasks)).map(PA.normalizeTask); // a fresh copy of every task, as after a reload
+    return realFetch(url, o);
+  };
+  const before2 = PA.DB.tasks[0].attachments.length;
+  await PA.AT.add(PA.DB.tasks[0], [new win.File(['jpg'], 'camera.jpg', { type: 'image/jpeg' })]);
+  await tick(30);
+  win.fetch = realFetch;
+  check(PA.DB.tasks[0].attachments.length === before2 + 1 && PA.DB.tasks[0].attachments.some((a) => a.original === 'camera.jpg'), 'a photo taken while the data is read again still lands on the record (the copy in use now)');
+
   // --- A file that can't be uploaded: says so, adds nothing ---
   g.offline = true;
   const before = PA.DB.tasks[0].attachments.length;

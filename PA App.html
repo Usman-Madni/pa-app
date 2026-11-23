@@ -1959,6 +1959,7 @@ const Vault = {
     changed('docs');
     for (let i = 0; i < made.length; i++) await AT.add(made[i], [files[i]], 'docs', true);
     // A file that couldn't be stored leaves nothing behind.
+    for (let i = 0; i < made.length; i++) made[i] = AT.current(made[i], 'docs'); // as they are now
     const failed = made.filter((d) => !d.attachments.length);
     if (failed.length) {
       DB.docs = DB.docs.filter((d) => !failed.includes(d));
@@ -3577,6 +3578,11 @@ const AT = {
   },
 
   // Files for a task, or (key) a vault document or an asset: any record with a title or name and `attachments`.
+  current(rec, key) {
+    const now = (DB[key] || []).find((x) => x.id === rec.id) || rec;
+    if (!Array.isArray(now.attachments)) now.attachments = [];
+    return now;
+  },
   async add(task, files, key = 'tasks', quiet = false) {
     if (state.readOnly || !task) return;
     if (!Array.isArray(task.attachments)) task.attachments = [];
@@ -3590,8 +3596,9 @@ const AT = {
         await w.write(f);
         await w.close();
         // New attachments belong to this copy only; 📌 makes one carry over to every repeat.
-        task.attachments.push({ id: uid(), name: Files.base(stored), file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
-        if (key === 'tasks') Vault.fileTask(task, task.attachments[task.attachments.length - 1]);
+        const rec = this.current(task, key);
+        rec.attachments.push({ id: uid(), name: Files.base(stored), file: stored, original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        if (key === 'tasks') Vault.fileTask(rec, rec.attachments[rec.attachments.length - 1]);
         added++;
       } catch (e) {
         toast(`Could not attach ${f.name}: ${e.message}`);
@@ -9700,8 +9707,9 @@ const OD = Object.assign(Object.create(TD), {
         // OneDrive makes the folders on the way when they aren't there yet.
         const saved = await this.graph('PUT', `${this.filePath(Files.join(folder, wanted))}/content?@microsoft.graph.conflictBehavior=rename`, f);
         const stored = (saved && saved.name) || wanted;
-        task.attachments.push({ id: uid(), name: stored, file: Files.join(folder, stored), original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
-        if (key === 'tasks') Vault.fileTask(task, task.attachments[task.attachments.length - 1]);
+        const rec = AT.current(task, key); // the record as it is now (the data may have been read again while uploading)
+        rec.attachments.push({ id: uid(), name: stored, file: Files.join(folder, stored), original: f.name, size: f.size, type: f.type || '', added: Date.now(), keep: false });
+        if (key === 'tasks') Vault.fileTask(rec, rec.attachments[rec.attachments.length - 1]);
         added++;
       } catch (e) {
         toast(e && e.name === 'TypeError' ? `Could not attach ${f.name}: no connection` : `Could not attach ${f.name}: ${e.message}`);
