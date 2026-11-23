@@ -84,6 +84,24 @@ li { margin: 3px 0; }
 table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 14.5px; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.madeup { color: var(--muted); font-size: 13.5px; margin: 0 0 8px; }
+.chap-lead { font-size: 16.5px; margin: 4px 0 18px; }
+.mock { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 14px 16px; margin: 12px 0; overflow-x: auto; }
+.mock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.mock-title { font-family: var(--display); font-size: 24px; display: flex; align-items: center; gap: 6px; }
+.mock-sub { color: var(--muted); font-size: 13px; }
+.mock-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.mb { padding: 5px 10px; border-radius: 8px; font-size: 13px; border: 1px solid var(--border); white-space: nowrap; }
+.mb.act { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); border-color: transparent; }
+.mb.entry { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.mb.dots { border-color: transparent; font-weight: 700; }
+.mock-tabs { display: flex; align-items: center; gap: 4px; margin-top: 12px; flex-wrap: wrap; }
+.mt { padding: 5px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); }
+.mt.on { background: var(--panel-2); color: var(--text); }
+.mock-filter { margin-left: auto; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--muted); }
+.mk { font-style: normal; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 11px; font-weight: 700; flex: none; }
+ol.key { padding-left: 22px; }
+ol.key li { margin: 4px 0; }
 .chip { display: inline-block; padding: 1px 9px; border-radius: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .c-over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .c-today { background: var(--accent-soft); color: var(--accent); }
@@ -129,10 +147,32 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
     <div class="content">
       <h1 id="top">Butler Guide</h1>
       <p class="lede">Tasks, reminders, notes and a calendar in one place, with reminders on your phone through Microsoft To Do. Everything here is what's in the app today.</p>
+      <p class="madeup">Every name and figure in this guide is made up.</p>
 
       <!-- ===================== 1 ===================== -->
       <div class="chapter" data-chap="Start here">
         <h2>Chapter 1</h2><div class="title">Start here</div>
+        <p class="chap-lead">What Butler is, how to open it on the laptop and the phone, and how every page is laid out, so the rest of the guide reads the same way.</p>
+        <section id="top-of-page" data-title="The top of a page">
+          <h3>The top of a page</h3>
+          <p>Every page starts the same way. This is the Assets page; the numbers match the list under it.</p>
+          <div class="mock" role="img" aria-label="The top of the Assets page, with numbered parts">
+            <div class="mock-head">
+              <div><div class="mock-title">Assets <i class="mk">1</i></div><div class="mock-sub">Net worth Rs 12,40,000</div></div>
+              <div class="mock-btns"><span class="mb act">⇄ Transfer</span><i class="mk">2</i><span class="mb entry">+ Rates</span><span class="mb entry">Update balances</span><i class="mk">3</i><span class="mb list">+ Asset</span><i class="mk">4</i><span class="mb dots">⋮</span><i class="mk">5</i></div>
+            </div>
+            <div class="mock-tabs"><span class="mt on">Overview</span><span class="mt">Property</span><span class="mt">Vehicles</span><span class="mt">Rates</span><i class="mk">6</i><span class="mock-filter">Filter this page</span><i class="mk">7</i></div>
+          </div>
+          <ol class="key">
+            <li><b>The page's name</b> and one line on what it holds.</li>
+            <li><b>Gold buttons do something:</b> Transfer, Select, Paste history, Export, Import.</li>
+            <li><b>Teal buttons add an entry</b>, something that happens on a day: + Task, + Rates, + Zakat record, + Bill.</li>
+            <li><b>Outlined buttons add to a list</b> you pick from later: + Asset, + Car, + Connection, + Document. (Red ones delete.) They always come in this order: gold, teal, outlined; the keys <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… press them left to right.</li>
+            <li><b>⋮ opens the menu</b> down the right edge: every page's buttons in one place, grouped by these colours, then Data, the Guide, Light or dark and Settings.</li>
+            <li><b>The tabs</b> of the page (<kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>… open them).</li>
+            <li><b>Filter this page</b> narrows what's listed to what has every word you type.</li>
+          </ol>
+        </section>
         <section id="what" data-title="What Butler is">
           <h3>What Butler is</h3>
           <p>Butler keeps your tasks, notes and events in <b>one data file</b> in OneDrive, saved a couple of seconds after every change. You can edit on the laptop and on the phone; if both changed things, Butler puts them together. Microsoft To Do also puts your tasks on the phone with their reminders.</p>
@@ -361,6 +401,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       <!-- ===================== 2 ===================== -->
       <div class="chapter" data-chap="Tasks">
         <h2>Chapter 2</h2><div class="title">Tasks</div>
+        <p class="chap-lead">Everything you need to do lives here: add it in one line, open it for the details, and tick it off.</p>
         <section id="quickadd" data-title="Quick add">
           <h3>Quick add</h3>
           <p>Type a task the way you'd say it. Butler picks out the date, time, repeat, label, bucket and priority, and shows what it understood before you press <kbd>Enter</kbd>.</p>
@@ -416,6 +457,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       <!-- ===================== 3 ===================== -->
       <div class="chapter" data-chap="Repeating tasks">
         <h2>Chapter 3</h2><div class="title">Repeating tasks</div>
+        <p class="chap-lead">A task that comes back makes its next copy when you tick it, carrying its name, files and reminders forward.</p>
         <section id="repeat" data-title="How repeats work">
           <h3>How repeats work</h3>
           <p>A repeating task has one open <b>copy</b> at a time. Tick it off and its <b>next copy</b> appears, due on the next date, with the same steps (unticked), reminders, labels and 📌 files.</p>
@@ -446,6 +488,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       <!-- ===================== 4 ===================== -->
       <div class="chapter" data-chap="Reminders and notifications">
         <h2>Chapter 4</h2><div class="title">Reminders and notifications</div>
+        <p class="chap-lead">When something is due, Butler tells you: on the laptop while it's open, and on the phone through To Do.</p>
         <section id="reminders" data-title="Reminders">
           <h3>Reminders</h3>
           <p>A task can have several reminders. Pick one from <b>Remind me</b>, or a custom one:</p>
@@ -474,6 +517,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       <!-- ===================== 5 ===================== -->
       <div class="chapter" data-chap="Phone reminders (To Do)">
         <h2>Chapter 5</h2><div class="title">Phone reminders (Microsoft To Do)</div>
+        <p class="chap-lead">Your tasks go to a To Do list, so the phone rings even when Butler is closed, and anything you tick there comes back.</p>
         <section id="connect" data-title="Connecting">
           <h3>Connecting</h3>
           <ol class="steps">
@@ -505,6 +549,7 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       <!-- ===================== 6 ===================== -->
       <div class="chapter" data-chap="Your data">
         <h2>Chapter 6</h2><div class="title">Your data</div>
+        <p class="chap-lead">Where everything is kept, how the laptop and the phone share it, and how to see it all as tables.</p>
         <section id="data-page" data-title="The Data page">
           <h3>The Data page</h3>
           <p><b>Data</b> (sidebar; on a phone, under <b>More</b>) shows everything Butler keeps as tables, one per kind, so you can see it all laid out the way a spreadsheet would. Nothing is typed in here: every entry is made where it belongs, and this page shows it.</p>
@@ -516,6 +561,32 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
             <li><b>Export</b> saves the table you're on as a CSV file that Excel opens, with every field, including the ones the table leaves out.</li>
             <li>Each table ends with the record's <b>ID</b> and when it last <b>Changed</b>. With one person picked at the top, it shows only theirs.</li>
           </ul>
+          <details class="card note">
+            <summary><b>Every table and its columns</b></summary>
+            <table>
+            <tr><th>Entries</th><th>What it holds</th><th>Columns</th></tr>
+            <tr><td><b>Tasks</b></td><td>Everything to do</td><td>Title, Period, Due, Start, Done, Done on, Priority, Progress, Bucket, Labels, Whose, Repeat, Reminders, Checklist, Files</td></tr>
+            <tr><td><b>Events</b></td><td>Calendar events</td><td>Title, Date, Time, Whose</td></tr>
+            <tr><td><b>Notes</b></td><td>Notes</td><td>Title, Whose</td></tr>
+            <tr><td><b>Bills</b></td><td>A connection's bill each month</td><td>Month, Connection, Units, Amount, Credit, Paid on, Split by car, Note, Files</td></tr>
+            <tr><td><b>Upkeep log</b></td><td>Services, repairs and supplies for a car or other asset</td><td>Date, For, Type, Item, Cost, Vendor, Km, Files</td></tr>
+            <tr><td><b>Rates</b></td><td>Gold, silver and currency rates on a day</td><td>Date, Gold a tola, Silver a tola, Currencies, Filled in by Butler</td></tr>
+            <tr><td><b>Zakat years</b></td><td>A person's zakat year</td><td>Whose, Islamic year, Zakat day, Status, Counted, Nisab, Due, Pay by, Items</td></tr>
+            <tr><td><b>Zakat paid</b></td><td>Zakat paid</td><td>Date, Whose, Amount, To, For year</td></tr>
+            <tr><td><b>Musings</b></td><td>Pieces you wrote</td><td>Title, Written, Status, Collections, Whose, Pictures</td></tr>
+            <tr><th>Lists</th><th></th><th></th></tr>
+            <tr><td><b>People</b></td><td>You and the people you keep things for</td><td>Name, Zakat day</td></tr>
+            <tr><td><b>Assets</b></td><td>What you own and owe</td><td>Name, Kind, Karat, Grams, Currency, Values, Owners, Acquired, Closed, Files</td></tr>
+            <tr><td><b>Documents</b></td><td>Documents and plain files in the Vault</td><td>Name, Category, Type, Number, Issued, Expires, Remind (months), Whose, Assets, Folder, Plain file, Files</td></tr>
+            <tr><td><b>Connections</b></td><td>Electricity, gas, water, phone, internet, fuel</td><td>Name, Type, Provider, Account, Property, Bill day, Bill is for, Cars, Whose</td></tr>
+            <tr><td><b>Agreements</b></td><td>Rental agreements</td><td>Name, Properties, Tenant, Phone, Deposit, Rent day, Remind (months), Terms, Payments, Ended, Whose</td></tr>
+            <tr><td><b>Buckets</b></td><td>Task buckets</td><td>Name, Order, Butler's tasks, For</td></tr>
+            <tr><td><b>Labels</b></td><td>Task labels</td><td>Name, Colour</td></tr>
+            <tr><td><b>Folders</b></td><td>Your own Vault folders</td><td>Folder, Whose</td></tr>
+            <tr><td><b>Moon corrections</b></td><td>A month the moon was sighted a day off here</td><td>Islamic year, Month, Shift (days)</td></tr>
+            </table>
+            <p>Each table also ends with the record's ID and when it last changed. The export has every field, including the few the table leaves out (notes, Butler's own bookkeeping).</p>
+          </details>
         </section>
         <section id="file" data-title="The data file">
           <h3>The data file</h3>
@@ -572,18 +643,73 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
       </div>
 
       <!-- ===================== 7 ===================== -->
+      <div class="chapter" data-chap="How figures are worked out">
+        <h2>Chapter 7</h2><div class="title">How figures are worked out</div>
+        <p class="chap-lead">Every number Butler shows can be checked by hand: here is each sum in words, with a worked example.</p>
+        <section id="fig-assets" data-title="What an asset is worth">
+          <h3>What an asset is worth</h3>
+          <p><b>Gold and silver:</b> the weight in tola (grams ÷ 11.7) × that day's rate for its karat (rupees per tola). <b>Cash, accounts, investments:</b> the latest amount on or before the day, × the currency's rate if it isn't rupees. <b>Debts</b> count against you. An asset with no rate for the day says <b>can't be valued</b> rather than counting as nothing.</p>
+          <p><b>Your part</b> of something shared is its value × your share on that day.</p>
+          <table><tr><th>Example</th><th>Sum</th><th>Result</th></tr>
+            <tr><td>A 46.8 g, 22 karat set; 22 karat at Rs 2,50,000 a tola</td><td>46.8 ÷ 11.7 = 4 tola; 4 × 2,50,000</td><td>Rs 10,00,000</td></tr>
+            <tr><td>Half of it is yours</td><td>10,00,000 × 50%</td><td>Rs 5,00,000</td></tr></table>
+        </section>
+        <section id="fig-zakat" data-title="Zakat">
+          <h3>Zakat</h3>
+          <p>On the zakat day: add up your part of everything ticked as counting. The <b>nisab</b> is 52.5 tola of silver at that day's silver rate. If the total is above it, zakat is <b>2.5%</b> of the total; with <b>Round up</b> on, that goes up to the next 1,000. Payments count towards the oldest year with something left; paying more than is left carries over or stays as extra charity, as you choose.</p>
+          <table><tr><th>Example</th><th>Sum</th><th>Result</th></tr>
+            <tr><td>Silver at Rs 2,600 a tola</td><td>52.5 × 2,600</td><td>Nisab Rs 1,36,500</td></tr>
+            <tr><td>Counted Rs 12,34,000 (above the nisab)</td><td>12,34,000 × 2.5%</td><td>Rs 30,850</td></tr>
+            <tr><td>Round up on</td><td>up to the next 1,000</td><td>Rs 31,000 due</td></tr></table>
+        </section>
+        <section id="fig-rent" data-title="Rent owed">
+          <h3>Rent owed</h3>
+          <p>Each month from the agreement's start to this month (or the month it ended) owes that month's rent from its term. <b>Owed</b> is the rent of every month less what was received and what was written off. Renewing suggests 10% more than the rent now, unrounded.</p>
+          <table><tr><th>Month</th><th>Rent</th><th>Received</th><th>Written off</th><th>Left</th></tr>
+            <tr><td>Jan</td><td>50,000</td><td>50,000</td><td></td><td>0</td></tr>
+            <tr><td>Feb</td><td>50,000</td><td>30,000</td><td></td><td>20,000</td></tr>
+            <tr><td>Mar</td><td>50,000</td><td>40,000</td><td>5,000</td><td>5,000</td></tr>
+            <tr><td colspan="4"><b>Owed</b></td><td><b>Rs 25,000</b></td></tr></table>
+        </section>
+        <section id="fig-bills" data-title="Bills and utilities">
+          <h3>Bills and utilities</h3>
+          <p>The <b>effective bill</b> is the bill less any credit (net metering, a refund). The <b>rate</b> is the bill ÷ the units; the <b>effective rate</b> is the effective bill ÷ the units. Rates show in whole rupees, as a bill sheet does. Totals on the Utilities page count effective bills. <b>vs last year</b> is (this period − the same months last year) ÷ the same months last year.</p>
+          <table><tr><th>Example</th><th>Sum</th><th>Result</th></tr>
+            <tr><td>Bill Rs 22,660 for 412 units</td><td>22,660 ÷ 412</td><td>Rate Rs 55</td></tr>
+            <tr><td>Net metering credit Rs 3,000</td><td>22,660 − 3,000</td><td>Effective bill Rs 19,660</td></tr>
+            <tr><td></td><td>19,660 ÷ 412</td><td>Effective rate Rs 48</td></tr>
+            <tr><td>Rs 1,20,000 so far this year, Rs 1,00,000 the same months last year</td><td>(1,20,000 − 1,00,000) ÷ 1,00,000</td><td>+20%</td></tr></table>
+        </section>
+        <section id="fig-check" data-title="A figure looks wrong">
+          <h3>A figure looks wrong</h3>
+          <ol>
+            <li>Check the day: values and zakat use the rates <b>on or before</b> that day, so an old rate may be in use. Add the day's rates.</li>
+            <li>Check whose: with one person picked at the top, only their part shows.</li>
+            <li>Open the <b>Data</b> page and find the rows behind it (Filter this page helps); a row opens its record.</li>
+            <li>Do the sum by hand with this chapter. If it still differs, note which row and which figure.</li>
+          </ol>
+        </section>
+      </div>
+
       <div class="chapter" data-chap="When something's wrong">
-        <h2>Chapter 7</h2><div class="title">When something's wrong</div>
+        <h2>Chapter 8</h2><div class="title">When something's wrong</div>
+        <p class="chap-lead">Look for the words you see on screen in the first column: it says why, and what to do.</p>
         <section id="faq" data-title="Common questions">
           <h3>Common questions</h3>
           <table>
-            <tr><th>What you see</th><th>What to do</th></tr>
-            <tr><td>Changes from the phone don't come in</td><td>Settings › Phone reminders: if it says Paused, reconnect the data file or sign in again, then <b>Sync now</b>.</td></tr>
-            <tr><td>Red text on the Phone reminders card</td><td>It says what went wrong. "Missing from the To Do list" means most tasks vanished there at once: check the "PA App" list in To Do before syncing again.</td></tr>
-            <tr><td>"Reconnect data file" banner</td><td>Click it. Chrome asks again after every restart.</td></tr>
-            <tr><td>The phone shows old tasks</td><td>Tap <b>Refresh</b> (or <b>Open newer file</b> if you're not signed in). After the laptop saves, OneDrive can take a minute to have the latest.</td></tr>
-            <tr><td>The laptop says the data file "isn't where it was"</td><td>You moved it: <b>Settings › Open existing data file</b> and choose it in its new place.</td></tr>
-            <tr><td>A message went by too fast</td><td>Notifications keeps it (on the phone, <b>More › Notifications</b>).</td></tr>
+            <tr><th>What you see</th><th>Why</th><th>What to do</th></tr>
+            <tr><td>"Read-only view." on the phone</td><td>The phone isn't signed in to OneDrive, is offline, or hasn't read the file yet.</td><td>Tap <b>Sign in to OneDrive</b>, or wait to be online; it edits again once the file is read.</td></tr>
+            <tr><td>"Reconnect data file"</td><td>Chrome asks again for the file after every restart.</td><td>Click it once.</td></tr>
+            <tr><td>"Saving to OneDrive…" stays</td><td>The phone has changes it couldn't send yet (often offline).</td><td>Get online; it sends them by itself.</td></tr>
+            <tr><td>"Brought in changes saved on …"</td><td>The file was changed elsewhere while this device also had changes.</td><td>Nothing: Butler put both together, the newer change to each thing winning.</td></tr>
+            <tr><td>"can't be valued yet"</td><td>An asset has no rate (gold, silver or currency) on or before the day.</td><td>Assets › <b>+ Rates</b> for that day.</td></tr>
+            <tr><td>"Needs the silver rate"</td><td>The nisab is worked out from the silver rate.</td><td>Add the day's rates, then open the zakat record again.</td></tr>
+            <tr><td>"… isn't on that page just now"</td><td>A button picked in the ⋮ menu is shown only on another tab of that page.</td><td>Open that tab and press it there.</td></tr>
+            <tr><td>Changes from the phone don't come in</td><td>The phone's To Do sync is paused or signed out.</td><td>Settings › Phone reminders: if it says Paused, reconnect the data file or sign in again, then <b>Sync now</b>.</td></tr>
+            <tr><td>Red text on the Phone reminders card</td><td>Something stopped the To Do sync.</td><td>It says what went wrong. "Missing from the To Do list" means most tasks vanished there at once: check the "PA App" list in To Do before syncing again.</td></tr>
+                        <tr><td>The phone shows old tasks</td><td>OneDrive hasn't got the laptop's latest save yet.</td><td>Tap <b>Refresh</b> (or <b>Open newer file</b> if you're not signed in). After the laptop saves, OneDrive can take a minute to have the latest.</td></tr>
+            <tr><td>The laptop says the data file "isn't where it was"</td><td>It was moved or renamed.</td><td>You moved it: <b>Settings › Open existing data file</b> and choose it in its new place.</td></tr>
+            <tr><td>A message went by too fast</td><td>Messages show for a few seconds.</td><td>Notifications keeps it (on the phone, <b>More › Notifications</b>).</td></tr>
           </table>
         </section>
         <section id="calendar" data-title="Calendar colours">
