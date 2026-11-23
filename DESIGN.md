@@ -41,7 +41,7 @@ under `prefers-reduced-motion`.
 
 ## Page layout
 Every page has the same parts, in this order:
-1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, one of them the main (primary) one. On a phone the main button stays and the rest go in a **More** menu.
+1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, in the colour key's order (see Buttons). On a phone the first teal button stays and the rest go in a **More** menu.
 2. **Tabs row:** the tabs on the left, **Filter this page** on the right (full width on a phone). A page's own pickers that apply to every tab (Utilities: property, year) go in a `.tabs-extra` block, which sits just before the box. Rows the box should match by something other than their text carry it in `data-find` (a Utilities connection: name, property, provider, account).
 3. **Toolbar** for the open tab's list: the picker (whose, which car), Group by and Sort on the left; how many and their total on the right.
 4. **The content:** cards, then lists.
@@ -70,3 +70,12 @@ summary row with its main buttons runs across the top, and its sections are card
 
 ## The Data page and SCHEMA
 `SCHEMA` (beside `DATA_KEYS`) describes every store: `kind` (entry: happens on a day; list: added to and picked from; system: bookkeeping, not shown), the pop-up a row opens (`open`), and its fields in order as `[field, heading, type, shown?]`. The Data page draws its tables from it, and every test checks on closing that each field a record has is listed there (`schemaCheck` in tests/helpers.js). A new field goes in SCHEMA in the same change.
+
+## Buttons: the colour key
+Each colour means one thing, everywhere:
+- **Gold** (`.btn.act`, tokens `--act` / `--act-soft`): an action: Transfer, Select, Paste history, Export, Import.
+- **Teal filled** (`.btn.primary`): add an *entry*, something that happens on a day: + Task, + Note, + Rates, + Zakat record, + Payment, + Upkeep, + Bill.
+- **Outlined** (plain `.btn`): add to a *list*: + Asset, + Car, + Property, + Agreement, + Connection, + Document, + Folder.
+- **Red outline** (`.btn.danger`): delete.
+On a page's header they go gold, then teal, then outlined, left to right (so Q W E… press them in that order). An add button says what it adds, with a plus icon and the noun ("+ Asset"), and an `aria-label` in full ("Add an asset"); not "Add …" or "New …". Settings keeps its own rule (one filled button, the data file's). `tests/test-button-colours.js` checks every page.
+Tabs may carry `data-kind` (entry, list, action): the active one is underlined in that kind's colour (the Data page's tabs do).

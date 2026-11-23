@@ -48,6 +48,7 @@
   --lab-red: #a5482f; --lab-orange: #9a5d12; --lab-green: #4b7445; --lab-blue: #44627e; --lab-purple: #7a4f74; --lab-pink: #a1465f; --lab-grey: #6b6457;
   /* Gold and silver on their icons only (a bar and a coin); text never takes them */
   --metal-gold: #9a6d12; --metal-gold-fill: #f1d68c; --metal-silver: #6f757c; --metal-silver-fill: #e1e4e7;
+  --act: #8a5f0c; --act-soft: #f5e9cc; /* gold buttons: actions (import, paste, export, select) */
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -58,6 +59,7 @@
     --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
     --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
     --metal-gold: #e6bd5c; --metal-gold-fill: #5e4a1d; --metal-silver: #c9ced4; --metal-silver-fill: #464a50;
+    --act: #ebc66f; --act-soft: #3b3018;
     color-scheme: dark;
   }
 }
@@ -68,6 +70,7 @@
   --shadow-float: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
     --lab-red: #e39377; --lab-orange: #deae5f; --lab-green: #9cc795; --lab-blue: #a3bad0; --lab-purple: #cfa3c6; --lab-pink: #e3a0b2; --lab-grey: #a39c8e;
     --metal-gold: #e6bd5c; --metal-gold-fill: #5e4a1d; --metal-silver: #c9ced4; --metal-silver-fill: #464a50;
+    --act: #ebc66f; --act-soft: #3b3018;
   color-scheme: dark;
 }
 
@@ -472,7 +475,15 @@ button:disabled { cursor: not-allowed; }
 a.btn { color: var(--text); text-decoration: none; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
 .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.btn.danger { color: var(--danger); }
+.btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+/* The colour key (DESIGN.md › Buttons): gold = an action (import, paste, export, select); teal filled (.primary) = add an
+   entry (something that happens on a day); outlined (plain .btn) = add to a list; red outline (.danger) = delete. On a
+   page's header they go gold, then teal, then outlined, left to right. */
+.btn.act { background: var(--act-soft); color: var(--act); border-color: transparent; }
+.btn.act:hover { border-color: var(--act); }
+.tab[data-kind="entry"].active { box-shadow: inset 0 -2px 0 var(--accent); }
+.tab[data-kind="list"].active { box-shadow: inset 0 -2px 0 var(--text); }
+.tab[data-kind="action"].active { box-shadow: inset 0 -2px 0 var(--act); }
 .btn:disabled { opacity: .55; }
 .btn.small { padding: 4px 10px; font-size: var(--t-sm); }
 .icon-btn { display: inline-grid; place-items: center; border: 0; background: transparent; cursor: pointer; color: var(--muted); padding: 4px; border-radius: var(--r-sm); transition: background-color .12s ease-out, color .12s ease-out; }
@@ -1754,8 +1765,8 @@ const Zakat = {
         if (d.date > toISO(addDays(now, this.TASK_AHEAD_DAYS))) continue;
         if (d === around.last && d.date < toISO(addDays(now, -330))) continue; // an old year with no record: let it be
         const when = `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)} (${fmtDate(d.date)})`;
-        ensure(upd, `${prefix(p)}Update balances and rates for ${when}`, d.date, p.id, `The zakat record uses what Butler has for that day: type each account's balance (Assets › Update balances) and that day's gold and silver rates (Add rates).`);
-        ensure(id, `${prefix(p)}Make zakat record ${d.hyear}`, d.date, p.id, `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)}. Make it on Butler's Zakat page (Make record); it uses that day's balances and rates.`);
+        ensure(upd, `${prefix(p)}Update balances and rates for ${when}`, d.date, p.id, `The zakat record uses what Butler has for that day: type each account's balance (Assets › Update balances) and that day's gold and silver rates (+ Rates).`);
+        ensure(id, `${prefix(p)}Make zakat record ${d.hyear}`, d.date, p.id, `${Hijri.text(d.hyear, p.zakat.month, p.zakat.day)}. Make it on Butler's Zakat page (+ Zakat record); it uses that day's balances and rates.`);
       }
     }
     for (const rec of DB.zakat.filter((r) => r.status === 'done')) {
@@ -4816,7 +4827,7 @@ function renderToday() {
   return `
     <div class="page-head">
       <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, <button type="button" class="link-btn hijri-today" data-action="hijri-today" title="Moon sighted on a different day here? Correct this month">${esc(Hijri.textOf(toISO(now)))}</button>. ${summary}${lateNote}.</p></div>
-      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
+      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details" aria-label="Add a task">${ic('plus', 'sm')}Task</button>
     </div>
     ${unloggedBanners(Upkeep.unlogged(Assets.list(People.viewing())))}
     <div class="grid grid-main today">
@@ -4873,8 +4884,8 @@ function renderTasks() {
           <button class="tab ${layout === 'list' ? 'active' : ''}" data-action="layout" data-layout="list">${ic('list', 'sm')}List</button>
           <button class="tab ${layout === 'board' ? 'active' : ''}" data-action="layout" data-layout="board">${ic('layout-kanban', 'sm')}Board</button>
         </div>
-        <button class="btn edit-only" data-action="select-mode" aria-pressed="${Selection.on()}">${ic('checklist', 'sm')}Select</button>
-        <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details">${ic('plus', 'sm')}New task</button>
+        <button class="btn act edit-only" data-action="select-mode" aria-pressed="${Selection.on()}">${ic('checklist', 'sm')}Select</button>
+        <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details" aria-label="Add a task">${ic('plus', 'sm')}Task</button>
       </div>
     </div>
     <div class="tabs task-tabs">${Object.entries(TASK_TABS).map(([k, v]) => tab(k, v.label)).join('')}</div>
@@ -6237,10 +6248,10 @@ function renderAssets() {
     <div class="page-head">
       <div><h1>Assets</h1><p class="sub">${list.length ? `Net worth ${rupees(t.net)}${who === 'all' ? '' : ` for ${esc(People.name(who))}`}, at the latest rates` : 'What you own and owe, in one place'}</p></div>
       <div class="row edit-only page-actions">
-        <button class="btn ${tab === 'rates' ? '' : 'primary'}" data-action="asset-form" data-form-type="asset" data-kind="${['overview', 'rates'].includes(tab) ? 'cash' : esc(tab)}">${ic('plus', 'sm')}Add asset</button>
-        <button class="btn ${tab === 'rates' ? 'primary' : ''}" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>
-        ${list.length ? `<button class="btn" data-action="asset-form" data-form-type="transfer">${ic('arrows-exchange', 'sm')}Transfer</button>` : ''}
-        ${list.some((a) => !Assets.metal(a) && !a.closed) ? `<button class="btn" data-action="asset-form" data-form-type="balances">Update balances</button>` : ''}
+        ${list.length ? `<button class="btn act" data-action="asset-form" data-form-type="transfer">${ic('arrows-exchange', 'sm')}Transfer</button>` : ''}
+        <button class="btn primary" data-action="asset-form" data-form-type="rates" aria-label="Add rates">${ic('plus', 'sm')}Rates</button>
+        ${list.some((a) => !Assets.metal(a) && !a.closed) ? `<button class="btn primary" data-action="asset-form" data-form-type="balances">Update balances</button>` : ''}
+        <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="${['overview', 'rates'].includes(tab) ? 'cash' : esc(tab)}" aria-label="Add an asset">${ic('plus', 'sm')}Asset</button>
       </div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-asset-tab="${k}" role="tab" aria-selected="${k === tab}">${label(k)}</button>`).join('')}</div>
@@ -6250,7 +6261,7 @@ function renderAssets() {
 function assetOverview(who, list, t) {
   if (!list.length) {
     return `<div class="card empty-state"><p><b>Nothing here yet.</b> Add a bank account, gold, property or a debt, and Butler keeps its value by date.</p>
-      <button class="btn primary edit-only" data-action="asset-form" data-form-type="asset" data-kind="cash">${ic('plus', 'sm')}Add asset</button></div>`;
+      <button class="btn edit-only" data-action="asset-form" data-form-type="asset" data-kind="cash" aria-label="Add an asset">${ic('plus', 'sm')}Asset</button></div>`;
   }
   const cash = t.byKind.cash;
   const debts = t.byKind.debt;
@@ -6433,9 +6444,9 @@ function renderZakat() {
     <div class="page-head">
       <div><h1>Zakat</h1><p class="sub">${p ? (p.zakat ? `${p.id === ME && !People.several() ? 'Your' : `${esc(p.name)}'s`} zakat day: ${esc(`${ordinal(p.zakat.day)} ${HIJRI_MONTHS[p.zakat.month - 1]}`)}` : `${p.id === ME && !People.several() ? 'You have' : `${esc(p.name)} has`} no zakat day yet`) : 'Records, payments and rates for everyone'}</p></div>
       <div class="row edit-only page-actions">
-        <button class="btn ${tab === 'rates' ? '' : 'primary'}" data-action="asset-form" data-form-type="zakat-make">${ic('plus', 'sm')}Make record</button>
-        ${anyDone ? `<button class="btn" data-action="asset-form" data-form-type="zakat-pay">Add payment</button>` : ''}
-        <button class="btn ${tab === 'rates' ? 'primary' : ''}" data-action="asset-form" data-form-type="rates">${ic('plus', 'sm')}Add rates</button>
+        <button class="btn primary" data-action="asset-form" data-form-type="zakat-make" aria-label="Make a zakat record">${ic('plus', 'sm')}Zakat record</button>
+        ${anyDone ? `<button class="btn primary" data-action="asset-form" data-form-type="zakat-pay" aria-label="Add a payment">${ic('plus', 'sm')}Payment</button>` : ''}
+        <button class="btn primary" data-action="asset-form" data-form-type="rates" aria-label="Add rates">${ic('plus', 'sm')}Rates</button>
       </div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-zakat-tab="${k}" role="tab" aria-selected="${k === tab}">${label[k]}</button>`).join('')}</div>
@@ -6562,10 +6573,10 @@ function renderVehicles() {
     <div class="page-head">
       <div>${subPageBack('vehicles')}<h1>Vehicles</h1><p class="sub">${list.length ? `${plural(list.length, 'vehicle')}${car ? `, showing ${esc(car.name)}` : ''}` : 'Cars, their upkeep and supplies'}</p></div>
       <div class="row edit-only page-actions">
-        ${list.length ? `<button class="btn primary" data-action="upkeep-entry" data-asset="${esc(car ? car.id : '')}" data-choose="${car ? '' : '1'}">${ic('plus', 'sm')}Add entry</button>` : ''}
-        <button class="btn" data-action="upkeep-entry" data-asset="store">${ic('plus', 'sm')}Add to store</button>
-        ${car && Upkeep.vehicle(car) ? `<button class="btn" data-action="asset-form" data-form-type="reading" data-asset="${esc(car.id)}">${ic('gauge', 'sm')}Update reading</button>` : ''}
-        <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="vehicle">${ic('plus', 'sm')}Add a car</button>
+        ${list.length ? `<button class="btn primary" data-action="upkeep-entry" data-asset="${esc(car ? car.id : '')}" data-choose="${car ? '' : '1'}">${ic('plus', 'sm')}Upkeep</button>` : ''}
+        <button class="btn primary" data-action="upkeep-entry" data-asset="store" aria-label="Add to the store">${ic('plus', 'sm')}Store supplies</button>
+        ${car && Upkeep.vehicle(car) ? `<button class="btn primary" data-action="asset-form" data-form-type="reading" data-asset="${esc(car.id)}" aria-label="Add a reading">${ic('gauge', 'sm')}Reading</button>` : ''}
+        <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="vehicle" aria-label="Add a car">${ic('plus', 'sm')}Car</button>
       </div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${VEHICLE_TABS.filter(([k]) => k !== 'details' || car).map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-vehicle-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
@@ -6780,7 +6791,7 @@ function renderMusings() {
   return `
     <div class="page-head">
       <div><h1>Musings</h1><p class="sub">${all.length ? `${plural(all.length, 'piece')}, ${words.toLocaleString('en-IN')} words` : 'Pieces you\'ve written, with their pictures'}</p></div>
-      <div class="row edit-only page-actions"><button class="btn primary" data-action="musing-new">${ic('plus', 'sm')}New piece</button></div>
+      <div class="row edit-only page-actions"><button class="btn primary" data-action="musing-new" aria-label="Write a new piece">${ic('plus', 'sm')}Piece</button></div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${MUSING_TABS.map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-musing-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
     ${all.length ? listTools('musings', rows, {
@@ -7319,8 +7330,8 @@ function renderProperty() {
     <div class="page-head">
       <div>${subPageBack('property')}<h1>Property</h1><p class="sub">${props.length} ${props.length === 1 ? 'property' : 'properties'}${props.some((a) => Rentals.forProperty(a.id).length) ? `, ${props.filter((a) => Rentals.forProperty(a.id).length).length} rented out` : ''}</p></div>
       <div class="row edit-only page-actions">
-        <button class="btn ${tab === 'properties' ? 'primary' : ''}" data-action="asset-form" data-form-type="asset" data-kind="property">${ic('plus', 'sm')}Add property</button>
-        <button class="btn ${tab === 'rentals' ? 'primary' : ''}" data-action="asset-form" data-form-type="rental">${ic('plus', 'sm')}Add rental agreement</button>
+        <button class="btn" data-action="asset-form" data-form-type="asset" data-kind="property" aria-label="Add a property">${ic('plus', 'sm')}Property</button>
+        <button class="btn" data-action="asset-form" data-form-type="rental" aria-label="Add a rental agreement">${ic('plus', 'sm')}Agreement</button>
       </div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${[['properties', 'Properties'], ['rentals', 'Rentals']].map(([k, l]) => `<button class="tab ${k === tab ? 'active' : ''}" data-property-tab="${k}" role="tab" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
@@ -7367,7 +7378,7 @@ function rentalTop(r) {
     <div class="row edit-only">
       <button type="button" class="btn small primary" data-action="asset-form" data-form-type="rent-pay" data-id="${esc(r.id)}">${ic('coins', 'sm')}Record rent</button>
       <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-renew" data-id="${esc(r.id)}">${ic('repeat', 'sm')}Renew</button>
-      <button type="button" class="btn small" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
+      <button type="button" class="btn small act" data-action="asset-form" data-form-type="rent-paste" data-id="${esc(r.id)}">${ic('copy', 'sm')}Paste history</button>
       <label class="btn small">${ic('paperclip', 'sm')}Add files<input type="file" multiple data-input="rental-files" data-id="${esc(r.id)}" hidden></label>
     </div></div>
 `;
@@ -7450,7 +7461,7 @@ function utilityTop(c) {
       ${Utilities.credit([c], y) ? `<div><span class="meta">${esc(Utilities.creditLabel(c.type).replace(' credit', ''))} saved this year</span><b>${rupees(Utilities.credit([c], y))}</b></div>` : ''}
       ${u && units ? `<div><span class="meta">${esc(u)} this year, rate</span><b>${units.toLocaleString('en-IN')}, ${perUnit(Utilities.sum([c], y) / units)}</b></div>` : ''}
     </div>
-    <div class="row edit-only"><button type="button" class="btn small primary" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button>${sameName(c.type, 'Electricity') ? `<button type="button" class="btn small" data-action="asset-form" data-form-type="bill-paste" data-id="${esc(c.id)}">${ic('copy', 'sm')}Paste history</button>` : ''}${Utilities.openTask(c) ? '' : `<button type="button" class="btn small" data-action="utility-task" data-id="${esc(c.id)}">${ic('repeat', 'sm')}Make its bill task</button>`}</div></div>`;
+    <div class="row edit-only"><button type="button" class="btn small primary" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button>${sameName(c.type, 'Electricity') ? `<button type="button" class="btn small act" data-action="asset-form" data-form-type="bill-paste" data-id="${esc(c.id)}">${ic('copy', 'sm')}Paste history</button>` : ''}${Utilities.openTask(c) ? '' : `<button type="button" class="btn small" data-action="utility-task" data-id="${esc(c.id)}">${ic('repeat', 'sm')}Make its bill task</button>`}</div></div>`;
 }
 function utilityMain(c) {
   const t = Utilities.openTask(c);
@@ -7589,7 +7600,7 @@ function renderUtilities() {
   return `
     <div class="page-head">
       <div><h1>Utilities</h1><p class="sub">${all.length ? plural(all.length, 'connection') : 'Electricity, gas, water, phone, internet, fuel'}</p></div>
-      <div class="row edit-only page-actions"><button class="btn primary" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab === 'overview' ? 'Electricity' : tab)}">${ic('plus', 'sm')}Add a connection</button></div>
+      <div class="row edit-only page-actions"><button class="btn" data-action="asset-form" data-form-type="utility" data-kind="${esc(tab === 'overview' ? 'Electricity' : tab)}" aria-label="Add a connection">${ic('plus', 'sm')}Connection</button></div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${['overview', ...types].map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-util-tab="${esc(k)}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : esc(k)}</button>`).join('')}</div>
     <div class="asset-body">${body}</div>`;
@@ -7921,7 +7932,7 @@ function renderVault() {
       <h2 class="vault-h">Needs renewing</h2>${list(due, 'Nothing needs renewing')}
       <h2 class="vault-h">Expiring in the next year</h2>${list(soon, 'Nothing expires in the next year')}`
       : `<div class="card empty-state"><p><b>Nothing here yet.</b> Keep IDs, passports, licences, deeds and certificates here, with their numbers, dates and scans. Anything that expires gets a renew reminder.</p>
-        <button class="btn primary edit-only" data-action="asset-form" data-form-type="doc" data-kind="id">${ic('plus', 'sm')}Add document</button></div>`)
+        <button class="btn edit-only" data-action="asset-form" data-form-type="doc" data-kind="id" aria-label="Add a document">${ic('plus', 'sm')}Document</button></div>`)
     : listTools(`vault-${tab}`, docs.filter((d) => d.cat === tab), {
       group: { none: 'No grouping', ...(People.several() ? { whose: 'Whose' } : {}), type: 'Type', state: 'Renewal' },
       sort: { name: 'By name', expiry: 'Expiring first' },
@@ -7933,7 +7944,7 @@ function renderVault() {
   return `
     <div class="page-head">
       <div><h1>Vault</h1><p class="sub">${docs.length ? [docs.filter((d) => !d.plain).length ? plural(docs.filter((d) => !d.plain).length, 'document') : '', docs.some((d) => d.plain) ? plural(docs.filter((d) => d.plain).length, 'file') : ''].filter(Boolean).join(', ') + (due.length ? `, ${due.length} to renew` : '') : 'Documents, with their numbers, dates and scans'}</p></div>
-      <div class="row edit-only page-actions">${tab === 'folders' ? '' : `<button class="btn primary" data-action="asset-form" data-form-type="doc" data-kind="${tab === 'overview' ? 'id' : esc(tab)}">${ic('plus', 'sm')}Add document</button>`}</div>
+      <div class="row edit-only page-actions">${tab === 'folders' ? '' : `<button class="btn" data-action="asset-form" data-form-type="doc" data-kind="${tab === 'overview' ? 'id' : esc(tab)}" aria-label="Add a document">${ic('plus', 'sm')}Document</button>`}</div>
     </div>
     <div class="tabs asset-tabs" role="tablist">${tabs.map((k) => `<button class="tab ${k === tab ? 'active' : ''}" data-vault-tab="${k}" role="tab" aria-selected="${k === tab}">${k === 'overview' ? 'Overview' : k === 'folders' ? 'Folders' : esc(Vault.cat(k).name)}</button>`).join('')}</div>
     <div class="asset-body">${body}</div>`;
@@ -8512,7 +8523,7 @@ function zakatForm(f, box) {
           <label class="field">Date<input class="input" type="date" name="date" value="${esc(date)}" required data-zmake></label>
           ${hijriPick(date, 'date')}
         </div>
-        ${checks.length ? `<div class="banner warn zk-checks"><span>${ic('exclamation-mark')}<span>Out of date for this day? ${esc(checks.join('; '))}. Update them first (Assets › Update balances, Add rates), or go ahead and change them in the record.</span></span></div>`
+        ${checks.length ? `<div class="banner warn zk-checks"><span>${ic('exclamation-mark')}<span>Out of date for this day? ${esc(checks.join('; '))}. Update them first (Assets › Update balances, + Rates), or go ahead and change them in the record.</span></span></div>`
           : '<p class="meta" style="margin:0">Balances and rates are up to date for this day.</p>'}
         ${w && w.nisab != null ? `<p class="meta" style="margin:0">That day: zakatable wealth ${rupees(w.wealth)}, nisab ${rupees(w.nisab)}${w.wealth > w.nisab ? '' : '. Below the nisab, so nothing would be due and the zakat day ends'}.</p>` : ''}
         <p class="meta" style="margin:0">The record uses that day's balances and rates; you check everything before it's done.</p>`
@@ -9041,7 +9052,7 @@ function renderNotes() {
   return `
     <div class="page-head">
       <div><h1>Notes</h1><p class="sub">${plural(shown.length, 'note')}${state.readOnly ? '' : ', saved as you type'}</p></div>
-      <button class="btn primary edit-only" data-action="new-note">${ic('plus', 'sm')}New note</button>
+      <button class="btn primary edit-only" data-action="new-note" aria-label="Add a note">${ic('plus', 'sm')}Note</button>
     </div>
     <div class="notes-layout">
       <div>

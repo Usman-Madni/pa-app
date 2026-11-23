@@ -24,10 +24,10 @@ const { loadApp, check, done, answer } = require('./helpers');
   // --- Q W E…: the screen's buttons in order; A S D…: its tabs ---
   key('5');
   key('w');
-  check(doc.querySelector('#modal form[data-form="asset-rates"]'), 'on Assets, W is its second button (Add rates)');
+  check(doc.querySelector('#modal form[data-form="asset-asset"]'), 'on Assets, W is its second button (+ Asset, outlined, after the teal ones)');
   doc.querySelector('#modal [data-action="asset-cancel"]').click();
   key('q');
-  check(doc.querySelector('#modal form[data-form="asset-asset"]'), 'and Q its first (Add asset)');
+  check(doc.querySelector('#modal form[data-form="asset-rates"]'), 'and Q its first (+ Rates)');
   key('3');
   check(PA.state.view === 'assets', 'with a pop-up open, keys don\'t switch screens');
   doc.querySelector('#modal [data-action="asset-cancel"]').click();
