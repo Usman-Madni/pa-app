@@ -8059,7 +8059,8 @@ function drawAssetForm() {
     const plain = !!(d && d.plain); // a plain file: its dates and number only once asked for
     const folders = [...new Set(['Documents', Vault.folderOf(v), ...Vault.tops().flatMap((t) => Vault.paths(t))])].filter((p) => !Vault.reserved(p)).sort((a, b) => a.localeCompare(b));
     const on = People.of(v);
-    const assets = DB.assets.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const shownAssets = new Set(Assets.list(People.viewing()).map((a) => a.id)); // the person shown's (everyone's when all are), and any already linked
+    const assets = DB.assets.filter((a) => shownAssets.has(a.id) || (v.assets || []).includes(a.id)).sort((a, b) => a.name.localeCompare(b.name));
     const linkedNow = (v.assets || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean);
     $('#modal').innerHTML = box(d ? d.name : 'Add document', `
       ${f.renewed ? `<p class="banner warn" style="margin:0">Renewed? Type the new expiry date, and the next reminder follows from it.</p>` : ''}

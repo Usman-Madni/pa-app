@@ -106,9 +106,17 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   go('Documents');
   check(main().textContent.includes('Robin ID') && /Files\s*›\s*Robin\s*›\s*Documents/.test(main().querySelector('.vault-crumbs').textContent), 'a person\'s folder holds their things');
   People.view(robin.id);
+  const As = win.eval('Assets');
+  const mineCar = As.add({ kind: 'vehicle', name: 'My car', owners: [{ id: 'me', share: 100 }] });
+  const robinCar = As.add({ kind: 'vehicle', name: 'Robin car', owners: [{ id: robin.id, share: 100 }] });
+  win.eval('changed')('assets');
+  win.eval('openAssetForm')('doc', {});
+  const af = doc.querySelector('#modal form');
+  check(af.elements[`doc-a-${robinCar.id}`] && !af.elements[`doc-a-${mineCar.id}`], 'a new document, with Robin shown: only Robin\'s assets to link');
+  win.eval('closeAssetForm')(true);
   doc.querySelector('[data-vault-go=""]').click();
   const rob = [...main().querySelectorAll('.vault-folder .title')].map((x) => x.textContent);
-  check(rob.join(',') === 'Shared,Documents', `Robin shown: it opens on Robin's folder, with Shared as a folder (got ${rob.join(',')})`);
+  check(rob.join(',') === 'Shared,Documents,Assets', `Robin shown: it opens on Robin's folder, with Shared as a folder (got ${rob.join(',')})`);
   go('Documents');
   check(main().textContent.includes('Robin ID'), 'Robin\'s Documents hold Robin\'s documents');
   doc.querySelector('[data-vault-go=""]').click();
