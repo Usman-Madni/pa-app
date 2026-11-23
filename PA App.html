@@ -333,12 +333,23 @@ button:disabled { cursor: not-allowed; }
 .util-stats .stat-card { display: flex; flex-direction: column; gap: 2px; }
 .util-stats .stat-card b { font-size: var(--t-lg); }
 .util-group { padding: 0; margin-bottom: 12px; overflow: hidden; }
-.util-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-.util-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.7fr) 94px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border); }
-.util-head-row { border-top: 0; padding-top: 6px; padding-bottom: 2px; font-size: var(--t-xs); color: var(--muted); }
-.util-name { min-width: 0; overflow-wrap: anywhere; }
-.util-num { text-align: right; }
-.util-head-row span:nth-child(3), .util-head-row span:nth-child(4) { text-align: right; }
+.util-scroll { overflow-x: auto; }
+.util-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.util-table th, .util-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+.util-table tr:last-child td { border-bottom: 0; }
+.util-table th { color: var(--muted); font-weight: 500; font-size: var(--t-xs); }
+.util-table .ut-n { text-align: right; font-variant-numeric: tabular-nums; }
+.util-table th:first-child, .util-table td:first-child { width: 1%; padding-right: 0; color: var(--muted); }
+.util-table .util-total td { background: var(--panel-2); font-weight: 600; }
+.util-table .util-total .pill { font-weight: 500; }
+.util-table .util-conn { cursor: pointer; }
+.util-table .util-conn:hover td { background: var(--panel-2); }
+.util-table .util-name { white-space: normal; min-width: 140px; }
+.util-table .util-name .meta { display: block; }
+.util-table td .spark { display: block; }
+.tabs-extra { gap: 8px; flex-wrap: wrap; margin: 0 0 0 auto; }
+.tabs-extra .input { width: auto; padding: 6px 10px; font-size: var(--t-sm); }
+.tabs-row .tabs-extra + .page-filter { margin-left: 0; }
 .spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
 .util-legend { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
 .util-legend .sw { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -353,8 +364,7 @@ button:disabled { cursor: not-allowed; }
 .um-row .kb-val { grid-column: 3; grid-row: 1; text-align: right; }
 @media (max-width: 700px) {
   .util-stats { grid-template-columns: 1fr; }
-  .util-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .util-row .util-num:nth-of-type(4), .util-row .util-spark, .util-head-row { display: none; }
+  .tabs-extra { margin-left: 0; }
 }
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .split-row .field { margin: 0; }
@@ -4110,11 +4120,12 @@ function renderSearch() {
 const FILTER_VIEWS = ['tasks', 'musings', 'assets', 'vehicles', 'property', 'utilities', 'zakat', 'vault', 'notices', 'trash'];
 function applyPageFilter() {
   const words = Search.words(state.pageFilter?.[state.view]);
-  for (const el of $$('#main li.item, #main .notice-row, #main .task-card')) {
-    const off = !!words.length && !Search.hit(words, el.textContent);
+  for (const el of $$('#main li.item, #main .notice-row, #main .task-card, #main [data-find]')) {
+    const off = !!words.length && !Search.hit(words, el.dataset.find ?? el.textContent);
     el.hidden = off;
     el.style.display = off ? 'none' : ''; // rows are styled as flex, which would beat 'hidden' alone
   }
+  for (const g of $$('#main .util-group')) g.style.display = words.length && !g.querySelector('[data-find]:not([hidden])') ? 'none' : '';
 }
 // Every page has the same parts in the same order (see DESIGN.md): the title row (title and what it holds; the page's
 // buttons on the right, one main one), the tabs row (tabs; "Filter this page" on the right), a toolbar for the open
@@ -4153,7 +4164,10 @@ function addPageFilter() {
   Object.assign(box, { className: 'input page-filter', type: 'search', placeholder: 'Filter this page', value: state.pageFilter?.[state.view] || '' });
   box.setAttribute('aria-label', 'Filter this page');
   box.dataset.input = 'page-filter';
-  tabsRow().append(box);
+  const row = tabsRow();
+  const extra = $('#main .tabs-extra'); // a page's own pickers (Utilities: property, year) sit beside the box
+  if (extra) row.append(extra);
+  row.append(box);
   applyPageFilter();
 }
 
@@ -7322,7 +7336,7 @@ function utilityCard(c) {
   const y = new Date().getFullYear();
   const prop = c.property && DB.assets.find((a) => a.id === c.property);
   return `
-    <div class="card utility-card">
+    <div class="card utility-card" data-find="${esc([c.name, prop?.name, c.provider, c.account].filter(Boolean).join(' '))}">
       <div class="row util-head">
         <span class="tl-mark">${ic(Utilities.icon(c.type))}</span>
         <div class="grow clickable" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}"><div class="title"><b>${esc(c.name)}</b> ${whoBadges(c)}</div>
@@ -7391,9 +7405,9 @@ function utilFilters() {
   return { props, prop, years, year: year === 'all' ? 'all' : Number(year), match: (c) => !prop || (prop === 'none' ? !c.property : c.property === prop) };
 }
 function utilFilterRow(f) {
-  return `<div class="row util-filters">
-    ${f.props.length ? `<label class="field">Property<select class="input" data-util-prop><option value="">All properties</option>${f.props.map((a) => `<option value="${esc(a.id)}" ${a.id === f.prop ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}<option value="none" ${f.prop === 'none' ? 'selected' : ''}>Not linked to a property</option></select></label>` : ''}
-    <label class="field">Year<select class="input" data-util-year>${f.years.map((y) => `<option value="${y}" ${y === f.year ? 'selected' : ''}>${y}</option>`).join('')}<option value="all" ${f.year === 'all' ? 'selected' : ''}>All time</option></select></label>
+  return `<div class="row util-filters tabs-extra">
+    ${f.props.length ? `<select class="input" data-util-prop aria-label="Property"><option value="">All properties</option>${f.props.map((a) => `<option value="${esc(a.id)}" ${a.id === f.prop ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}<option value="none" ${f.prop === 'none' ? 'selected' : ''}>Not linked to a property</option></select>` : ''}
+    <select class="input" data-util-year aria-label="Year">${f.years.map((y) => `<option value="${y}" ${y === f.year ? 'selected' : ''}>${y}</option>`).join('')}<option value="all" ${f.year === 'all' ? 'selected' : ''}>All time</option></select>
   </div>`;
 }
 // The period the figures cover, and the one they're compared with: this year so far against the same months last year;
@@ -7413,36 +7427,61 @@ function sparkline(values) {
   const pts = values.map((v, i) => `${Math.round((i / (values.length - 1)) * 88) + 1},${Math.round(25 - (v / max) * 22)}`).join(' ');
   return `<svg class="spark" width="90" height="28" viewBox="0 0 90 28" aria-hidden="true"><polyline points="${pts}"/></svg>`;
 }
-// One type's group: its totals for the period, then a row per connection.
+// One type's group, as a table: the column heads, a shaded first row with the type's totals in the same columns, then
+// a numbered row per connection. Each type adds its own columns (electricity: units, rate, net metering; gas and
+// water: units, rate; fuel: litres, price a litre). On the phone it scrolls sideways inside its card.
+function utilColumns(type) {
+  const u = Utilities.unitsLabel(type);
+  const cols = [];
+  if (u) cols.push({ head: u, val: (x) => (x.units ? x.units.toLocaleString('en-IN') : '–') }, { head: u === 'Litres' ? 'Price a litre' : 'Rate', val: (x) => (x.units ? perUnit(x.eff / x.units) : '–') });
+  if (sameName(type, 'Electricity')) cols.push({ head: 'Net metering', val: (x) => (x.credit ? rupees(x.credit) : '–') });
+  return cols;
+}
 function utilGroup(type, cs, per) {
+  const cols = utilColumns(type);
   const t = per.cur(cs);
   const p = per.prev ? per.prev(cs) : null;
-  const u = Utilities.unitsLabel(type);
-  const elec = sameName(type, 'Electricity');
-  const bits = [plural(cs.length, 'connection'), `${rupees(t.eff)} ${per.label.toLowerCase()}`];
-  if (u && t.units) bits.push(`${t.units.toLocaleString('en-IN')} ${u.toLowerCase()}, ${perUnit(t.eff / t.units)} a ${u === 'Litres' ? 'litre' : 'unit'}`);
-  if (elec && t.credit) bits.push(`net metering saved ${rupees(t.credit)}`);
-  const rows = cs.map((c) => {
-    const last = Utilities.bills(c)[0];
-    const lx = last && Utilities.figures(last);
+  const lastOf = (c) => Utilities.bills(c)[0];
+  const dueOf = (c) => Utilities.openTask(c)?.due || '';
+  // totals: the latest month any of them has a bill for, and what's unpaid in it
+  const lastYm = cs.map((c) => lastOf(c)).filter(Boolean).map((b) => Utilities.monthOf(b)).sort().pop();
+  const inLast = lastYm ? Utilities.billsFor(cs).filter((b) => Utilities.monthOf(b) === lastYm) : [];
+  const unpaid = inLast.filter((b) => !b.date).length;
+  const firstDue = cs.map(dueOf).filter(Boolean).sort()[0];
+  const paidPill = (paid) => (paid ? '<span class="pill">Paid</span>' : '<span class="pill zk-left">Unpaid</span>');
+  const vs = (now, was) => (was ? pctChange(now, was) || '–' : '<span class="meta">–</span>');
+  const total = `<tr class="util-total">
+      <td>${ic(Utilities.icon(type), 'sm')}</td>
+      <td><b>${esc(type)}</b></td>
+      <td>${lastYm ? `${esc(ymLabel(lastYm))}, ${rupees(inLast.reduce((a, b) => a + Utilities.figures(b).eff, 0))} ${unpaid ? `<span class="pill zk-left">${unpaid} unpaid</span>` : paidPill(true)}` : '<span class="meta">No bills yet</span>'}</td>
+      ${cols.map((col) => `<td class="ut-n">${col.val(t)}</td>`).join('')}
+      <td class="ut-n">${rupees(t.eff)}</td>
+      ${per.prev ? `<td class="ut-n">${vs(t.eff, p.eff)}</td>` : ''}
+      <td>${sparkline(Utilities.last12(cs))}</td>
+      <td>${firstDue ? esc(shortDate(firstDue)) : ''}</td>
+    </tr>`;
+  const rows = cs.map((c, i) => {
+    const last = lastOf(c);
     const ct = per.cur([c]);
     const cp = per.prev ? per.prev([c]) : null;
-    const task = Utilities.openTask(c);
+    const due = dueOf(c);
     const prop = c.property && DB.assets.find((a) => a.id === c.property);
-    return `<div class="util-row">
-      <div class="util-name"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${esc(c.name)}</button> ${whoBadges(c)}
-        <div class="meta">${[prop ? prop.name : '', task?.due ? `next due ${shortDate(task.due)}` : '', elec && ct.credit ? `saved ${rupees(ct.credit)}` : ''].filter(Boolean).map(esc).join(' · ')}</div></div>
-      <div class="util-last">${last ? `${esc(ymLabel(Utilities.monthOf(last)))} · ${rupees(lx.eff)}<div>${last.date ? '<span class="pill">Paid</span>' : '<span class="pill zk-left">Unpaid</span>'}</div>` : '<span class="meta">No bills yet</span>'}</div>
-      <div class="util-num">${rupees(ct.eff)}</div>
-      <div class="util-num">${cp ? pctChange(ct.eff, cp.eff) || '<span class="meta">–</span>' : ''}</div>
-      <div class="util-spark">${sparkline(Utilities.last12([c]))}</div>
-    </div>`;
+    const find = [c.name, prop?.name, c.provider, c.account].filter(Boolean).join(' ');
+    return `<tr class="util-conn" data-find="${esc(find)}" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">
+      <td>${i + 1}</td>
+      <td class="util-name"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${esc(c.name)}</button> ${whoBadges(c)}${prop ? `<div class="meta">${esc(prop.name)}</div>` : ''}</td>
+      <td class="util-last">${last ? `${esc(ymLabel(Utilities.monthOf(last)))}, ${rupees(Utilities.figures(last).eff)} ${paidPill(last.date)}` : '<span class="meta">No bills yet</span>'}</td>
+      ${cols.map((col) => `<td class="ut-n">${col.val(ct)}</td>`).join('')}
+      <td class="ut-n">${rupees(ct.eff)}</td>
+      ${per.prev ? `<td class="ut-n">${vs(ct.eff, cp.eff)}</td>` : ''}
+      <td class="util-spark">${sparkline(Utilities.last12([c]))}</td>
+      <td>${due ? esc(shortDate(due)) : '<span class="meta">–</span>'}</td>
+    </tr>`;
   }).join('');
-  return `<div class="card util-group">
-    <div class="util-group-head">${ic(Utilities.icon(type))}<b>${esc(type)}</b><span class="meta">${bits.map(esc).join(' · ')}</span>${p ? pctChange(t.eff, p.eff) : ''}</div>
-    <div class="util-row util-head-row"><span>Connection</span><span>Last bill</span><span>${esc(per.label)}</span><span>${per.prev ? `vs ${esc(per.vsLabel)}` : ''}</span><span>12 months</span></div>
-    ${rows}
-  </div>`;
+  return `<div class="card util-group" data-type="${esc(type)}"><div class="util-scroll"><table class="util-table">
+    <thead><tr><th>#</th><th>Connection</th><th>Last bill</th>${cols.map((col) => `<th class="ut-n">${esc(col.head)}</th>`).join('')}<th class="ut-n">${esc(per.label)}</th>${per.prev ? `<th class="ut-n">vs ${esc(per.vsLabel)}</th>` : ''}<th>12 months</th><th>Next due</th></tr></thead>
+    <tbody>${total}${rows}</tbody>
+  </table></div></div>`;
 }
 function renderUtilities() {
   const f = utilFilters();

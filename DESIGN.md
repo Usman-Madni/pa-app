@@ -42,7 +42,7 @@ under `prefers-reduced-motion`.
 ## Page layout
 Every page has the same parts, in this order:
 1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, one of them the main (primary) one. On a phone the main button stays and the rest go in a **More** menu.
-2. **Tabs row:** the tabs on the left, **Filter this page** on the right (full width on a phone).
+2. **Tabs row:** the tabs on the left, **Filter this page** on the right (full width on a phone). A page's own pickers that apply to every tab (Utilities: property, year) go in a `.tabs-extra` block, which sits just before the box. Rows the box should match by something other than their text carry it in `data-find` (a Utilities connection: name, property, provider, account).
 3. **Toolbar** for the open tab's list: the picker (whose, which car), Group by and Sort on the left; how many and their total on the right.
 4. **The content:** cards, then lists.
 
