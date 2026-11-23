@@ -53,7 +53,11 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   check(mainText().includes('Renew car tax') && !mainText().includes('Book dentist'), 'showing you: only yours');
   pick('all');
   check(mainText().includes('Renew car tax') && mainText().includes('Book dentist'), 'Everyone: both');
-  check(doc.querySelectorAll('#main .who-badges').length === 1 && /Sam Rivers/.test(doc.querySelector('#main .who-badges').title), 'Sam\'s task carries Sam\'s initials; yours none');
+  const badges = [...doc.querySelectorAll('#main .who-badges')].map((b) => b.title);
+  check(badges.length === 2 && badges.some((x) => /Sam Rivers/.test(x)) && badges.some((x) => !/Sam/.test(x)), `Everyone: each task carries its person's tag, yours too (got ${badges.join(' | ')})`);
+  pick(sam.id);
+  check(!doc.querySelector('#main .who-badges'), 'showing Sam: Sam\'s own tasks go without a tag');
+  pick('all');
 
   // --- The task panel: add and take off people ---
   PA.state.openTask = t.id; PA.renderDrawer();

@@ -139,6 +139,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   win.eval('setView')('property');
   main().querySelector('[data-property-tab="properties"]').click();
   check([...main().querySelectorAll('.asset-row')].filter((x) => /Rented out/.test(x.textContent)).length === 2, 'both properties show as Rented out');
+  check(/2 rented out/.test(main().querySelector('.page-head').textContent), 'the page counts properties rented out (2), not agreements');
   open('asset', { id: shop.id });
   check(doc.querySelector('#modal').textContent.includes('Plaza lease'), 'a property\'s pop-up lists its agreement');
 

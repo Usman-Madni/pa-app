@@ -142,6 +142,10 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const fig = U.figures(eb);
   check(eb.units === 345 && eb.credit === 12156 && fig.eff === 9305 && Math.round(fig.rate) === 62 && Math.round(fig.effRate) === 27, 'it works out the rate (62), the effective bill (9,305) and the effective rate (27)');
   check(U.sum([el], new Date().getFullYear()) === 9305, 'and costs count what it really cost (the bill less the credit)');
+  PA.device.set('utilTab', 'Electricity');
+  win.eval('setView')('utilities');
+  const elCard = [...doc.querySelectorAll('#main .utility-card')].find((x) => x.textContent.includes('Home power'));
+  check(/Last bill[^R]*Rs 9,305/.test(elCard.textContent), 'the card\'s last bill is the effective bill too');
   win.eval('openAssetForm')('utility', { id: el.id });
   const sheet = doc.querySelector('#modal form');
   const heads = [...sheet.querySelectorAll('.sheet-side .ledger th')].map((x) => x.textContent).join(',');

@@ -317,6 +317,8 @@ button:disabled { cursor: not-allowed; }
 .ledger tr.short td:nth-child(5) { color: var(--danger); }
 .ledger tfoot td { font-weight: 600; }
 .ledger.bills td:last-child { min-width: 0; white-space: nowrap; }
+.link-btn.inline-link { flex: none; width: auto; }
+.util-task { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .split-row .field { margin: 0; }
 .split-car { display: flex; align-items: center; gap: 4px; padding-bottom: 10px; }
@@ -4935,7 +4937,7 @@ function whoBadges(r) {
   if (!People.several()) return '';
   const on = People.of(r);
   const v = People.viewing();
-  if (on.length === 1 && on[0] === (v === 'all' ? ME : v)) return '';
+  if (v !== 'all' && on.length === 1 && on[0] === v) return ''; // one person shown and it's theirs alone
   return `<span class="who-badges who-names" title="${esc(on.map((id) => People.name(id)).join(', '))}">${on.map((id) => personName(id)).join('')}</span>`; // names in full, each in its colour
 }
 // Who a task or note is for, with + Add and a × on each (never on the last one). kind: 'tasks' | 'notes'.
@@ -7130,7 +7132,7 @@ function renderProperty() {
   const rentals = Rentals.list();
   return `
     <div class="page-head">
-      <div>${subPageBack('property')}<h1>Property</h1><p class="sub">${props.length} ${props.length === 1 ? 'property' : 'properties'}${rentals.length ? `, ${rentals.filter((r) => !r.ended).length} rented out` : ''}</p></div>
+      <div>${subPageBack('property')}<h1>Property</h1><p class="sub">${props.length} ${props.length === 1 ? 'property' : 'properties'}${props.some((a) => Rentals.forProperty(a.id).length) ? `, ${props.filter((a) => Rentals.forProperty(a.id).length).length} rented out` : ''}</p></div>
       <div class="row edit-only page-actions">
         <button class="btn ${tab === 'properties' ? 'primary' : ''}" data-action="asset-form" data-form-type="asset" data-kind="property">${ic('plus', 'sm')}Add property</button>
         <button class="btn ${tab === 'rentals' ? 'primary' : ''}" data-action="asset-form" data-form-type="rental">${ic('plus', 'sm')}Add rental agreement</button>
@@ -7224,9 +7226,9 @@ function utilityCard(c) {
           <div class="meta">${[c.provider, c.account ? `Account ${c.account}` : '', prop ? prop.name : ''].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
         <button type="button" class="icon-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}" aria-label="Edit ${esc(c.name)}" title="Edit">${ic('pencil', 'sm')}</button>
       </div>
-      <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `, due ${esc(fmtDate(t.due))}` : ''}`
+      <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn inline-link" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `<span> · due ${esc(fmtDate(t.due))}</span>` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
-      <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill</span><b>${rupees(bills[0].amount)}</b></div>` : ''}</div>
+      <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}</div>
       <div class="value-history">${billsTable(c, 6)}</div>
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
@@ -7284,7 +7286,7 @@ function renderUtilities() {
   if (tab === 'overview') {
     const rows = all.map((c) => {
       const st = Utilities.status(c);
-      const pill = st.state === 'unpaid' ? `<span class="pill zk-left">Unpaid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'paid' ? `<span class="pill">Paid ${rupees(st.bill.amount)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
+      const pill = st.state === 'unpaid' ? `<span class="pill zk-left">Unpaid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'paid' ? `<span class="pill">Paid ${rupees(Utilities.figures(st.bill).eff)}</span>` : st.state === 'late' ? `<span class="pill zk-left">Due since ${esc(fmtDate(st.task.due))}</span>` : st.state === 'due' ? `<span class="pill med">Due ${esc(fmtDate(st.task.due))}</span>` : '';
       return `<li class="item"><span class="tl-mark">${ic(Utilities.icon(c.type))}</span><div class="body clickable" data-util-tab="${esc(c.type)}"><div class="title">${esc(c.name)} ${whoBadges(c)}</div><div class="meta"><span>${esc(c.type)}</span>${Utilities.bills(c)[0] ? `<span>Last ${rupees(Utilities.bills(c)[0].amount)}</span>` : ''}</div></div>${pill}</li>`;
     }).join('');
     const byType = types.map((t) => ({ t, cs: all.filter((c) => sameName(c.type, t)) })).filter((x) => x.cs.length);
