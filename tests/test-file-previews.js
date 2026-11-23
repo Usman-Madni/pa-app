@@ -12,7 +12,7 @@ const { loadApp, fakeFile, fakeFolder, tick, check, done } = require('./helpers'
   win.URL.revokeObjectURL = () => {};
   const Vault = win.eval('Vault');
   const Assets = win.eval('Assets');
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const jpg = (n) => new win.File(['x'], n, { type: 'image/jpeg' });

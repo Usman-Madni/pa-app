@@ -54,7 +54,7 @@ const FILES = [
   check(guess.Alex === 'me' && guess.Robin === 'new', 'a first guess: the base\'s first person is you, others new');
 
   // --- The pop-up from Settings ---
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   const input = doc.querySelector('[data-input="airtable"]');
   check(input && input.closest('.edit-only'), 'Settings has "Bring in from Airtable" (edit-only)');
   Object.defineProperty(input, 'files', { value: FILES, configurable: true });
@@ -106,7 +106,7 @@ const FILES = [
 
   // --- Never silent: a file that can't be read is named in the pop-up ---
   const c = loadApp();
-  c.doc.querySelector('[data-view="settings"]').click();
+  c.doc.defaultView.eval('setView')('settings');
   const cIn = c.doc.querySelector('[data-input="airtable"]');
   const cloudOnly = { name: 'Gold-Grid view.csv', text: async () => { throw Object.assign(new Error('The file could not be read'), { name: 'NotReadableError' }); } };
   Object.defineProperty(cIn, 'files', { value: [cloudOnly, FILES[4]], configurable: true });
@@ -152,7 +152,7 @@ const FILES = [
 
   // --- Read-only ---
   const ro = loadApp({ fsa: false });
-  ro.doc.querySelector('[data-view="settings"]').click();
+  ro.doc.defaultView.eval('setView')('settings');
   const roInput = ro.doc.querySelector('[data-input="airtable"]');
   Object.defineProperty(roInput, 'files', { value: FILES, configurable: true });
   roInput.dispatchEvent(new ro.win.Event('change', { bubbles: true }));

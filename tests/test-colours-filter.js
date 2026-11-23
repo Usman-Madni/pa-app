@@ -63,7 +63,7 @@ const { loadApp, check, done } = require('./helpers');
   const C = win.eval('PERSON_COLORS');
   check(People.colorOf('me') === '' && kim.color === C[0] && sam.color === C[1], 'each new person gets the next free colour; you have none');
   check((badge.querySelector('.pname').getAttribute('style') || '').includes('--pc:var(--lab-red)'), 'their name shows in it');
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   const pick = doc.querySelector(`[data-person-color="${kim.id}"]`);
   check(pick && pick.value === C[0] && !doc.querySelector('[data-person-color="me"]'), 'Settings › People has a colour box for each person but you');
   pick.value = C[3];

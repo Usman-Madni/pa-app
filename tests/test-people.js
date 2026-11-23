@@ -24,7 +24,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   check(!/People/.test(doc.querySelector('#drawer').textContent), 'and no People row in the task panel');
 
   // --- Settings: add a person, rename, zakat day ---
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   check(/\(you\)/.test(doc.querySelector('#people-card').textContent), 'Settings lists you');
   submitForm(win, 'add-person', { title: 'Sam Rivers' });
   const sam = PA.DB.people.find((p) => p.name === 'Sam Rivers');
@@ -97,7 +97,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
 
   // --- Removing a person: what was only theirs becomes yours ---
   pick(sam.id);
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector(`[data-action="remove-person"][data-id="${sam.id}"]`).click();
   const q = await answer(win, true);
   check(/only theirs: they become yours/.test(q), 'removing asks, and says their things become yours');

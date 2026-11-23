@@ -12,7 +12,7 @@ const { loadApp, fakeFile, fakeFolder, answer, submitForm, tick, check, done } =
   const Vault = win.eval('Vault');
   const People = win.eval('People');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const main = () => doc.querySelector('#main');

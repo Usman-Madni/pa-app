@@ -14,7 +14,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const Assets = win.eval('Assets');
   const open = win.eval('openAssetForm');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const iso = (d) => PA.toISO(d);

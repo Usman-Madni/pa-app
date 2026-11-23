@@ -64,7 +64,7 @@ const { loadApp, check, done, confirmDone, tick } = require('./helpers');
   // Choosing another bucket for an area moves its open tasks
   win.eval('addBucket')('Car stuff');
   const other = PA.DB.buckets.find((b) => b.name === 'Car stuff');
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   const sel = doc.querySelector('[data-area-bucket="vehicles"]');
   check(sel && sel.value === B.bucketFor('vehicles', false) && doc.querySelector('[data-area-bucket="zakat"]').value === B.bucketFor('zakat', false), 'Settings › Buckets says where each area\'s tasks go');
   sel.value = other.id;

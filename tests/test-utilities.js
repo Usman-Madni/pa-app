@@ -14,7 +14,7 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const U = win.eval('Utilities');
   const Assets = win.eval('Assets');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const main = () => doc.querySelector('#main');
@@ -306,8 +306,8 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const ro = loadApp({ storage, query: '?readonly' });
   ro.PA.state.readOnly = true;
   ro.doc.querySelector('[data-view="utilities"]').click();
-  const adds = [...ro.doc.querySelectorAll('#main .page-actions > button:not(.act-toggle)')];
-  check(adds.length && adds.every((b) => b.closest('.edit-only')), 'read-only: adding is edit-only (the ⋮ menu stays)');
+  const adds = [...ro.doc.querySelectorAll('#main .page-actions > button:not(.act-toggle):not(.bell-btn)')];
+  check(adds.length && adds.every((b) => b.closest('.edit-only')), 'read-only: adding is edit-only (the bell and ⋮ stay)');
   ro.close();
   done();
 })();

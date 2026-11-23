@@ -18,8 +18,10 @@ const { loadApp, check, done, answer } = require('./helpers');
   key('0');
   check(PA.state.view === 'settings', '0 opens Settings');
   key('n');
-  check(PA.state.view === 'notices', 'N opens Notifications');
-  check(doc.querySelector('.nav-btn[data-view="assets"]').title === 'Assets (5)' && doc.querySelector('.nav-btn[data-view="notices"]').title === 'Notifications (N)', 'each screen\'s button says its key');
+  check(doc.querySelector('#bell-pop') && PA.state.view === 'settings', 'N opens the bell\'s window (the page stays)');
+  key('Escape');
+  check(!doc.querySelector('#bell-pop'), 'Esc closes it');
+  check(doc.querySelector('.nav-btn[data-view="assets"]').title === 'Assets (5)' && doc.querySelector('#main .bell-btn').title === 'Notifications (N)', 'each screen\'s button says its key');
 
   // --- Q W E…: the screen's buttons in order; A S D…: its tabs ---
   key('5');
@@ -57,7 +59,7 @@ const { loadApp, check, done, answer } = require('./helpers');
 
   // --- ? lists them ---
   key('?');
-  check(/1 My Day, 2 Tasks.*0 Settings, N Notifications.*Q W E R T/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
+  check(/1 My Day, 2 Tasks.*0 Settings, N Notifications \(the bell\).*Q W E R T/.test(doc.querySelector('#toasts').textContent), '? lists the shortcuts');
 
   // --- Notes: delete is an icon at the top of the note, not a red button in the corner ---
   key('4');

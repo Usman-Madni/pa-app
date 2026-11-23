@@ -143,9 +143,9 @@ const { loadApp, check, done, answer, submitForm } = require('./helpers');
 
   // --- The phone's More ---
   doc.querySelector('[data-action="more"]').click();
-  check([...doc.querySelectorAll('#more-sheet [data-view]')].map((b) => b.dataset.view).join() === 'musings,utilities,zakat,vault,notices,settings,trash', 'More lists Musings, Utilities, Zakat, the Vault, Notifications, Settings and Trash');
-  doc.querySelector('#more-sheet [data-view="settings"]').click();
-  check(PA.state.view === 'settings' && !doc.querySelector('#more-sheet .more-panel') && doc.querySelector('.more-btn').classList.contains('active'), 'picking one opens it and closes the sheet; More stays lit');
+  check([...doc.querySelectorAll('#more-sheet [data-view]')].map((b) => b.dataset.view).join() === 'musings,utilities,zakat,vault,data', 'More lists Musings, Utilities, Zakat, the Vault and Data (Notifications is the bell; Settings and Trash are in ⋮)');
+  doc.querySelector('#more-sheet [data-view="vault"]').click();
+  check(PA.state.view === 'vault' && !doc.querySelector('#more-sheet .more-panel') && doc.querySelector('.more-btn').classList.contains('active'), 'picking one opens it and closes the sheet; More stays lit');
   check(!/[—·]/.test(main()), 'no em dashes or middle dots');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
 

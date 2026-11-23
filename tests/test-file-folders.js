@@ -15,7 +15,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   const Files = win.eval('Files');
   const changed = win.eval('changed');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const file = (name, type = 'application/pdf') => new win.File(['x'], name, { type });
@@ -148,7 +148,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   phone.PA.OD.SAVE_MS = 10;
   phone.PA.AT.SETTLE_MS = 5;
   await tick(100);
-  phone.doc.querySelector('[data-view="settings"]').click();
+  phone.doc.defaultView.eval('setView')('settings');
   phone.doc.querySelector('[data-action="at-tidy"]').click();
   await answer(phone.win, true);
   await tick(100);

@@ -13,7 +13,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   const Assets = win.eval('Assets');
   const Vault = win.eval('Vault');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const file = (name, type = 'image/jpeg') => new win.File(['x'], name, { type });

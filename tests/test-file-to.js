@@ -12,7 +12,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   await PA.DF.createNew();
   const Vault = win.eval('Vault');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const file = (name) => new win.File(['%PDF'], name, { type: 'application/pdf' });

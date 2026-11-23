@@ -43,6 +43,27 @@ const { loadApp, check, done } = require('./helpers');
   toggle().click();
   panel().querySelector('[data-act-view="data"]').click();
   check(PA.state.view === 'data' && panel().hidden, 'Data goes to the Data page');
+  // --- The top bar: the bell, and what left the sidebar ---
+  const side = [...doc.querySelectorAll('.sidebar [data-view], .sidebar [data-action="cycle-theme"], .sidebar a[href="PA App Guide.html"]')].map((x) => x.dataset.view || 'other');
+  check(!side.some((v) => ['notices', 'settings', 'trash', 'other'].includes(v)), `the sidebar has the pages and Data only: Notifications, Settings, Trash, Theme and Guide left it (got ${side})`);
+  const css = [...doc.querySelectorAll('style')].map((x) => x.textContent).join('');
+  check(/\.sidebar \{[^}]*overflow-y: auto/.test(css), 'the sidebar scrolls on its own, so a long one never makes the page taller than the window');
+  check(/#main > \.page-head \{[^}]*position: sticky; top: 0/.test(css), 'the title row is a top bar that stays put as the page scrolls');
+  win.eval('Notices').add('Bill due today', null);
+  win.eval('Notices').add('Saved from the phone', null);
+  win.eval('setView')('assets');
+  const bell = () => doc.querySelector('#main .page-head .bell-btn');
+  check(bell() && bell().querySelector('#notice-count').textContent === '2' && !bell().querySelector('#notice-count').hidden, 'the bell, beside ⋮, shows how many are unread');
+  bell().click();
+  const pop = () => doc.querySelector('#bell-pop');
+  check(pop() && pop().querySelectorAll('.bell-row.unread').length === 2 && /Bill due today/.test(pop().textContent) && PA.state.view === 'assets', 'pressing it opens a small window under it with the latest (not a pop-up: the page stays)');
+  pop().querySelector('[data-action="bell-read"]').click();
+  check(!pop().querySelector('.bell-row.unread') && bell().querySelector('#notice-count').hidden, 'Mark all read');
+  doc.querySelector('#main h1').click();
+  check(!pop(), 'a click elsewhere closes it');
+  bell().click();
+  pop().querySelector('[data-action="bell-all"]').click();
+  check(PA.state.view === 'notices' && !pop(), 'View all notifications opens the Notifications page');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
 

@@ -139,7 +139,7 @@ const { loadApp, tick, check, done, answer, submitForm } = require('./helpers');
   doc.querySelector(`#main [data-action="open-asset"][data-id="${home.id}"]`).click();
   doc.querySelector('#modal [data-action="delete-asset"]').click();
   check(!PA.DB.assets.some((x) => x.id === home.id) && PA.DB.trash.some((e) => e.kind === 'assets' && e.item.id === home.id) && /Sold or closed on/.test(doc.querySelector('#toasts').textContent), 'deleting goes to the Trash at once (and points to closing it instead)');
-  doc.querySelector('[data-view="trash"]').click();
+  doc.defaultView.eval('setView')('trash');
   check(/Asset, deleted/.test(doc.querySelector('#main').textContent), 'the Trash lists it as an asset');
   doc.querySelector('#main [data-action="trash-restore"]').click();
   check(PA.DB.assets.some((x) => x.id === home.id && A.amountOn(x, '2026-10-01') === 40000), 'Restore brings it back with its amounts');

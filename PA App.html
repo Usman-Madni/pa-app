@@ -43,6 +43,7 @@
   --font-display: "Newsreader", Georgia, "Times New Roman", serif;
   --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 17px; --t-lg: 20px; --t-xl: 26px; --t-2xl: 34px;
   --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --topbar-h: 112px; /* the top bar: down to the Islamic date under Butler in the sidebar */
   --radius: var(--r-lg);
   /* Label shades, warm to sit with the palette (a label's stored colour picks one: see LABEL_COLORS) */
   --lab-red: #a5482f; --lab-orange: #9a5d12; --lab-green: #4b7445; --lab-blue: #44627e; --lab-purple: #7a4f74; --lab-pink: #a1465f; --lab-grey: #6b6457;
@@ -101,7 +102,7 @@ button:disabled { cursor: not-allowed; }
 /* ===== Sidebar ===== */
 .sidebar {
   width: 220px; flex-shrink: 0; padding: 20px 12px; border-right: 1px solid var(--border); background: var(--panel);
-  display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 20px; font-family: var(--font-display); font-weight: 500; font-size: var(--t-lg); letter-spacing: -.01em; }
 .today-date { display: flex; flex-direction: column; gap: 1px; margin: -12px 10px 16px; font-size: var(--t-xs); color: var(--muted); line-height: 1.35; }
@@ -345,6 +346,8 @@ button:disabled { cursor: not-allowed; }
 .data-table .dt-sys { color: var(--muted); font-size: var(--t-xs); }
 .data-table th .dt-sort { color: inherit; font: inherit; padding: 0; }
 .data-table tbody tr:not([data-action]) { cursor: default; }
+.data-export { margin-bottom: 14px; }
+.data-export-list { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .tab-split { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--border); flex: none; }
 .util-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 .util-table th, .util-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
@@ -430,6 +433,21 @@ button:disabled { cursor: not-allowed; }
 /* ===== Main ===== */
 .main { flex: 1; min-width: 0; padding: 32px 36px 64px; } /* every screen uses the full width */
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* The top bar: the title row stays at the top as the page scrolls, as tall as Butler's name and date beside it. */
+#main > .page-head { position: sticky; top: 0; z-index: 16; background: var(--bg); margin: -32px -36px 18px; padding: 24px 36px 14px; min-height: var(--topbar-h); border-bottom: 1px solid var(--border); }
+.main.fill #main > .page-head { position: static; }
+.page-head .bell-btn, .page-head .act-toggle { flex: none; }
+.bell-btn { position: relative; }
+.bell-count { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
+.bell-pop { position: absolute; right: 36px; top: calc(100% - 6px); z-index: 30; width: min(340px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-float); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.bell-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.bell-row { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 6px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: var(--t-sm); text-align: left; border-radius: 0; }
+button.bell-row { cursor: pointer; }
+button.bell-row:hover { background: var(--panel-2); }
+.bell-row.unread .notice-text { font-weight: 600; }
+.bell-row .meta { font-size: var(--t-xs); }
+.bell-all { align-self: flex-start; margin-top: 6px; }
+.bell-pop .link-btn { flex: none; width: auto; }
 .page-head .page-actions { margin-left: auto; justify-content: flex-end; flex-wrap: wrap; }
 .tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .tabs-row .tabs { margin-bottom: 0; }
@@ -901,6 +919,8 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
   .nav-btn .lbl-long { display: none; }
   .nav-btn .lbl-short { display: inline; }
   .main { padding: 20px 16px 90px; }
+  #main > .page-head { margin: -20px -16px 14px; padding: 12px 16px 10px; min-height: 0; }
+  .bell-pop { right: 16px; }
   /* The phone's status banner is one compact line, so today's tasks are on the first screen */
   .banner { padding: 8px 12px; font-size: var(--t-sm); gap: 8px; margin-bottom: 12px; }
   .banner.has-short .ro-more { display: none; }
@@ -968,14 +988,9 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
     <button class="nav-btn more-item" data-view="zakat" title="Zakat (8)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-coins"/></svg></span><span>Zakat</span></button>
     <button class="nav-btn more-item" data-view="vault" title="Vault (9)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-id"/></svg></span><span>Vault</span></button>
     <button class="nav-btn more-item" data-view="data" title="Data: everything as tables"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-table"/></svg></span><span>Data</span></button>
-    <button class="nav-btn more-item" data-view="notices" title="Notifications (N)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><span class="lbl-long">Notifications</span><span class="lbl-short">Alerts</span><span class="nav-count" id="notice-count" hidden></span></button>
-    <button class="nav-btn more-item" data-view="settings" title="Settings (0)"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></span><span>Settings</span></button>
     <button class="nav-btn more-btn" data-action="more" aria-haspopup="true" aria-expanded="false"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></span><span>More</span><span class="nav-count" id="more-count" hidden></span></button>
     <div class="side-foot">
-      <button class="nav-btn trash-nav" data-view="trash" title="Deleted things, kept 30 days"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></span><span>Trash</span><span class="nav-count muted" id="trash-count" hidden></span></button>
       <div class="df-badge" id="df-badge"></div>
-      <button class="theme-btn" data-action="cycle-theme" id="theme-btn"></button>
-      <a class="theme-btn" href="PA App Guide.html" target="_blank" rel="noopener"><svg class="i sm" aria-hidden="true"><use href="#i-help-circle"/></svg>Guide</a>
     </div>
   </nav>
   <div id="more-sheet"></div>
@@ -3130,10 +3145,6 @@ function renderUnread() {
   const n = state.readOnly ? 0 : Notices.unread();
   el.textContent = n > 99 ? '99+' : String(n);
   el.hidden = !n;
-  const mc = $('#more-count'); // the phone's More carries it too (Notifications is in there)
-  if (mc) { mc.textContent = el.textContent; mc.hidden = !n; }
-  const tc = $('#trash-count'); // how many things are in the Trash
-  if (tc) { tc.textContent = String(DB.trash.length); tc.hidden = !DB.trash.length; }
 }
 
 // ===================== Screen state =====================
@@ -4065,7 +4076,7 @@ const ActMenu = {
         const label = b.textContent.trim();
         const group = b.classList.contains('act') ? 'act' : b.classList.contains('primary') ? 'entry' : 'list';
         const key = `${label}|${b.dataset.action}|${b.dataset.formType || ''}`;
-        if (!label || seen.has(key)) continue; // + Rates is on Assets and Zakat: once is enough
+        if (!label || seen.has(key) || b.dataset.action === 'data-export') continue; // + Rates is on Assets and Zakat: once is enough; Export is Butler's own, below
         seen.add(key);
         const icon = b.querySelector('use')?.getAttribute('href')?.slice(3) || '';
         items.push({ view: v, sig: this.sig(b), label: icon === 'plus' ? `+ ${label}` : label, group, icon: icon === 'plus' ? '' : icon });
@@ -4084,9 +4095,11 @@ const ActMenu = {
       ${group('act', 'Actions')}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
       <div class="act-group"><p class="act-h">Butler</p>
         <button type="button" class="act-item" data-act-view="data">${ic('table', 'sm')}<span>Data</span></button>
+        <button type="button" class="act-item" data-act-export>${ic('download', 'sm')}<span>Export</span></button>
         <a class="act-item" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}<span>Guide</span></a>
         <button type="button" class="act-item" data-action="cycle-theme">${ic('sun-moon', 'sm')}<span>Light or dark</span></button>
         <button type="button" class="act-item" data-act-view="settings">${ic('settings', 'sm')}<span>Settings</span></button>
+        <button type="button" class="act-item" data-act-view="trash">${ic('trash', 'sm')}<span>Trash</span>${DB.trash.length ? `<span class="nav-count muted">${DB.trash.length}</span>` : ''}</button>
       </div>`;
   },
   open() {
@@ -4114,6 +4127,34 @@ const ActMenu = {
     if (b) b.click(); else toast(`${it.label} isn't on that page just now`);
   },
 };
+// The bell, beside ⋮: how many notifications are unread, and a small window under it with the latest ones (a tap on
+// one with a task opens the task), Mark all read, and View all for the Notifications page. Esc, the bell again or a
+// click elsewhere closes it. N opens it from the keyboard.
+const Bell = {
+  SHOW: 6,
+  html() {
+    const list = [...DB.notices].sort((a, b) => b.at - a.at).slice(0, this.SHOW);
+    const when = (at) => { const k = toISO(new Date(at)); return k === todayISO() ? fmtTime(fmtClock(at)) : k === toISO(addDays(new Date(), -1)) ? 'Yesterday' : shortDate(k); };
+    const rows = list.map((n) => {
+      const task = n.task && DB.tasks.find((t) => t.id === n.task);
+      const inner = `<span class="notice-text">${iconText(n.text)}</span><span class="meta">${esc(when(n.at))}</span>`;
+      return task ? `<button type="button" class="bell-row ${n.read ? '' : 'unread'}" data-action="open-task" data-id="${esc(task.id)}">${inner}</button>` : `<div class="bell-row ${n.read ? '' : 'unread'}">${inner}</div>`;
+    }).join('');
+    return `<div class="bell-top"><b>Notifications</b>${!state.readOnly && Notices.unread() ? '<button type="button" class="link-btn" data-action="bell-read">Mark all read</button>' : ''}</div>
+      ${rows || '<p class="meta" style="margin:6px 0">Nothing yet. Messages Butler shows are kept here for 30 days.</p>'}
+      <button type="button" class="link-btn bell-all" data-action="bell-all">View all notifications</button>`;
+  },
+  draw() {
+    const head = $('#main .page-head');
+    if (!head) return;
+    let pop = head.querySelector('#bell-pop');
+    if (!pop) { pop = document.createElement('div'); pop.id = 'bell-pop'; pop.className = 'bell-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Notifications'); head.append(pop); }
+    pop.innerHTML = this.html();
+  },
+  open() { state.bellOpen = true; ActMenu.close(); this.draw(); $$('.bell-btn').forEach((b) => b.setAttribute('aria-expanded', 'true')); },
+  close() { if (!state.bellOpen) return; state.bellOpen = false; $('#bell-pop')?.remove(); $$('.bell-btn').forEach((b) => b.setAttribute('aria-expanded', 'false')); },
+  toggle() { if (state.bellOpen) this.close(); else this.open(); },
+};
 // The ⋮ button, at the end of every page's title row.
 function addActButton() {
   const head = $('#main .page-head');
@@ -4127,9 +4168,18 @@ function addActButton() {
   b.setAttribute('aria-haspopup', 'true');
   b.setAttribute('aria-expanded', String(ActMenu.isOpen()));
   b.innerHTML = ic('dots-vertical');
+  const bell = document.createElement('button');
+  Object.assign(bell, { type: 'button', className: 'icon-btn bell-btn', title: 'Notifications (N)' });
+  bell.dataset.action = 'bell-toggle';
+  bell.setAttribute('aria-label', 'Notifications');
+  bell.setAttribute('aria-haspopup', 'true');
+  bell.setAttribute('aria-expanded', String(!!state.bellOpen));
+  bell.innerHTML = `${ic('bell')}<span class="nav-count bell-count" id="notice-count" hidden></span>`;
   // In the button row, at its end. A row that's hidden when read-only hides its buttons one by one instead, so ⋮ stays.
   if (box.classList.contains('edit-only')) { box.classList.remove('edit-only'); [...box.children].forEach((c) => c.classList.add('edit-only')); }
-  box.append(b);
+  box.append(bell, b);
+  renderUnread();
+  if (state.bellOpen) Bell.draw();
 }
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
@@ -4143,7 +4193,7 @@ function render() {
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
-    ? { y: window.scrollY, top: oldBoard ? oldBoard.scrollTop : 0, left: oldBoard ? oldBoard.scrollLeft : 0 } : null;
+    ? { y: window.scrollY, top: oldBoard ? oldBoard.scrollTop : 0, left: oldBoard ? oldBoard.scrollLeft : 0, tabs: $('#main [role="tablist"]')?.scrollLeft || 0 } : null;
   render.lastView = state.view;
   $('#main').innerHTML = (views[state.view] || renderToday)();
   if (keep) {
@@ -4158,8 +4208,20 @@ function render() {
   loadThumbs();
   addPageFilter();
   addActButton();
+  const strip = $('#main [role="tablist"]'); // a row of tabs that scrolls sideways stays where it was (after the tabs row is made, which moves it)
+  if (strip && keep) strip.scrollLeft = keep.tabs;
+  showActiveTab();
   if (state.view === 'search' && document.activeElement?.id !== 'side-search') $('#main [data-input="global-search"]')?.focus();
   renderStatus();
+}
+// The open tab is always in sight in a row of tabs that scrolls sideways (only that row moves, not the page).
+function showActiveTab() {
+  const strip = $('#main [role="tablist"]');
+  const on = strip?.querySelector('.tab.active');
+  if (!on || strip.scrollWidth <= strip.clientWidth) return;
+  const l = on.offsetLeft - strip.offsetLeft;
+  if (l < strip.scrollLeft) strip.scrollLeft = l - 8;
+  else if (l + on.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = l + on.offsetWidth - strip.clientWidth + 8;
 }
 // Fill in the small pictures on screen (an asset's first photo), once each can be read.
 // What kind of file an attachment is, by its stored type or else its name (photos fetched from Airtable came with none).
@@ -4378,7 +4440,8 @@ function renderTodayDate() {
 // Status bits only — safe to call while the user is typing (doesn't rebuild the page).
 function renderStatus() {
   const theme = device.get('theme', 'auto');
-  $('#theme-btn').innerHTML = `${ic('sun-moon', 'sm')}Theme: ${theme[0].toUpperCase() + theme.slice(1)}`;
+  const tb = $('#theme-btn'); // (Light or dark is in the ⋮ menu now; kept for a button that may come back)
+  if (tb) tb.innerHTML = `${ic('sun-moon', 'sm')}Theme: ${theme[0].toUpperCase() + theme.slice(1)}`;
   $('#df-badge').innerHTML = statusBadge();
   $('#banner').innerHTML = statusBanner();
   const card = $('#df-card');
@@ -5155,7 +5218,7 @@ async function deleteLabel(id) {
 }
 
 // ----- The phone's More: the screens that don't fit its bottom bar, as a sheet above it -----
-const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['utilities', 'bolt', 'Utilities'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['notices', 'bell', 'Notifications'], ['settings', 'settings', 'Settings'], ['trash', 'trash', 'Trash']];
+const MORE_VIEWS = [['musings', 'pencil', 'Musings'], ['utilities', 'bolt', 'Utilities'], ['zakat', 'coins', 'Zakat'], ['vault', 'id', 'Vault'], ['data', 'table', 'Data']];
 function renderMore() {
   const btn = $('.more-btn');
   if (!btn) return;
@@ -7767,6 +7830,26 @@ const DataView = {
     const f = this.fields(key).find((x) => x[0] === s.f);
     return this.rows(key).map((r) => [this.sortVal(r, f), r]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0) * s.dir).map((x) => x[1]);
   },
+  // The tables ticked for export (this device), the open table to start with.
+  picked() { const p = device.get('dataExport', null); return (Array.isArray(p) ? p : [this.tab()]).filter((k) => SCHEMA[k] && SCHEMA[k].kind !== 'system'); },
+  // One CSV per ticked table, a moment apart (Chrome asks once to allow several downloads).
+  exportPicked() {
+    const keys = this.picked();
+    keys.forEach((k, i) => setTimeout(() => this.export(k), i * 400));
+    if (keys.length) toast(`Saving ${plural(keys.length, 'table')} as CSV files…`);
+  },
+  chooser() {
+    const picked = new Set(this.picked());
+    const box = (k) => `<label class="check"><input type="checkbox" data-export-key="${esc(k)}" ${picked.has(k) ? 'checked' : ''}> ${esc(SCHEMA[k].label)}</label>`;
+    return `<div class="card data-export">
+      <div class="row" style="justify-content:space-between"><b>Export</b><span class="meta">One CSV file per table, every field; Excel opens them.</span></div>
+      <p class="meta" style="margin:6px 0 2px">Entries</p><div class="data-export-list">${this.keys('entry').map(box).join('')}</div>
+      <p class="meta" style="margin:8px 0 2px">Lists</p><div class="data-export-list">${this.keys('list').map(box).join('')}</div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="btn small" data-action="data-export-all">All</button><button type="button" class="btn small" data-action="data-export-none">None</button>
+        <button type="button" class="btn act" data-action="data-export-go" ${picked.size ? '' : 'disabled'}>${ic('download', 'sm')}Export ${plural(picked.size, 'table')}</button>
+        <button type="button" class="btn" data-action="data-export-close">Close</button></div>
+    </div>`;
+  },
   csv(key) {
     const fields = this.fields(key, true);
     const cell = (x) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
@@ -7797,8 +7880,9 @@ function renderData() {
   return `
     <div class="page-head">
       <div><h1>Data</h1><p class="sub">Everything Butler keeps, as tables: ${DataView.keys('entry').length} kinds of entry, ${DataView.keys('list').length} lists</p></div>
-      <div class="row page-actions"><button class="btn act" data-action="data-export">${ic('download', 'sm')}Export ${esc(sc.label.toLowerCase())}</button></div>
+      <div class="row page-actions"><button class="btn act" data-action="data-export" aria-expanded="${!!state.dataExport}">${ic('download', 'sm')}Export</button></div>
     </div>
+    ${state.dataExport ? DataView.chooser() : ''}
     <div class="tabs data-tabs" role="tablist">${DataView.keys('entry').map(tabOf).join('')}<span class="tab-split" aria-hidden="true"></span>${DataView.keys('list').map(tabOf).join('')}</div>
     <div class="list-tools"><span class="meta">${esc(sc.kind === 'entry' ? 'Entries: things that happen on a day' : 'A list: things you add to and pick from')}</span><span class="meta" style="margin-left:auto">${plural(rows.length, 'row')}</span></div>
     ${rows.length ? `<div class="card data-card"><div class="ledger-wrap data-wrap"><table class="ledger data-table">
@@ -10080,6 +10164,7 @@ function setView(view) {
   state.daySheet = false;
   state.view = view;
   device.set('view', view);
+  Bell.close();
   if (view === 'notices') Notices.markRead();
   render();
   try { window.scrollTo(0, 0); } catch { /* not available in tests */ }
@@ -10263,8 +10348,10 @@ document.addEventListener('click', (e) => {
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
   if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', vehicleOpen.dataset.tabTo || 'overview'); state.moreOpen = false; return setView('vehicles'); }
   if (ActMenu.isOpen() && !e.target.closest('#act-panel, .act-toggle')) ActMenu.close(); // a click outside closes the menu
+  if (state.bellOpen && !e.target.closest('#bell-pop, .bell-btn')) Bell.close(); // and the bell's window
   const actGo = e.target.closest('[data-act-go]');
   if (actGo) return ActMenu.go(Number(actGo.dataset.actGo));
+  if (e.target.closest('[data-act-export]')) { ActMenu.close(); state.dataExport = true; return setView('data'); }
   const actView = e.target.closest('[data-act-view]');
   if (actView) { ActMenu.close(); return setView(actView.dataset.actView); }
   const dataTab = e.target.closest('[data-data-tab]');
@@ -10782,8 +10869,15 @@ document.addEventListener('click', (e) => {
       TD.sync(); render(); break;
     case 'td-disconnect': ask('Stop sending tasks to Microsoft To Do on this computer?', { yes: 'Disconnect', danger: true }).then((yes) => { if (yes) TD.disconnect(); }); break;
     case 'cycle-theme': cycleTheme(); break;
-    case 'data-export': DataView.export(DataView.tab()); break;
-    case 'act-toggle': ActMenu.toggle(); break;
+    case 'data-export': state.dataExport = !state.dataExport; render(); break;
+    case 'data-export-close': state.dataExport = false; render(); break;
+    case 'data-export-all': device.set('dataExport', [...DataView.keys('entry'), ...DataView.keys('list')]); render(); break;
+    case 'data-export-none': device.set('dataExport', []); render(); break;
+    case 'data-export-go': DataView.exportPicked(); break;
+    case 'act-toggle': Bell.close(); ActMenu.toggle(); break;
+    case 'bell-toggle': Bell.toggle(); break;
+    case 'bell-read': Notices.markRead(); renderUnread(); Bell.draw(); break;
+    case 'bell-all': Bell.close(); setView('notices'); break;
     case 'act-close': ActMenu.close(); break;
     case 'enable-notifications': askNotifications(); break;
     case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
@@ -10895,6 +10989,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (Viewer.on()) { Viewer.close(); return; } // the photo first, then the pop-up under it
   if (ActMenu.isOpen()) { ActMenu.close(); $('.act-toggle')?.focus(); return; }
+  if (state.bellOpen) { Bell.close(); $('.bell-btn')?.focus(); return; }
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.openTask && state.assetForm) { closeTaskDrawer(); return; } // the task panel over a pop-up: it first
@@ -10914,7 +11009,7 @@ const BUTTON_KEYS = 'qwertyuiop';
 const TAB_KEYS = 'asdfghjkl';
 const shown = (el) => !!el && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none';
 // The open screen's own buttons (at the top, in order) and its tabs (every row of them, in order).
-const pageButtons = () => $$('#main .page-head .page-actions > button, #main .page-head .page-actions > label').filter((b) => !b.classList.contains('act-toggle') && !(state.readOnly && b.closest('.edit-only')) && shown(b));
+const pageButtons = () => $$('#main .page-head .page-actions > button, #main .page-head .page-actions > label').filter((b) => !b.classList.contains('act-toggle') && !b.classList.contains('bell-btn') && !(state.readOnly && b.closest('.edit-only')) && shown(b));
 const pageTabs = () => $$('#main [role="tablist"] .tab');
 function shortcut(e) {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false; // (assetForm: any pop-up)
@@ -10923,7 +11018,7 @@ function shortcut(e) {
   if (k === '0') { setView('settings'); return true; }
   const n = SHORTCUT_VIEWS[Number(k) - 1];
   if (n) { setView(n); return true; }
-  if (k === 'n') { setView('notices'); return true; }
+  if (k === 'n') { Bell.toggle(); return true; }
   if (BUTTON_KEYS.includes(k)) { const b = pageButtons()[BUTTON_KEYS.indexOf(k)]; if (!b) return false; b.click(); return true; }
   if (TAB_KEYS.includes(k)) { const t = pageTabs()[TAB_KEYS.indexOf(k)]; if (!t) return false; t.click(); return true; }
   if (e.key === '/') { // search: the sidebar box on the laptop, the Search page's on the phone
@@ -10933,7 +11028,7 @@ function shortcut(e) {
     $('#main [data-input="global-search"]')?.focus();
     return true;
   }
-  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Settings, N Notifications. Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Settings, N Notifications (the bell). Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });
@@ -11260,6 +11355,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.matches?.('[data-doc-track]')) { $('#modal').querySelectorAll('.doc-full').forEach((x) => { x.style.display = e.target.checked ? '' : 'none'; }); return; }
+  if (e.target.matches?.('[data-export-key]')) { const set = new Set(DataView.picked()); if (e.target.checked) set.add(e.target.dataset.exportKey); else set.delete(e.target.dataset.exportKey); device.set('dataExport', [...set]); render(); return; }
   if (e.target.matches?.('[data-util-prop]')) { device.set('utilProp', e.target.value); render(); return; }
   if (e.target.matches?.('[data-util-year]')) { device.set('utilYear', e.target.value === 'all' ? 'all' : Number(e.target.value)); render(); return; }
   if (e.target.matches?.('[data-file-to]') && !state.readOnly) { taskFileTo(currentTask(), e.target.value); return; }

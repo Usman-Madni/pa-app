@@ -34,7 +34,7 @@ const { loadApp, answer, tick, check, done } = require('./helpers');
   check(!PA.DB.notices.some((x) => x.id === 'old'), 'older than 30 days: dropped');
 
   // --- The screen ---
-  doc.querySelector('[data-view="notices"]').click();
+  doc.defaultView.eval('setView')('notices');
   const main = doc.querySelector('#main');
   const rows = [...main.querySelectorAll('.notice-row')].map((r) => r.textContent);
   check(main.querySelector('h1').textContent === 'Notifications' && main.querySelector('.notice-day').textContent === 'Today', 'its own screen, grouped by day');
@@ -67,7 +67,7 @@ const { loadApp, answer, tick, check, done } = require('./helpers');
   const fileText = JSON.stringify({ app: 'PA App', version: 2, saveToken: 't', savedAt: new Date().toISOString(), savedFrom: 'Laptop', data: { tasks: [], notes: [], events: [], notices: kept } });
   await phone.PA.RO.open({ name: 'pa-app-data.json', text: async () => fileText });
   phone.win.eval('toast')('Read-only on this device');
-  phone.doc.querySelector('[data-view="notices"]').click();
+  phone.doc.defaultView.eval('setView')('notices');
   check(phone.PA.DB.notices.length === 1 && phone.doc.querySelector('#main').textContent.includes('From the laptop'), 'phone: shows the laptop\'s notifications, adds none of its own');
   check(!phone.PA.DB.notices[0].read && phone.doc.querySelector('#notice-count').hidden && !phone.doc.querySelector('#main [data-action="clear-notices"]:not(.edit-only)'), 'phone: changes nothing (no unread count, no Clear all)');
   phone.close();

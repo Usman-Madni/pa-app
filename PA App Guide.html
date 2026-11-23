@@ -155,11 +155,11 @@ ol.key li { margin: 4px 0; }
         <p class="chap-lead">What Butler is, how to open it on the laptop and the phone, and how every page is laid out, so the rest of the guide reads the same way.</p>
         <section id="top-of-page" data-title="The top of a page">
           <h3>The top of a page</h3>
-          <p>Every page starts the same way. This is the Assets page; the numbers match the list under it.</p>
+          <p>Every page starts with the same <b>top bar</b>, which stays put as the page scrolls under it. This is the Assets page; the numbers match the list under it.</p>
           <div class="mock" role="img" aria-label="The top of the Assets page, with numbered parts">
             <div class="mock-head">
               <div><div class="mock-title">Assets <i class="mk">1</i></div><div class="mock-sub">Net worth Rs 12,40,000</div></div>
-              <div class="mock-btns"><span class="mb act">⇄ Transfer</span><i class="mk">2</i><span class="mb entry">+ Rates</span><span class="mb entry">Update balances</span><i class="mk">3</i><span class="mb list">+ Asset</span><i class="mk">4</i><span class="mb dots">⋮</span><i class="mk">5</i></div>
+              <div class="mock-btns"><span class="mb act">⇄ Transfer</span><i class="mk">2</i><span class="mb entry">+ Rates</span><span class="mb entry">Update balances</span><i class="mk">3</i><span class="mb list">+ Asset</span><i class="mk">4</i><span class="mb dots" aria-label="bell"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg></span><span class="mb dots">⋮</span><i class="mk">5</i></div>
             </div>
             <div class="mock-tabs"><span class="mt on">Overview</span><span class="mt">Property</span><span class="mt">Vehicles</span><span class="mt">Rates</span><i class="mk">6</i><span class="mock-filter">Filter this page</span><i class="mk">7</i></div>
           </div>
@@ -168,7 +168,7 @@ ol.key li { margin: 4px 0; }
             <li><b>Gold buttons do something:</b> Transfer, Select, Paste history, Export, Import.</li>
             <li><b>Teal buttons add an entry</b>, something that happens on a day: + Task, + Rates, + Zakat record, + Bill.</li>
             <li><b>Outlined buttons add to a list</b> you pick from later: + Asset, + Car, + Connection, + Document. (Red ones delete.) They always come in this order: gold, teal, outlined; the keys <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… press them left to right.</li>
-            <li><b>⋮ opens the menu</b> down the right edge: every page's buttons in one place, grouped by these colours, then Data, the Guide, Light or dark and Settings.</li>
+            <li><b>The bell</b> shows how many notifications are unread and opens the latest under it; <b>⋮ opens the menu</b> down the right edge: every page's buttons in one place, grouped by these colours, then Data, Export, the Guide, Light or dark, Settings and the Trash. The sidebar keeps just the pages.</li>
             <li><b>The tabs</b> of the page (<kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>… open them).</li>
             <li><b>Filter this page</b> narrows what's listed to what has every word you type.</li>
           </ol>
@@ -224,7 +224,7 @@ ol.key li { margin: 4px 0; }
           <table>
             <tr><th>Key</th><th>Does</th></tr>
             <tr><td><kbd>1</kbd> to <kbd>9</kbd>, <kbd>0</kbd></td><td>The screens in the sidebar's order: My Day, Tasks, Calendar, Notes, Assets, Utilities, Musings, Zakat, Vault; <kbd>0</kbd> Settings (pointing at a screen's name shows its key)</td></tr>
-            <tr><td><kbd>N</kbd></td><td>Notifications</td></tr>
+            <tr><td><kbd>N</kbd></td><td>Notifications: opens the bell's window</td></tr>
             <tr><td><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd> …</td><td>The open screen's buttons at the top, in order: on Assets, <kbd>Q</kbd> is the first (+ Rates) and <kbd>W</kbd> the next</td></tr>
             <tr><td><kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> …</td><td>The open screen's tabs, in order</td></tr>
             <tr><td><kbd>/</kbd></td><td>Search across Butler</td></tr>
@@ -238,7 +238,7 @@ ol.key li { margin: 4px 0; }
           <p>The <b>Search</b> box at the top of the sidebar (on the phone, the magnifying glass above the page) looks through everything: tasks (and their notes and steps), notes, events, assets, documents (by name, type or number), zakat records and payments. Type a few words; each one must be there, in any order. Results are grouped by kind; click one to open it. With the person picker on one person, it searches only theirs.</p>
           <p><b>Filter this page:</b> Tasks, Assets, Utilities, Zakat, the Vault, Notifications and the Trash each have their own box, which narrows that page's list as you type.</p>
           <p><b>Button colours:</b> <b>gold</b> buttons do something (Transfer, Select, Paste history, Export); <b>teal</b> ones add an entry, something that happens on a day (+ Task, + Rates, + Zakat record); <b>outlined</b> ones add to a list (+ Asset, + Connection, + Document); <b>red</b> ones delete. On a page they go gold, then teal, then outlined, left to right, and the add buttons say what they add.</p>
-          <p><b>The ⋮ menu</b> at the end of every page's buttons opens a panel down the right edge with every page's buttons in one place: <b>Actions</b> (the gold ones), <b>Add an entry</b> (teal) and <b>Add to a list</b> (outlined), each with the page it's on, then Data, the Guide, Light or dark, and Settings. Pick one and Butler goes to that page and presses it. Esc, × or a tap outside closes it.</p>
+          <p><b>The ⋮ menu</b> at the end of every page's buttons opens a panel down the right edge with every page's buttons in one place: <b>Actions</b> (the gold ones), <b>Add an entry</b> (teal) and <b>Add to a list</b> (outlined), each with the page it's on, then Data, Export, the Guide, Light or dark, Settings and the Trash. Pick one and Butler goes to that page and presses it. Esc, × or a tap outside closes it.</p>
           <p><b>Every page is laid out the same:</b> its name with its buttons on the right and <b>⋮</b> at the end (on a phone, the first teal button and <b>⋮</b>), then the tabs with <b>Filter this page</b> beside them, then the list's Group by and Sort, with how many and their total on the right.</p>
         </section>
         <section id="photos" data-title="Photos">
@@ -324,7 +324,7 @@ ol.key li { margin: 4px 0; }
         </section>
         <section id="zakat" data-title="Zakat">
           <h3>Zakat</h3>
-          <p><b>Zakat</b> is in the sidebar (on a phone, under <b>More</b>, with the Vault, Notifications, Settings and Trash). It works from each person's zakat day, set in Settings › People, for example 15th Sha'ban.</p>
+          <p><b>Zakat</b> is in the sidebar (on a phone, under <b>More</b>, with the Vault and Data). It works from each person's zakat day, set in Settings › People, for example 15th Sha'ban.</p>
           <ul>
             <li><b>Islamic dates</b> are worked out from the Umm al-Qura calendar. Today's is under Butler in the sidebar, and in My Day's line on a phone. If the month began on a different day where you are, click that date (or the Islamic date beside a date in Add rates or Make record) and pick how it is here: up to two days later or earlier. It corrects that whole month everywhere in Butler, on both devices, so you do it once a month, whenever you notice it drifting.</li>
             <li><b>Records</b> are named by both dates, for example 15th Sha'ban 1447 (Tue 3 Feb 2026). Dates on the Zakat, Assets and Vault pages always carry the year; on tasks and the calendar only when it isn't this year.</li>
@@ -444,7 +444,7 @@ ol.key li { margin: 4px 0; }
           <p>At the bottom: <b>Duplicate</b> makes "Title (copy)", not started, with steps unticked. <b>Delete</b> asks first if the task has notes, steps or files.</p>
           <p><b>Several at once:</b> on Tasks, press <b>Select</b>, then tap the tasks you want (List or Board, laptop or phone). The bar above them can <b>Mark done</b>, <b>Move to</b> a bucket, or <b>Delete</b> them all (one Undo brings them all back). <b>Select all</b> picks every task shown; <b>Cancel</b> or <kbd>Esc</kbd> stops selecting.</p>
           <p><b>Changed your mind?</b> After a delete, a message says <b>Deleted "…"</b> with <b>Undo</b> for about 6 seconds. Until then the task is only hidden, so nothing else (the data file, your other device, To Do) is told. Leaving the app, or switching away on the phone, deletes it straight away. In a list, the delete <b>×</b> shows when you point at a row (on the phone it's always there). Deleting a note works the same way.</p>
-          <p><b>The Trash:</b> once it's really deleted, a task or note goes to the <b>Trash</b> (bottom of the sidebar; on the phone, <b>More › Trash</b>) for 30 days. <b>Restore</b> puts it back as it was; <b>×</b> deletes one for good, <b>Empty Trash</b> all of them. After 30 days things leave the Trash by themselves. Both devices share it.</p>
+          <p><b>The Trash:</b> once it's really deleted, a task or note goes to the <b>Trash</b> (in the <b>⋮</b> menu, with how many are in it) for 30 days. <b>Restore</b> puts it back as it was; <b>×</b> deletes one for good, <b>Empty Trash</b> all of them. After 30 days things leave the Trash by themselves. Both devices share it.</p>
           <p><b>Assets, documents, rates, zakat records and payments</b> are deleted the same way, without a question: they go to the Trash straight away, with an <b>Undo</b> for a few seconds (a document's renew task goes and comes back with it). Removing a person still asks first.</p>
         </section>
         <section id="done" data-title="Ticking a task off">
@@ -510,7 +510,7 @@ ol.key li { margin: 4px 0; }
         </section>
         <section id="notices" data-title="Notifications">
           <h3>Notifications</h3>
-          <p>Messages fade after 5 seconds. <b>Notifications</b> in the sidebar keeps every one for 30 days, newest first and grouped by day, with a count of unread ones. Click a reminder there to open its task. <b>Clear all</b> empties the list.</p>
+          <p>Messages fade after 5 seconds. The <b>bell</b> in the top bar keeps every one for 30 days, with a red count of unread ones. Press it (or <kbd>N</kbd>) and a small window opens right under it with the latest few and <b>Mark all read</b>; <b>View all notifications</b> opens the full page, newest first and grouped by day. Esc, the bell again or a click elsewhere closes it. Click a reminder there to open its task. <b>Clear all</b> empties the list.</p>
         </section>
       </div>
 
@@ -558,7 +558,8 @@ ol.key li { margin: 4px 0; }
             <li><b>Sort:</b> tap a column's heading; tap it again for the other way. Entries open newest first; the choice is kept on this device.</li>
             <li><b>Filter this page</b> narrows the rows to those with every word you type.</li>
             <li><b>Open a row</b> to see or change its record in its own pop-up (a task opens its panel).</li>
-            <li><b>Export</b> saves the table you're on as a CSV file that Excel opens, with every field, including the ones the table leaves out.</li>
+            <li><b>Export</b> (also in the <b>⋮</b> menu) shows a tick box for every table, with <b>All</b> and <b>None</b>; <b>Export 3 tables</b> saves one CSV file per ticked table, with every field, including the ones a table leaves out. Excel opens them. Chrome asks once to allow several downloads.</li>
+            <li><b>The tabs</b> scroll sideways when they don't fit; the one you pick stays in sight.</li>
             <li>Each table ends with the record's <b>ID</b> and when it last <b>Changed</b>. With one person picked at the top, it shows only theirs.</li>
           </ul>
           <details class="card note">
@@ -709,7 +710,7 @@ ol.key li { margin: 4px 0; }
             <tr><td>Red text on the Phone reminders card</td><td>Something stopped the To Do sync.</td><td>It says what went wrong. "Missing from the To Do list" means most tasks vanished there at once: check the "PA App" list in To Do before syncing again.</td></tr>
                         <tr><td>The phone shows old tasks</td><td>OneDrive hasn't got the laptop's latest save yet.</td><td>Tap <b>Refresh</b> (or <b>Open newer file</b> if you're not signed in). After the laptop saves, OneDrive can take a minute to have the latest.</td></tr>
             <tr><td>The laptop says the data file "isn't where it was"</td><td>It was moved or renamed.</td><td>You moved it: <b>Settings › Open existing data file</b> and choose it in its new place.</td></tr>
-            <tr><td>A message went by too fast</td><td>Messages show for a few seconds.</td><td>Notifications keeps it (on the phone, <b>More › Notifications</b>).</td></tr>
+            <tr><td>A message went by too fast</td><td>Messages show for a few seconds.</td><td>The bell keeps it: press it for the latest.</td></tr>
           </table>
         </section>
         <section id="calendar" data-title="Calendar colours">

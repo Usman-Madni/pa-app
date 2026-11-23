@@ -91,7 +91,7 @@ function pick(win, sel, value, type = 'input') {
   pick(win, '[data-input="task-label"]', '');
 
   // --- Settings: manage buckets & labels ---
-  $(win, '[data-view="settings"]').click();
+  win.eval('setView')('settings');
   check($(win, '#main').textContent.includes('Monthly bills') && $(win, '#main').textContent.includes('Urgent call'), 'Settings lists buckets and labels');
   pick(win, `[data-label-color="${urgent.id}"]`, '#3b82f6', 'change');
   check(urgent.color === '#3b82f6', 'label colour can be changed');

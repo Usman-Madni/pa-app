@@ -25,7 +25,7 @@ const { loadApp, check, done } = require('./helpers');
   check(doc.querySelector('.nav-btn[data-view="tasks"]').getAttribute('aria-current') === 'page' && !doc.querySelector('.nav-btn[data-view="today"]').hasAttribute('aria-current'), 'the current screen\'s button says so (aria-current)');
 
   // --- Plurals ---
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   const manage = doc.querySelector('#main').textContent;
   check(/Call\s*1 task\b/.test(manage) && !/\b1 tasks\b/.test(manage), 'Settings says "1 task", not "1 tasks"');
 
@@ -38,7 +38,7 @@ const { loadApp, check, done } = require('./helpers');
   changed('tasks');
   const shownText = [];
   for (const v of ['today', 'tasks', 'calendar', 'notes', 'notices', 'settings']) {
-    doc.querySelector(`[data-view="${v}"]`).click();
+    win.eval('setView')(v);
     shownText.push(doc.querySelector('#main').textContent, doc.querySelector('#banner').textContent);
   }
   PA.state.calMonth = new Date(2026, 9, 1);

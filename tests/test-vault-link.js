@@ -12,7 +12,7 @@ const { loadApp, fakeFile, fakeFolder, answer, tick, check, done } = require('./
   const Vault = win.eval('Vault');
   const Assets = win.eval('Assets');
   PA.AT.SETTLE_MS = 5;
-  doc.querySelector('[data-view="settings"]').click();
+  doc.defaultView.eval('setView')('settings');
   doc.querySelector('[data-action="at-folder"]').click();
   await tick(10);
   const [bill] = await Vault.addFiles('me', 'Bills', [new win.File(['%PDF'], 'Electricity Oct.pdf', { type: 'application/pdf' })]);
