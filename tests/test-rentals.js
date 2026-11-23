@@ -141,6 +141,18 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   check([...main().querySelectorAll('.asset-row')].filter((x) => /Rented out/.test(x.textContent)).length === 2, 'both properties show as Rented out');
   check(/2 rented out/.test(main().querySelector('.page-head').textContent), 'the page counts properties rented out (2), not agreements');
   open('asset', { id: shop.id });
+  const pr = doc.querySelector('#modal .prop-row').textContent.replace(/\s+/g, ' ');
+  check(/with Flat/.test(pr) && /a month for both/.test(pr) && /\(all\)/.test(pr), `a property's pop-up: the agreement's rent "for both", naming the other, owed for all (got: ${pr})`);
+  win.eval('closeAssetForm')(true);
+  open('rental', { id: r.id });
+  submitForm(win, 'asset-rental', { [`rs-${shop.id}`]: '60', [`rs-${flat.id}`]: '' });
+  check(/share adding up to 100%/.test(doc.querySelector('#modal .form-error').textContent), 'a share for only one property is refused');
+  submitForm(win, 'asset-rental', { [`rs-${shop.id}`]: '60', [`rs-${flat.id}`]: '40' });
+  open('asset', { id: shop.id });
+  const pr2 = doc.querySelector('#modal .prop-row').textContent.replace(/\s+/g, ' ');
+  check(R.shareOf(r, shop.id) === 0.6 && pr2.includes(`Rs ${Math.round(R.rentNow(r) * 0.6).toLocaleString('en-IN')}`) && /\(60%\)/.test(pr2), 'split 60/40: the property shows its 60% of the rent and of what\'s owed');
+  win.eval('closeAssetForm')(true);
+  open('asset', { id: shop.id });
   check(doc.querySelector('#modal').textContent.includes('Plaza lease'), 'a property\'s pop-up lists its agreement');
 
   // --- Files ---

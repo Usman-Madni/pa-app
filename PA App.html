@@ -319,6 +319,14 @@ button:disabled { cursor: not-allowed; }
 .ledger.bills td:last-child { min-width: 0; white-space: nowrap; }
 .link-btn.inline-link { flex: none; width: auto; }
 .util-task { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.prop-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
+.prop-row:first-of-type { border-top: 0; }
+.prop-main { min-width: 0; overflow-wrap: anywhere; }
+.prop-fig { text-align: right; flex: none; }
+.share-rows { display: flex; flex-direction: column; gap: 6px; }
+.share-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.share-pct { display: flex; align-items: center; gap: 4px; }
+.share-pct .input { width: 80px; }
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .split-row .field { margin: 0; }
 .split-car { display: flex; align-items: center; gap: 4px; padding-bottom: 10px; }
@@ -6712,7 +6720,7 @@ const Rentals = {
   list() { return DB.rentals.filter((r) => People.shows(r)).sort((a, b) => a.name.localeCompare(b.name)); },
   forProperty(id) { return DB.rentals.filter((r) => (r.properties || []).includes(id) && !r.ended); },
   add(data) {
-    const r = { id: uid(), name: (data.name || '').trim() || 'Rental agreement', properties: data.properties || [], tenant: data.tenant || '', phone: data.phone || '', deposit: Number(data.deposit) || 0,
+    const r = { id: uid(), name: (data.name || '').trim() || 'Rental agreement', properties: data.properties || [], shares: data.shares || {}, tenant: data.tenant || '', phone: data.phone || '', deposit: Number(data.deposit) || 0,
       dueDay: Number(data.dueDay) || 1, renewMonths: data.renewMonths == null ? 1 : Number(data.renewMonths), people: data.people || People.forNew(), notes: data.notes || '', ended: '',
       terms: [], payments: [], created: Date.now() };
     if (data.start) r.terms.push({ id: uid(), start: data.start, months: Number(data.months) || 11, rent: Number(data.rent) || 0, note: '' });
@@ -6724,6 +6732,12 @@ const Rentals = {
   current(r) { return this.terms(r).pop() || null; },
   endOf(term) { return term ? toISO(addMonthsClamped(parseISO(term.start), term.months)) : ''; },
   rentNow(r) { return this.current(r)?.rent || 0; },
+  // A property's share of the agreement (0-1), or null when it isn't split (the rent is for them all together).
+  shareOf(r, propId) {
+    const sh = r.shares || {};
+    const total = (r.properties || []).reduce((t, id) => t + (Number(sh[id]) || 0), 0);
+    return total > 0 && Number(sh[propId]) ? Number(sh[propId]) / total : null;
+  },
   // The rent a renewal suggests: 10% more, not rounded (you type the real figure).
   suggest(r, pct = 10) { return Math.round(this.rentNow(r) * (1 + pct / 100) * 100) / 100; },
   lastPaid(r) { return (r.payments || []).filter((p) => !p.writeOff).sort((a, b) => (a.date || a.month).localeCompare(b.date || b.month)).pop()?.amount || 0; },
@@ -7331,14 +7345,30 @@ function fuelBlock(a) {
 // A property's rental agreements, in its pop-up.
 function propertyRentalsBlock(a) {
   const rs = DB.rentals.filter((r) => (r.properties || []).includes(a.id));
-  return `<div class="value-history"><div class="meta">Rented out</div>${rs.map((r) => `<div class="vh-row"><button type="button" class="link-btn" data-action="asset-form" data-form-type="rental" data-id="${esc(r.id)}">${ic('home', 'sm')} ${esc(r.name)}${r.ended ? ' (ended)' : ''}</button><span class="meta">${esc(r.tenant || '')}</span><span>${rupees(Rentals.rentNow(r))} a month${Rentals.owed(r) > 0 ? `, owed ${rupees(Rentals.owed(r))}` : ''}</span></div>`).join('')}<div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="rental" data-asset="${esc(a.id)}">${ic('plus', 'sm')}Rent it out</button></div></div>`;
+  const rows = rs.map((r) => {
+    const others = (r.properties || []).filter((id) => id !== a.id).map((id) => DB.assets.find((x) => x.id === id)?.name).filter(Boolean);
+    const share = Rentals.shareOf(r, a.id);
+    const rent = Rentals.rentNow(r);
+    const owed = Math.max(0, Rentals.owed(r));
+    const scope = others.length ? (share == null ? ` for ${others.length === 1 ? 'both' : `all ${others.length + 1}`}` : ` (${Math.round(share * 1000) / 10}%)`) : '';
+    return `<div class="prop-row">
+      <div class="prop-main"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="rental" data-id="${esc(r.id)}">${ic('home', 'sm')} ${esc(r.name)}${r.ended ? ' (ended)' : ''}</button>
+        <div class="meta">${[r.tenant, others.length ? `with ${others.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ')}</div></div>
+      <div class="prop-fig"><b>${rupees(share == null ? rent : rent * share)}</b><span class="meta"> a month${esc(scope)}</span>${owed ? `<div class="meta">Owed ${rupees(share == null ? owed : owed * share)}${share == null && others.length ? ' (all)' : ''}</div>` : ''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="value-history"><div class="meta">Rented out</div>${rows}<div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="rental" data-asset="${esc(a.id)}">${ic('plus', 'sm')}Rent it out</button></div></div>`;
 }
 // A property's utilities, in its pop-up.
 function propertyUtilitiesBlock(a) {
   const cs = DB.utilities.filter((c) => c.property === a.id);
   if (!cs.length) return '';
   const y = new Date().getFullYear();
-  return `<div class="value-history"><div class="meta">Utilities</div>${cs.map((c) => `<div class="vh-row"><button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${ic(Utilities.icon(c.type), 'sm')} ${esc(c.name)}</button><span class="meta">${esc(c.type)}</span><span>${rupees(Utilities.sum([c], y))} this year</span></div>`).join('')}</div>`;
+  return `<div class="value-history"><div class="meta">Utilities</div>${cs.map((c) => { const last = Utilities.bills(c)[0]; return `<div class="prop-row">
+      <div class="prop-main"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${ic(Utilities.icon(c.type), 'sm')} ${esc(c.name)}</button>
+        <div class="meta">${esc([c.type, last ? `last bill ${ymLabel(Utilities.monthOf(last))}: ${rupees(Utilities.figures(last).eff)}` : ''].filter(Boolean).join(' · '))}</div></div>
+      <div class="prop-fig"><b>${rupees(Utilities.sum([c], y))}</b><span class="meta"> this year</span></div>
+    </div>`; }).join('')}</div>`;
 }
 
 // ===================== Vault page =====================
@@ -7703,7 +7733,7 @@ function drawAssetForm() {
     const on = People.of(v);
     $('#modal').innerHTML = box(r ? r.name : 'Add rental agreement', `
       <label class="field">Name<input class="input" name="name" value="${esc(v.name)}" placeholder="e.g. Shop, upper floor" maxlength="60"></label>
-      ${props.length ? `<fieldset class="owner-box"><legend>Properties it rents out</legend><div class="check-row">${props.map((a) => `<label><input type="checkbox" name="rp-${esc(a.id)}" ${v.properties.includes(a.id) ? 'checked' : ''}> ${ic('home', 'sm')}${esc(a.name)}</label>`).join('')}</div></fieldset>` : '<p class="meta">Add the property in Assets › Property to link it.</p>'}
+      ${props.length ? `<fieldset class="owner-box"><legend>Properties it rents out <span class="meta">(share of the rent: leave empty if it isn't split)</span></legend><div class="share-rows">${props.map((a) => `<div class="share-row"><label><input type="checkbox" name="rp-${esc(a.id)}" ${v.properties.includes(a.id) ? 'checked' : ''}> ${ic('home', 'sm')}${esc(a.name)}</label><label class="share-pct"><input class="input" type="number" min="0" max="100" step="any" name="rs-${esc(a.id)}" value="${esc((v.shares || {})[a.id] ?? '')}" aria-label="${esc(a.name)}'s share in %">%</label></div>`).join('')}</div></fieldset>` : '<p class="meta">Add the property in Assets › Property to link it.</p>'}
       <div class="row">
         <label class="field grow">Tenant<input class="input" name="tenant" value="${esc(v.tenant)}" maxlength="80"></label>
         <label class="field">Phone<input class="input" name="phone" type="tel" value="${esc(v.phone)}" maxlength="30"></label>
@@ -8319,7 +8349,9 @@ function submitAssetForm(type, data) {
     const people = People.several() ? People.list().filter((p) => data[`r-p-${p.id}`] === 'on').map((p) => p.id) : [ME];
     if (!people.length) return formError('Pick whose it is.');
     const properties = DB.assets.filter((a) => data[`rp-${a.id}`] === 'on').map((a) => a.id);
-    const fields = { name: (data.name || '').trim() || 'Rental agreement', properties, tenant: (data.tenant || '').trim(), phone: (data.phone || '').trim(), deposit: Number(data.deposit) || 0, dueDay: Math.min(31, Math.max(1, Number(data.dueDay) || 1)), renewMonths: Number(data.renewMonths) || 0, people, notes: data.notes || '' };
+    const shares = Object.fromEntries(properties.filter((id) => data[`rs-${id}`] !== '' && data[`rs-${id}`] != null).map((id) => [id, Number(data[`rs-${id}`]) || 0]));
+    if (Object.keys(shares).length && (Object.keys(shares).length !== properties.length || Math.abs(Object.values(shares).reduce((t, x) => t + x, 0) - 100) > 0.01)) return formError('Give every property a share adding up to 100%, or leave them all empty.');
+    const fields = { shares, name: (data.name || '').trim() || 'Rental agreement', properties, tenant: (data.tenant || '').trim(), phone: (data.phone || '').trim(), deposit: Number(data.deposit) || 0, dueDay: Math.min(31, Math.max(1, Number(data.dueDay) || 1)), renewMonths: Number(data.renewMonths) || 0, people, notes: data.notes || '' };
     let r = f.id ? DB.rentals.find((x) => x.id === f.id) : null;
     const dayWas = r ? r.dueDay : 0;
     if (r) Object.assign(r, fields, { ended: data.ended || '' });
