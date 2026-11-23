@@ -41,7 +41,7 @@ under `prefers-reduced-motion`.
 
 ## Page layout
 Every page has the same parts, in this order:
-1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, in the colour key's order (see Buttons). On a phone the first teal button stays and the rest go in a **More** menu.
+1. **Title row:** the page name and one line saying what it holds; the page's buttons on the right, in the colour key's order (see Buttons). A ⋮ button ends the row on every page and opens the menu (below). On a phone the first teal button stays and the rest are reached through ⋮.
 2. **Tabs row:** the tabs on the left, **Filter this page** on the right (full width on a phone). A page's own pickers that apply to every tab (Utilities: property, year) go in a `.tabs-extra` block, which sits just before the box. Rows the box should match by something other than their text carry it in `data-find` (a Utilities connection: name, property, provider, account).
 3. **Toolbar** for the open tab's list: the picker (whose, which car), Group by and Sort on the left; how many and their total on the right.
 4. **The content:** cards, then lists.
@@ -79,3 +79,6 @@ Each colour means one thing, everywhere:
 - **Red outline** (`.btn.danger`): delete.
 On a page's header they go gold, then teal, then outlined, left to right (so Q W E… press them in that order). An add button says what it adds, with a plus icon and the noun ("+ Asset"), and an `aria-label` in full ("Add an asset"); not "Add …" or "New …". Settings keeps its own rule (one filled button, the data file's). `tests/test-button-colours.js` checks every page.
 Tabs may carry `data-kind` (entry, list, action): the active one is underlined in that kind's colour (the Data page's tabs do).
+
+## The ⋮ menu
+`ActMenu` draws a panel down the right edge (`#act-panel`): every page's header buttons, collected fresh each time it opens by drawing the pages in `ACT_VIEWS` (`VIEWS`), grouped by the colour key (Actions, Add an entry, Add to a list) with the page each is on, then Butler's own (Data, Guide, Light or dark, Settings). Picking one goes to its page and clicks the real button (matched by `ActMenu.sig`), so it never drifts from the pages. A button repeated on two pages is listed once. Esc, × or a click outside closes it; read-only it leaves out edit-only buttons. The keys Q W E… press a page's buttons but never ⋮.

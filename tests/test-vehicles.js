@@ -123,7 +123,7 @@ const { loadApp, check, done, submitForm, answer, tick } = require('./helpers');
   const head = doc.querySelector('#main .page-head');
   const row = head.nextElementSibling;
   check(row.classList.contains('tabs-row') && row.querySelector('.tabs') && row.querySelector('[data-input="page-filter"]'), 'under the title: the tabs, with the filter on the same row');
-  check(head.querySelector('.page-actions .page-more') && head.querySelectorAll('.page-actions > .wide-only').length >= 2, 'the page\'s other buttons also sit in a More menu (shown on a phone)');
+  check(head.querySelector('.act-toggle') && head.querySelectorAll('.page-actions > .wide-only').length >= 2, 'on a phone the other buttons are in the ⋮ menu beside the title');
   doc.querySelector('[data-vehicle-tab="log"]').click();
   check(/\d+ entries?, Rs/.test(doc.querySelector('#main .list-count')?.textContent || ''), 'the toolbar says how many and their total');
   doc.querySelector('[data-view="tasks"]').click();

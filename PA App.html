@@ -435,6 +435,18 @@ button:disabled { cursor: not-allowed; }
 .tabs-row .tabs { margin-bottom: 0; }
 .tabs-row .page-filter { margin-left: auto; }
 .task-tabs { width: fit-content; }
+.act-toggle { flex: none; }
+.act-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 270px; max-width: 86vw; z-index: 58; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow-float); padding: 14px 12px 24px; display: flex; flex-direction: column; gap: 14px; }
+.act-panel[hidden] { display: none; }
+.act-top { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.act-h { margin: 0 4px 4px; font-size: var(--t-xs); color: var(--muted); }
+.act-group { display: flex; flex-direction: column; gap: 2px; padding-left: 8px; border-left: 3px solid var(--border); }
+.act-group.act-act { border-left-color: var(--act); }
+.act-group.act-entry { border-left-color: var(--accent); }
+.act-group.act-list { border-left-color: var(--text); }
+.act-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: inherit; font-size: var(--t-sm); text-align: left; text-decoration: none; cursor: pointer; }
+.act-item:hover, .act-item:focus-visible { background: var(--panel-2); }
+.act-item .meta { margin-left: auto; font-size: var(--t-xs); }
 .page-more { position: relative; display: none; }
 .page-more > summary { list-style: none; cursor: pointer; }
 .page-more > summary::-webkit-details-marker { display: none; }
@@ -967,6 +979,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
     </div>
   </nav>
   <div id="more-sheet"></div>
+  <aside id="act-panel" class="act-panel" aria-label="Menu" hidden></aside>
   <main class="main"><div id="banner"></div><div id="who-bar" class="who-bar"></div><div id="main"></div></main>
 </div>
 <div class="drawer-backdrop" data-action="close-task"></div>
@@ -1048,6 +1061,7 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
 <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M13.41 10.59l2.59 -2.59"/><path d="M7 12a5 5 0 0 1 5 -5"/></symbol>
 <symbol id="i-search" viewBox="0 0 24 24"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/></symbol>
 <symbol id="i-table" viewBox="0 0 24 24"><path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14z"/><path d="M3 10h18"/><path d="M10 3v18"/></symbol>
+<symbol id="i-dots-vertical" viewBox="0 0 24 24"><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M12 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
 </svg>
 
@@ -4028,6 +4042,95 @@ function itemsForDay(key, previews) {
 }
 
 // ===================== Rendering =====================
+const VIEWS = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, data: renderData, property: renderProperty, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
+// The ⋮ menu down the right edge: every page's header buttons in one place, grouped by the
+// colour key (Actions in gold, Add an entry in teal, Add to a list), then the app's own (Data, Guide, Theme,
+// Settings). It keeps no list of its own: each time it opens it draws the pages and copies their real buttons, and
+// picking one goes to that page and presses that button, so it can never drift from the pages. Esc, ×, or a click
+// outside closes it. On a phone it takes the place of the page's More menu.
+const ACT_VIEWS = ['today', 'tasks', 'notes', 'assets', 'vehicles', 'property', 'utilities', 'musings', 'zakat', 'vault', 'data'];
+const ActMenu = {
+  list: [],
+  isOpen() { return document.body.classList.contains('act-open'); },
+  // A button's identity, so the same one can be found on its page again.
+  sig(b) { return [b.dataset.action || '', b.dataset.formType || '', b.dataset.kind || '', b.dataset.asset || '', b.textContent.trim()].join('|'); },
+  collect() {
+    const seen = new Set();
+    const items = [];
+    const tpl = document.createElement('template');
+    for (const v of ACT_VIEWS) {
+      try { tpl.innerHTML = VIEWS[v](); } catch { continue; } // a page that can't draw here just has nothing to offer
+      for (const b of tpl.content.querySelectorAll('.page-head .page-actions > button')) {
+        if (state.readOnly && (b.classList.contains('edit-only') || b.closest('.edit-only'))) continue;
+        const label = b.textContent.trim();
+        const group = b.classList.contains('act') ? 'act' : b.classList.contains('primary') ? 'entry' : 'list';
+        const key = `${label}|${b.dataset.action}|${b.dataset.formType || ''}`;
+        if (!label || seen.has(key)) continue; // + Rates is on Assets and Zakat: once is enough
+        seen.add(key);
+        const icon = b.querySelector('use')?.getAttribute('href')?.slice(3) || '';
+        items.push({ view: v, sig: this.sig(b), label: icon === 'plus' ? `+ ${label}` : label, group, icon: icon === 'plus' ? '' : icon });
+      }
+    }
+    return items;
+  },
+  html() {
+    this.list = this.collect();
+    const title = (v) => (document.querySelector(`.nav-btn[data-view="${v}"] span:not(.ico):not(.nav-count)`)?.textContent || v[0].toUpperCase() + v.slice(1));
+    const group = (g, head) => {
+      const its = this.list.map((x, i) => [x, i]).filter(([x]) => x.group === g);
+      return its.length ? `<div class="act-group act-${g}"><p class="act-h">${head}</p>${its.map(([x, i]) => `<button type="button" class="act-item" data-act-go="${i}">${x.icon ? ic(x.icon, 'sm') : ''}<span>${esc(x.label)}</span><span class="meta">${esc(title(x.view))}</span></button>`).join('')}</div>` : '';
+    };
+    return `<div class="act-top"><b>Menu</b><button type="button" class="icon-btn" data-action="act-close" aria-label="Close the menu">${ic('x', 'sm')}</button></div>
+      ${group('act', 'Actions')}${group('entry', 'Add an entry')}${group('list', 'Add to a list')}
+      <div class="act-group"><p class="act-h">Butler</p>
+        <button type="button" class="act-item" data-act-view="data">${ic('table', 'sm')}<span>Data</span></button>
+        <a class="act-item" href="PA App Guide.html" target="_blank" rel="noopener">${ic('help-circle', 'sm')}<span>Guide</span></a>
+        <button type="button" class="act-item" data-action="cycle-theme">${ic('sun-moon', 'sm')}<span>Light or dark</span></button>
+        <button type="button" class="act-item" data-act-view="settings">${ic('settings', 'sm')}<span>Settings</span></button>
+      </div>`;
+  },
+  open() {
+    const p = $('#act-panel');
+    p.innerHTML = this.html();
+    p.hidden = false;
+    document.body.classList.add('act-open');
+    $$('[data-action="act-toggle"]').forEach((b) => b.setAttribute('aria-expanded', 'true'));
+    p.querySelector('.act-item')?.focus();
+  },
+  close() {
+    if (!this.isOpen()) return;
+    document.body.classList.remove('act-open');
+    $('#act-panel').hidden = true;
+    $$('[data-action="act-toggle"]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  },
+  toggle() { if (this.isOpen()) this.close(); else this.open(); },
+  // Go to the button's page and press the real button there.
+  go(i) {
+    const it = this.list[i];
+    this.close();
+    if (!it) return;
+    if (state.view !== it.view) setView(it.view);
+    const b = $$('#main .page-head .page-actions > button').find((x) => this.sig(x) === it.sig);
+    if (b) b.click(); else toast(`${it.label} isn't on that page just now`);
+  },
+};
+// The ⋮ button, at the end of every page's title row.
+function addActButton() {
+  const head = $('#main .page-head');
+  if (!head || head.querySelector('.act-toggle')) return;
+  let box = head.querySelector('.page-actions');
+  if (!box) { box = document.createElement('div'); box.className = 'row page-actions'; head.append(box); }
+  const b = document.createElement('button');
+  Object.assign(b, { type: 'button', className: 'icon-btn act-toggle', title: 'Menu: every page\'s buttons' });
+  b.dataset.action = 'act-toggle';
+  b.setAttribute('aria-label', 'Menu');
+  b.setAttribute('aria-haspopup', 'true');
+  b.setAttribute('aria-expanded', String(ActMenu.isOpen()));
+  b.innerHTML = ic('dots-vertical');
+  // In the button row, at its end. A row that's hidden when read-only hides its buttons one by one instead, so ⋮ stays.
+  if (box.classList.contains('edit-only')) { box.classList.remove('edit-only'); [...box.children].forEach((c) => c.classList.add('edit-only')); }
+  box.append(b);
+}
 function render() {
   document.body.classList.toggle('readonly', state.readOnly);
   document.body.classList.toggle('phone', state.phone);
@@ -4036,7 +4139,7 @@ function render() {
   renderPersonPick();
   renderMore();
   renderTodayDate();
-  const views = { today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, assets: renderAssets, zakat: renderZakat, vault: renderVault, utilities: renderUtilities, data: renderData, property: renderProperty, notices: renderNotices, settings: renderSettings, trash: renderTrash, search: renderSearch, vehicles: renderVehicles, musings: renderMusings };
+  const views = VIEWS;
   // Redrawing would jump the page and the board back to the top — keep where you were on the same screen.
   const oldBoard = $('#main .board');
   const keep = state.view === render.lastView
@@ -4054,6 +4157,7 @@ function render() {
   drawCharts();
   loadThumbs();
   addPageFilter();
+  addActButton();
   if (state.view === 'search' && document.activeElement?.id !== 'side-search') $('#main [data-input="global-search"]')?.focus();
   renderStatus();
 }
@@ -4220,19 +4324,13 @@ function tabsRow() {
   if (next?.classList.contains('tabs')) { next.replaceWith(wrap); wrap.append(next); } else head.after(wrap);
   return wrap;
 }
-// On a phone the title row keeps only the main button; the rest go in a More menu beside it.
+// On a phone the title row keeps only the main button (the first teal one); the rest are in the ⋮ menu beside it.
 function tidyPageActions() {
   const box = $('#main .page-head .page-actions');
-  if (!box || box.querySelector('.page-more')) return;
+  if (!box) return;
   const btns = [...box.children].filter((b) => b.matches('button'));
   const main = btns.find((b) => b.classList.contains('primary')) || btns[0];
-  const rest = btns.filter((b) => b !== main);
-  if (rest.length < 2) return;
-  const more = document.createElement('details');
-  more.className = 'page-more';
-  more.innerHTML = `<summary class="btn">More</summary><div class="page-more-menu">${rest.map((b) => b.outerHTML).join('')}</div>`;
-  rest.forEach((b) => b.classList.add('wide-only'));
-  box.append(more);
+  btns.filter((b) => b !== main).forEach((b) => b.classList.add('wide-only')); // in the ⋮ menu on a phone
 }
 function addPageFilter() {
   tidyPageActions();
@@ -4827,7 +4925,7 @@ function renderToday() {
   return `
     <div class="page-head">
       <div><h1>My Day</h1><p class="sub">${greet}. ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}, <button type="button" class="link-btn hijri-today" data-action="hijri-today" title="Moon sighted on a different day here? Correct this month">${esc(Hijri.textOf(toISO(now)))}</button>. ${summary}${lateNote}.</p></div>
-      <button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details" aria-label="Add a task">${ic('plus', 'sm')}Task</button>
+      <div class="row page-actions"><button class="btn primary edit-only" data-action="new-task" title="Add a task and fill in its details" aria-label="Add a task">${ic('plus', 'sm')}Task</button></div>
     </div>
     ${unloggedBanners(Upkeep.unlogged(Assets.list(People.viewing())))}
     <div class="grid grid-main today">
@@ -9052,7 +9150,7 @@ function renderNotes() {
   return `
     <div class="page-head">
       <div><h1>Notes</h1><p class="sub">${plural(shown.length, 'note')}${state.readOnly ? '' : ', saved as you type'}</p></div>
-      <button class="btn primary edit-only" data-action="new-note" aria-label="Add a note">${ic('plus', 'sm')}Note</button>
+      <div class="row page-actions"><button class="btn primary edit-only" data-action="new-note" aria-label="Add a note">${ic('plus', 'sm')}Note</button></div>
     </div>
     <div class="notes-layout">
       <div>
@@ -10164,6 +10262,11 @@ document.addEventListener('click', (e) => {
   if (vehicleTab) { device.set('vehicleTab', vehicleTab.dataset.vehicleTab); return render(); }
   const vehicleOpen = e.target.closest('[data-vehicle-open]'); // a car opens on the Vehicles page
   if (vehicleOpen) { device.set('vehicleCar', vehicleOpen.dataset.vehicleOpen); device.set('vehicleTab', vehicleOpen.dataset.tabTo || 'overview'); state.moreOpen = false; return setView('vehicles'); }
+  if (ActMenu.isOpen() && !e.target.closest('#act-panel, .act-toggle')) ActMenu.close(); // a click outside closes the menu
+  const actGo = e.target.closest('[data-act-go]');
+  if (actGo) return ActMenu.go(Number(actGo.dataset.actGo));
+  const actView = e.target.closest('[data-act-view]');
+  if (actView) { ActMenu.close(); return setView(actView.dataset.actView); }
   const dataTab = e.target.closest('[data-data-tab]');
   if (dataTab) { device.set('dataTab', dataTab.dataset.dataTab); return render(); }
   const dataSort = e.target.closest('[data-data-sort]');
@@ -10680,6 +10783,8 @@ document.addEventListener('click', (e) => {
     case 'td-disconnect': ask('Stop sending tasks to Microsoft To Do on this computer?', { yes: 'Disconnect', danger: true }).then((yes) => { if (yes) TD.disconnect(); }); break;
     case 'cycle-theme': cycleTheme(); break;
     case 'data-export': DataView.export(DataView.tab()); break;
+    case 'act-toggle': ActMenu.toggle(); break;
+    case 'act-close': ActMenu.close(); break;
     case 'enable-notifications': askNotifications(); break;
     case 'test-notification': askNotifications(); notify('Test reminder', 'Reminders are working'); break;
     case 'export': exportData(); break;
@@ -10789,6 +10894,7 @@ document.addEventListener('keydown', (e) => {
   if (Viewer.on() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); Viewer.step(e.key === 'ArrowLeft' ? -1 : 1); return; }
   if (e.key !== 'Escape') return;
   if (Viewer.on()) { Viewer.close(); return; } // the photo first, then the pop-up under it
+  if (ActMenu.isOpen()) { ActMenu.close(); $('.act-toggle')?.focus(); return; }
   if (asking) { answerAsk(false); return; }
   if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
   if (state.openTask && state.assetForm) { closeTaskDrawer(); return; } // the task panel over a pop-up: it first
@@ -10808,7 +10914,7 @@ const BUTTON_KEYS = 'qwertyuiop';
 const TAB_KEYS = 'asdfghjkl';
 const shown = (el) => !!el && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none';
 // The open screen's own buttons (at the top, in order) and its tabs (every row of them, in order).
-const pageButtons = () => $$('#main .page-head .page-actions > button, #main .page-head .page-actions > label').filter((b) => !(state.readOnly && b.closest('.edit-only')) && shown(b));
+const pageButtons = () => $$('#main .page-head .page-actions > button, #main .page-head .page-actions > label').filter((b) => !b.classList.contains('act-toggle') && !(state.readOnly && b.closest('.edit-only')) && shown(b));
 const pageTabs = () => $$('#main [role="tablist"] .tab');
 function shortcut(e) {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || asking || state.donePrompt || state.assetForm) return false; // (assetForm: any pop-up)

@@ -306,8 +306,8 @@ const { loadApp, fakeFile, fakeFolder, submitForm, confirmDone, tick, check, don
   const ro = loadApp({ storage, query: '?readonly' });
   ro.PA.state.readOnly = true;
   ro.doc.querySelector('[data-view="utilities"]').click();
-  const add = ro.doc.querySelector('#main .page-actions');
-  check(!add || add.classList.contains('edit-only'), 'read-only: adding is edit-only');
+  const adds = [...ro.doc.querySelectorAll('#main .page-actions > button:not(.act-toggle)')];
+  check(adds.length && adds.every((b) => b.closest('.edit-only')), 'read-only: adding is edit-only (the ⋮ menu stays)');
   ro.close();
   done();
 })();
