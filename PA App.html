@@ -898,6 +898,11 @@ body.drawer-over .drawer-backdrop { z-index: 69; }
   .sticky-top { margin: -20px -16px 0; padding: 16px 16px 2px; }
   .main.fill { height: auto; display: block; }
   .main.fill .board { overflow: auto; }
+  /* The page never scrolls sideways on a phone: only the board does, inside itself. (Chrome on a phone widens the
+     whole page to fit anything that pokes out, and the board's columns did.) */
+  html, body { overflow-x: hidden; max-width: 100%; }
+  .main, #main { max-width: 100vw; overflow-x: clip; }
+  .board { width: 100%; max-width: 100%; }
   .qa-input { min-width: 0; flex-basis: calc(100% - 40px); }
   .qa-tools { padding-left: 22px; }
   .qa-preview { padding-left: 14px; }
