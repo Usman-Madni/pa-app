@@ -35,7 +35,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - Use `gh` from PATH (its read-only commands need no approval), not the full `C:\Program Files\GitHub CLI\gh.exe` path.
 
 ## Checking work (minimum bar)
-1. `npm test`, which takes seconds. If the test tools are missing, run `npm run setup` (it installs into `%LOCALAPPDATA%\pa-app-testdeps`). **Never run `npm install` inside the project folder** if it's in a synced folder.
+1. While building, run only the tests for the area you're changing: `node tests/run-all.js utilities` (any part of the file names). Run the full `npm test` (4 at a time, about 45 seconds) once at the end of a round, before the commits are pushed; the push check runs it again. A file that fails is run once more on its own and only counts if it fails twice. If the test tools are missing, run `npm run setup` (it installs into `%LOCALAPPDATA%\pa-app-testdeps`). **Never run `npm install` inside the project folder** if it's in a synced folder.
 2. For a new safeguard, do a **sabotage check**: break it on purpose, confirm a test fails, then restore it.
 3. Check in the browser pane: start `node tools/serve.js` (http://localhost:8790), do a fresh page load, and look at both light and dark mode.
 
