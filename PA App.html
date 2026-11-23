@@ -7329,7 +7329,7 @@ function utilityCard(c) {
           <div class="meta">${[c.provider, c.account ? `Account ${c.account}` : '', prop ? prop.name : ''].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
         <button type="button" class="icon-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}" aria-label="Edit ${esc(c.name)}" title="Edit">${ic('pencil', 'sm')}</button>
       </div>
-      <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn inline-link" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `<span> · due ${esc(fmtDate(t.due))}</span>` : ''}`
+      <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn inline-link" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `<span>due ${esc(fmtDate(t.due))}</span>` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
       <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}</div>
       <div class="value-history">${billsTable(c, 6)}</div>
@@ -7341,8 +7341,9 @@ function billFiguresText(c, v) {
   const x = Utilities.figures(v);
   if (!x.amount) return '';
   const u = Utilities.unitsLabel(c.type);
-  return [u && x.units ? `Rate ${perUnit(x.rate)}` : '', x.credit ? `Effective bill ${rupees(x.eff)}` : '', u && x.units && x.credit ? `Effective rate ${perUnit(x.effRate)}` : ''].filter(Boolean).join(' · ');
+  return metaBits([u && x.units ? `Rate ${perUnit(x.rate)}` : '', x.credit ? `Effective bill ${rupees(x.eff)}` : '', u && x.units && x.credit ? `Effective rate ${perUnit(x.effRate)}` : '']);
 }
+const metaBits = (bits) => bits.filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('');
 const perUnit = (v) => (v == null ? '' : rupees(v)); // whole rupees, as a bill sheet shows them
 function billsTable(c, limit = 0) {
   const all = Utilities.bills(c);
@@ -7514,7 +7515,7 @@ function propertyRentalsBlock(a) {
     const scope = others.length ? (share == null ? ` for ${others.length === 1 ? 'both' : `all ${others.length + 1}`}` : ` (${Math.round(share * 1000) / 10}%)`) : '';
     return `<div class="prop-row">
       <div class="prop-main"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="rental" data-id="${esc(r.id)}">${ic('home', 'sm')} ${esc(r.name)}${r.ended ? ' (ended)' : ''}</button>
-        <div class="meta">${[r.tenant, others.length ? `with ${others.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ')}</div></div>
+        <div class="meta">${metaBits([r.tenant, others.length ? `with ${others.join(', ')}` : ''])}</div></div>
       <div class="prop-fig"><b>${rupees(share == null ? rent : rent * share)}</b><span class="meta"> a month${esc(scope)}</span>${owed ? `<div class="meta">Owed ${rupees(share == null ? owed : owed * share)}${share == null && others.length ? ' (all)' : ''}</div>` : ''}</div>
     </div>`;
   }).join('');
@@ -7527,7 +7528,7 @@ function propertyUtilitiesBlock(a) {
   const y = new Date().getFullYear();
   return `<div class="value-history"><div class="meta">Utilities</div>${cs.map((c) => { const last = Utilities.bills(c)[0]; return `<div class="prop-row">
       <div class="prop-main"><button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">${ic(Utilities.icon(c.type), 'sm')} ${esc(c.name)}</button>
-        <div class="meta">${esc([c.type, last ? `last bill ${ymLabel(Utilities.monthOf(last))}: ${rupees(Utilities.figures(last).eff)}` : ''].filter(Boolean).join(' · '))}</div></div>
+        <div class="meta">${metaBits([c.type, last ? `last bill ${ymLabel(Utilities.monthOf(last))}: ${rupees(Utilities.figures(last).eff)}` : ''])}</div></div>
       <div class="prop-fig"><b>${rupees(Utilities.sum([c], y))}</b><span class="meta"> this year</span></div>
     </div>`; }).join('')}</div>`;
 }
@@ -10516,7 +10517,7 @@ document.addEventListener('input', (e) => {
     const c = f && DB.utilities.find((x) => x.id === (f.id ? DB.bills.find((b) => b.id === f.id)?.utility : f.utility));
     const num = (n) => Number(String(billForm.elements[n]?.value || '').replace(/,/g, '')) || 0;
     const out = billForm.querySelector('.bill-figures');
-    if (c && out) out.textContent = billFiguresText(c, { amount: num('amount'), units: num('units'), credit: num('credit') });
+    if (c && out) out.innerHTML = billFiguresText(c, { amount: num('amount'), units: num('units'), credit: num('credit') });
     return;
   }
   if (e.target.matches?.('[data-bill-paste]')) {
