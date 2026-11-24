@@ -4236,6 +4236,7 @@ function render() {
   showActiveTab();
   if (state.view === 'search' && document.activeElement?.id !== 'side-search') $('#main [data-input="global-search"]')?.focus();
   renderStatus();
+  Native.later(); // the Android app: Android rings the coming reminders (when the phone rings them itself)
 }
 // The open tab is always in sight in a row of tabs that scrolls sideways (only that row moves, not the page).
 function showActiveTab() {
@@ -9321,6 +9322,26 @@ function dataFileCard() {
     <button class="btn" data-action="df-backup-folder">${DF.backupDir ? 'Change backup folder' : 'Choose backup folder'}</button>`;
 }
 
+// The Android app's own reminders: which rings them on this phone, To Do or Butler.
+function ringCard() {
+  const app = Native.ring() === 'app';
+  const soon = app ? Native.plan() : [];
+  const state_ = !app ? 'To Do rings your reminders on this phone, as before.'
+    : Native.allowed === 'denied' ? 'Android has notifications turned off for Butler: turn them on in the phone\'s Settings › Apps › Butler › Notifications.'
+      : soon.length ? `Butler rings them, even when it's closed. Next: <b>${esc(fullTitle(DB.tasks.find((t) => t.id === soon[0].task)))}</b>, ${esc(fmtDay(toISO(new Date(soon[0].at))))} ${esc(fmtTime(localStamp(soon[0].at).slice(11)))}.`
+        : 'Butler rings them, even when it\'s closed. None coming up.';
+  return `
+    <h2>Ring reminders from</h2>
+    <p class="sub">On this phone only. Reminders added on another device ring here once Butler has opened since.</p>
+    <div class="row"><select class="input" data-input="ring" aria-label="Ring reminders from">
+      <option value="todo"${app ? '' : ' selected'}>To Do</option>
+      <option value="app"${app ? ' selected' : ''}>Butler app</option>
+    </select></div>
+    <p class="sub">${state_}</p>
+    ${app ? '<p class="sub">To Do still rings too unless you turn off its notifications on this phone (or unlink it from the Reminder app).</p>' : ''}
+    ${Native.ringError ? `<p class="sub overdue">Android said: ${esc(Native.ringError)}</p>` : ''}`;
+}
+
 function renderSettings() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return `
@@ -9347,13 +9368,13 @@ function renderSettings() {
       <div class="grid settings-grid">
         ${todoCard()}
         <div class="card">
-          <h2>Reminders here</h2>
+          ${Native.on ? ringCard() : `<h2>Reminders here</h2>
           <p class="sub">Desktop notifications fire while the app is open in a tab.</p>
           <p>Status: <b>${perm === 'granted' ? 'Enabled' : perm === 'denied' ? 'Blocked in browser settings' : perm === 'unsupported' ? 'Not supported in this browser' : 'Not enabled yet'}</b></p>
           <div class="row">
             ${perm === 'default' ? '<button class="btn primary" data-action="enable-notifications">Enable notifications</button>' : ''}
             <button class="btn" data-action="test-notification">Send test reminder</button>
-          </div>
+          </div>`}
           <h2>This device</h2>
           <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
           <div class="row"><input class="input grow" data-input="device-name" value="${esc(deviceName())}" maxlength="40" aria-label="This device's name"></div>
@@ -9425,6 +9446,82 @@ const Native = {
     render();
   },
   from: location.search, // the address as the page opened, before finishSignIn tidies it
+
+  // Reminders rung by the phone itself (round 2). dev_ring: 'todo' (To Do rings them, as before) or 'app' (Butler hands
+  // each coming reminder to Android, which rings it even with Butler closed). Only inside the app.
+  RING_MAX: 60, // the soonest ones; Android keeps only so many alarms per app, and Butler re-plans each time it opens
+  planned: null, // what Android was last given, so it's only re-planned when something changed
+  allowed: '', // 'granted' / 'denied' / 'prompt': whether Android lets Butler show notifications
+  ringError: '',
+  ring() { return this.on && device.get('ring', 'todo') === 'app' ? 'app' : 'todo'; },
+  plugin() {
+    const c = window.Capacitor;
+    if (!c) return null;
+    return (c.Plugins && c.Plugins.LocalNotifications) || (typeof c.registerPlugin === 'function' ? c.registerPlugin('LocalNotifications') : null);
+  },
+  // A reminder's number for Android (a 32-bit whole number), the same every time for the same task and reminder.
+  numId(key) {
+    let h = 0;
+    for (const ch of key) h = (Math.imul(h, 31) + ch.codePointAt(0)) | 0;
+    return (h & 0x7fffffff) || 1;
+  },
+  // Each reminder still to come on a task you're on, soonest first: [{id, at (ms), title, body, task}].
+  plan(now = Date.now()) {
+    const out = [];
+    for (const t of DB.tasks) {
+      if (t.done || !People.mine(t)) continue;
+      for (const r of t.reminders) {
+        if (r.fired || state.remindedHere.has(`${t.id}:${r.id}`)) continue;
+        const at = Reminders.time(t, r);
+        if (at != null && at > now) out.push({ id: this.numId(`${t.id}:${r.id}`), at, title: fullTitle(t), body: reminderWhen(t), task: t.id });
+      }
+    }
+    return out.sort((a, b) => a.at - b.at).slice(0, this.RING_MAX);
+  },
+  // Gives Android the reminders to ring (none when To Do rings them), replacing what it had.
+  async schedule() {
+    const LN = this.plugin();
+    if (!this.on || !LN) return;
+    const list = this.ring() === 'app' ? this.plan() : [];
+    const sig = JSON.stringify(list.map((n) => [n.id, n.at, n.title, n.body]));
+    if (sig === this.planned) return;
+    try {
+      const pending = await LN.getPending();
+      const old = (pending && pending.notifications) || [];
+      if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
+      if (list.length) {
+        await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
+      }
+      this.planned = sig;
+      this.ringError = '';
+    } catch (e) { this.ringError = (e && e.message) || String(e); }
+  },
+  later() { // after any redraw: re-plan a moment later, once
+    if (!this.on) return;
+    clearTimeout(this.laterTimer);
+    this.laterTimer = setTimeout(() => this.schedule(), 1500);
+  },
+  async setRing(v) {
+    device.set('ring', v === 'app' ? 'app' : 'todo');
+    const LN = this.plugin();
+    if (v === 'app' && LN) try { this.allowed = (await LN.requestPermissions()).display || ''; } catch { /* asked again next time */ }
+    this.planned = null;
+    await this.schedule();
+    render();
+  },
+  // On opening the app: pressing a reminder opens its task; see whether notifications are allowed; plan.
+  start() {
+    const LN = this.plugin();
+    if (!this.on || !LN) return;
+    try {
+      LN.addListener('localNotificationActionPerformed', (a) => {
+        const id = a && a.notification && a.notification.extra && a.notification.extra.task;
+        if (id && DB.tasks.some((t) => t.id === id)) openTaskDrawer(id);
+      });
+      Promise.resolve(LN.checkPermissions()).then((p) => { this.allowed = (p && p.display) || ''; }).catch(() => {});
+    } catch { /* an older app without the plugin: To Do rings */ }
+    this.later();
+  },
 };
 
 const TD = {
@@ -10331,6 +10428,8 @@ function notify(title, body, quiet = false, task = '') {
 // Reminders whose time has come pop up. Ones over 10 minutes late were missed while PA App was closed or the laptop
 // slept: the phone has rung for them already (To Do), so they're named in one message instead.
 const MISSED_MS = 10 * 60000;
+// The line under a reminder's title: when the task is due.
+const reminderWhen = (t) => (t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder');
 function checkReminders() {
   const now = Date.now();
   let changedAny = false;
@@ -10338,8 +10437,7 @@ function checkReminders() {
   const missed = due.filter((d) => d.at < now - MISSED_MS).sort((a, b) => a.at - b.at);
   for (const { t, r, at } of due) {
     if (at >= now - MISSED_MS) {
-      const when = t.due ? `Due ${taskDate(t) === todayISO() ? 'today' : fmtDay(taskDate(t))}${taskTime(t) ? ' at ' + fmtTime(taskTime(t)) : ''}` : 'Reminder';
-      notify(fullTitle(t), when, !state.readOnly && TD.connected() && !!(t.todo && t.todo.id), t.id);
+      notify(fullTitle(t), reminderWhen(t),!state.readOnly && TD.connected() && !!(t.todo && t.todo.id), t.id);
     }
     if (state.readOnly) state.remindedHere.add(`${t.id}:${r.id}`);
     else { r.fired = true; changedAny = true; }
@@ -11512,6 +11610,7 @@ document.addEventListener('change', (e) => {
   }
   if (e.target.matches?.('[data-auto-rates]')) { device.set('autoRates', e.target.checked); if (e.target.checked) { device.remove('autoRatesDay'); autoRates(); } return; }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
+  if (e.target.dataset?.input === 'ring') { Native.setRing(e.target.value); return; } // this phone only, so even when read-only
   if (e.target.matches?.('[data-area-bucket]') && !state.readOnly) { if (e.target.value) { ButlerTasks.setBucket(e.target.dataset.areaBucket, e.target.value); toast(`${TASK_AREAS.find((x) => x.id === e.target.dataset.areaBucket).name} tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}`); } render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
@@ -11583,6 +11682,7 @@ else {
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
   setInterval(() => TD.sync(), TD.SYNC_MS);
   Native.finishSignIn(); // the Android app, back from Microsoft's sign-in
+  Native.start(); // the Android app: its reminders
 }
 
 // For tests and debugging in the console.

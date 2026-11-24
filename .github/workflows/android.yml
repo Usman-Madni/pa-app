@@ -52,6 +52,13 @@ jobs:
       - name: Sync
         run: npx cap sync android
 
+      # Reminders ring on the minute (Android otherwise lets them drift). USE_EXACT_ALARM is granted on Android 13+
+      # for apps whose job is reminders; SCHEDULE_EXACT_ALARM covers Android 12.
+      - name: Exact reminders
+        run: |
+          sed -i 's#<application#<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n\n    <application#' android/app/src/main/AndroidManifest.xml
+          grep -E "EXACT_ALARM" android/app/src/main/AndroidManifest.xml
+
       - name: Version (one up each build, so an update installs over the last)
         run: |
           sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle
@@ -60,7 +67,8 @@ jobs:
 
       - name: Build
         working-directory: android-app/android
-        run: ./gradlew assembleRelease --no-daemon
+        # Maven Central sometimes turns a busy GitHub machine away ("Too Many Requests"): wait and try once more.
+        run: ./gradlew assembleRelease --no-daemon || (sleep 90 && ./gradlew assembleRelease --no-daemon)
 
       - name: Sign
         env:
