@@ -3350,19 +3350,32 @@ const DF = {
     this.timer = setTimeout(() => this.save(), this.DEBOUNCE_MS);
   },
 
+  // A save that hangs (OneDrive holding the file while it syncs, say) gives up after this long and shows Save problem
+  // with Try again, instead of leaving every later save waiting behind it with "Saving…" for ever.
+  SAVE_LIMIT_MS: 30000,
+  saveGen: 0, // bumped when a save gives up, so the one that hung can never write late over a newer save
+
   async save() {
     if (!this.handle || this.status !== 'ok') return;
     if (this.saving) return this.schedule();
     this.saving = true;
+    const gen = ++this.saveGen;
+    let limit = null;
     try {
-      const file = await this.readFile();
-      // The file moved on since we last read it (saved elsewhere): merge both sides' changes, never overwrite them.
-      if (file && file.saveToken !== device.get('seenToken', null)) await this.mergeIn(file);
-      else await this.write();
-    } catch (e) { this.fail(e); } finally { this.saving = false; renderStatus(); }
+      await Promise.race([
+        (async () => {
+          const file = await this.readFile();
+          if (gen !== this.saveGen) return; // gave up meanwhile
+          // The file moved on since we last read it (saved elsewhere): merge both sides' changes, never overwrite them.
+          if (file && file.saveToken !== device.get('seenToken', null)) await this.mergeIn(file);
+          else await this.write(gen);
+        })(),
+        new Promise((_, no) => { limit = setTimeout(() => no(new Error('The data file didn\'t answer for 30 seconds (OneDrive may be busy with it). Nothing is lost: press Try again')), this.SAVE_LIMIT_MS); }),
+      ]);
+    } catch (e) { this.saveGen++; this.fail(e); } finally { clearTimeout(limit); this.saving = false; renderStatus(); }
   },
 
-  async write() {
+  async write(gen = null) {
     const payload = {
       app: 'PA App',
       version: 2,
@@ -3372,6 +3385,7 @@ const DF = {
       data: DB.exportAll(),
     };
     const w = await this.handle.createWritable(); // writes to a temp copy, swapped in on close
+    if (gen != null && gen !== this.saveGen) { try { await w.abort(); } catch { /* the temp copy is dropped anyway */ } return; } // this save gave up meanwhile
     await w.write(JSON.stringify(payload, null, 1));
     await w.close();
     device.set('seenToken', payload.saveToken);
