@@ -432,10 +432,10 @@ button:disabled { cursor: not-allowed; }
 
 /* ===== Main ===== */
 .main { flex: 1; min-width: 0; padding: 32px 36px 64px; } /* every screen uses the full width */
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.page-head { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; } /* relative: the bell's window hangs from it on every page */
 /* The top bar: the title row stays at the top as the page scrolls, as tall as Butler's name and date beside it. */
 #main > .page-head { position: sticky; top: 0; z-index: 16; background: var(--bg); margin: -32px -36px 18px; padding: 24px 36px 14px; min-height: var(--topbar-h); border-bottom: 1px solid var(--border); }
-.main.fill #main > .page-head { position: static; }
+.main.fill #main > .page-head { position: relative; }
 /* Under a banner (or the phone's people row) the top bar starts below it, not over it. */
 #banner:not(:empty) ~ #main > .page-head, #who-bar:not(:empty) ~ #main > .page-head,
 #banner:not(:empty) ~ #main > .sticky-top, #who-bar:not(:empty) ~ #main > .sticky-top { margin-top: 0; } /* Tasks: its header block */
@@ -443,10 +443,15 @@ button:disabled { cursor: not-allowed; }
 .bell-btn { position: relative; }
 .bell-count { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
 .bell-pop { position: absolute; right: 36px; top: calc(100% - 6px); z-index: 30; width: min(340px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-float); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sticky-top .bell-pop { right: 0; } /* Tasks: its title row has no padding of its own */
 .bell-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-.bell-row { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 6px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: var(--t-sm); text-align: left; border-radius: 0; }
-button.bell-row { cursor: pointer; }
-button.bell-row:hover { background: var(--panel-2); }
+.bell-row { display: flex; align-items: flex-start; gap: 4px; border-bottom: 1px solid var(--border); font-size: var(--t-sm); }
+.bell-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 7px 6px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; border-radius: 0; }
+button.bell-open { cursor: pointer; }
+button.bell-open:hover { background: var(--panel-2); }
+.bell-dot { flex: none; position: relative; width: 24px; height: 24px; margin-top: 5px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.bell-dot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--accent); }
+.bell-dot:hover { background: var(--panel-2); }
 .bell-row.unread .notice-text { font-weight: 600; }
 .bell-row .meta { font-size: var(--t-xs); }
 .bell-all { align-self: flex-start; margin-top: 6px; }
@@ -3141,6 +3146,12 @@ const Notices = {
     DB.notices.forEach((n) => { n.read = true; });
     changed('notices');
   },
+  markOne(id) { // one, when it's pressed in the bell's window
+    const n = DB.notices.find((x) => x.id === id);
+    if (state.readOnly || !n || n.read) return;
+    n.read = true;
+    changed('notices');
+  },
   clear() { DB.notices = []; changed('notices'); },
 };
 function renderUnread() {
@@ -4141,7 +4152,11 @@ const Bell = {
     const rows = list.map((n) => {
       const task = n.task && DB.tasks.find((t) => t.id === n.task);
       const inner = `<span class="notice-text">${iconText(n.text)}</span><span class="meta">${esc(when(n.at))}</span>`;
-      return task ? `<button type="button" class="bell-row ${n.read ? '' : 'unread'}" data-action="open-task" data-id="${esc(task.id)}">${inner}</button>` : `<div class="bell-row ${n.read ? '' : 'unread'}">${inner}</div>`;
+      const unread = !n.read && !state.readOnly;
+      // Pressing a row marks it read (and opens its task, if it has one); the dot marks it read and stays put.
+      const open = task || unread ? `<button type="button" class="bell-open" data-action="bell-open" data-id="${esc(n.id)}"${task ? ` title="Open ${esc(fullTitle(task))}"` : ''}>${inner}</button>` : `<div class="bell-open">${inner}</div>`;
+      const dot = unread ? `<button type="button" class="bell-dot" data-action="bell-one" data-id="${esc(n.id)}" title="Mark read" aria-label="Mark read"></button>` : '';
+      return `<div class="bell-row${n.read ? '' : ' unread'}">${open}${dot}</div>`;
     }).join('');
     return `<div class="bell-top"><b>Notifications</b>${!state.readOnly && Notices.unread() ? '<button type="button" class="link-btn" data-action="bell-read">Mark all read</button>' : ''}</div>
       ${rows || '<p class="meta" style="margin:6px 0">Nothing yet. Messages Butler shows are kept here for 30 days.</p>'}
@@ -10885,6 +10900,14 @@ document.addEventListener('click', (e) => {
     case 'act-toggle': Bell.close(); ActMenu.toggle(); break;
     case 'bell-toggle': Bell.toggle(); break;
     case 'bell-read': Notices.markRead(); renderUnread(); Bell.draw(); break;
+    case 'bell-one': Notices.markOne(id); renderUnread(); Bell.draw(); break;
+    case 'bell-open': {
+      const n = DB.notices.find((x) => x.id === id);
+      Notices.markOne(id); renderUnread();
+      const task = n && n.task && DB.tasks.find((t) => t.id === n.task);
+      if (task) { Bell.close(); openTaskDrawer(task.id); } else Bell.draw();
+      break;
+    }
     case 'bell-all': Bell.close(); setView('notices'); break;
     case 'act-close': ActMenu.close(); break;
     case 'enable-notifications': askNotifications(); break;

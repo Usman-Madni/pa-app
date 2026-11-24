@@ -66,8 +66,28 @@ const { loadApp, check, done } = require('./helpers');
   bell().click();
   const pop = () => doc.querySelector('#bell-pop');
   check(pop() && pop().querySelectorAll('.bell-row.unread').length === 2 && /Bill due today/.test(pop().textContent) && PA.state.view === 'assets', 'pressing it opens a small window under it with the latest (not a pop-up: the page stays)');
+  pop().querySelector('.bell-row.unread .bell-dot').click();
+  check(pop() && pop().querySelectorAll('.bell-row.unread').length === 1 && bell().querySelector('#notice-count').textContent === '1', 'the dot marks just that one read, and the window stays open');
   pop().querySelector('[data-action="bell-read"]').click();
-  check(!pop().querySelector('.bell-row.unread') && bell().querySelector('#notice-count').hidden, 'Mark all read');
+  check(!pop().querySelector('.bell-row.unread') && !pop().querySelector('.bell-dot') && bell().querySelector('#notice-count').hidden, 'Mark all read');
+  // Pressing a row: it's read, and its task opens
+  const tk = win.eval('addTask')({ title: 'Pay the bill' });
+  win.eval('Notices').add('Reminder: Pay the bill', tk.id);
+  if (pop()) win.eval('Bell').draw(); else bell().click();
+  pop().querySelector('.bell-row.unread [data-action="bell-open"]').click();
+  check(!pop() && bell().querySelector('#notice-count').hidden && PA.state.openTask === tk.id, 'pressing one marks it read and opens its task');
+  win.eval('closeTaskDrawer')();
+  // On Tasks (the Board too) the window opens in sight, under the bell
+  for (const layout of ['list', 'board']) {
+    PA.device.set('taskLayout', layout);
+    win.eval('setView')('tasks');
+    bell().click();
+    const head = doc.querySelector('#main .page-head');
+    check(pop() && pop().parentElement === head && /\n\.page-head \{ position: relative;/.test(css) && !/#main > \.page-head \{ position: static/.test(css),`Tasks (${layout}): the bell's window hangs from the title row, so it opens under the bell`);
+    doc.querySelector('#main h1').click();
+  }
+  PA.device.set('taskLayout', 'list');
+  win.eval('setView')('assets');
   doc.querySelector('#main h1').click();
   check(!pop(), 'a click elsewhere closes it');
   bell().click();
