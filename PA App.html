@@ -3114,7 +3114,7 @@ function changed(...keys) {
   if (Stamps.touch(keys) && !keys.includes('deleted')) keys = [...keys, 'deleted'];
   keys.forEach((k) => DB.persist(k));
   if (state.phone) OD.markDirty(); else DF.markDirty();
-  if (keys.includes('tasks')) TD.tasksChanged(); // the phone's copy in To Do follows a few seconds later
+  if (keys.includes('tasks')) { TD.tasksChanged(); Native.later(); } // To Do's copy, and the Android app's reminders, follow
   if (keys.some((k) => FILE_KEYS.has(k))) AT.later(); // a person, owner or name changed: files follow to their folder
 }
 // A path in someone's Vault ('Me/Vault/…'): those files show in the Vault's own view.
@@ -9478,8 +9478,13 @@ const Native = {
     }
     return out.sort((a, b) => a.at - b.at).slice(0, this.RING_MAX);
   },
-  // Gives Android the reminders to ring (none when To Do rings them), replacing what it had.
-  async schedule() {
+  // Gives Android the reminders to ring (none when To Do rings them), replacing what it had. One at a time, so two
+  // never cross and double up.
+  schedule() {
+    this.queue = (this.queue || Promise.resolve()).then(() => this.replan()).catch(() => {});
+    return this.queue;
+  },
+  async replan() {
     const LN = this.plugin();
     if (!this.on || !LN) return;
     const list = this.ring() === 'app' ? this.plan() : [];
@@ -9490,16 +9495,29 @@ const Native = {
       const old = (pending && pending.notifications) || [];
       if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
       if (list.length) {
-        await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
+        if (!this.channelMade) { // Android's default channel is quiet (no sound, no pop-up); reminders get a loud one
+          await LN.createChannel({ id: this.CHANNEL, name: 'Reminders', description: 'Task reminders from Butler', importance: 5, visibility: 1, vibration: true });
+          this.channelMade = true;
+        }
+        await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: this.CHANNEL, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
       }
       this.planned = sig;
       this.ringError = '';
     } catch (e) { this.ringError = (e && e.message) || String(e); }
   },
-  later() { // after any redraw: re-plan a moment later, once
+  CHANNEL: 'butler-reminders', // importance 5: sound and a pop-up (a channel's importance can't change once made)
+  channelMade: false,
+  later() { // after any change or redraw: re-plan a moment later, once
     if (!this.on) return;
     clearTimeout(this.laterTimer);
     this.laterTimer = setTimeout(() => this.schedule(), 1500);
+  },
+  // Butler going to the background: Android pauses it, so a re-plan still waiting happens now.
+  flush() {
+    if (!this.on || !this.laterTimer) return;
+    clearTimeout(this.laterTimer);
+    this.laterTimer = null;
+    this.schedule();
   },
   async setRing(v) {
     device.set('ring', v === 'app' ? 'app' : 'todo');
@@ -11640,7 +11658,7 @@ window.addEventListener('beforeunload', () => { if (!state.readOnly) DB.persist(
 // Coming back to the tab: see if another device saved meanwhile.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && DF.status === 'ok') DF.check(); });
 // A delete waiting for Undo happens now if the page is left or put in the background (a phone may never come back).
-document.addEventListener('visibilitychange', () => { if (document.hidden) PendingDelete.flush(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { PendingDelete.flush(); Native.flush(); } });
 window.addEventListener('pagehide', () => PendingDelete.flush());
 
 // ===================== Start =====================

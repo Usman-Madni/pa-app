@@ -5,11 +5,15 @@
 const { loadApp, tick, check, done } = require('./helpers');
 
 const fakeAndroid = () => {
-  const n = { pending: [], scheduled: [], asked: 0, listeners: {} };
+  const n = { pending: [], scheduled: [], asked: 0, listeners: {}, channels: [] };
   n.plugin = {
+    createChannel: async (c) => { n.channels.push(c); },
     getPending: async () => ({ notifications: n.pending.map((x) => ({ id: x.id })) }),
     cancel: async ({ notifications }) => { n.pending = n.pending.filter((p) => !notifications.some((c) => c.id === p.id)); },
-    schedule: async ({ notifications }) => { n.scheduled.push(notifications); n.pending.push(...notifications); },
+    schedule: async ({ notifications }) => {
+      if (notifications.some((x) => x.channelId && !n.channels.some((c) => c.id === x.channelId))) throw new Error('no such channel');
+      n.scheduled.push(notifications); n.pending.push(...notifications);
+    },
     requestPermissions: async () => { n.asked++; return { display: 'granted' }; },
     checkPermissions: async () => ({ display: 'granted' }),
     addListener: (ev, fn) => { n.listeners[ev] = fn; },
@@ -55,6 +59,8 @@ const local = (ms) => { const d = new Date(ms); const p = (x) => String(x).padSt
   const first = n.scheduled[n.scheduled.length - 1] || [];
   check(first.length === 2 && first[0].schedule.at.getTime() === soon && first[1].schedule.at.getTime() === later, 'Android gets the task\'s two coming reminders, soonest first (not the one gone off, not a done task\'s)');
   check(first[0].title === 'Pay the bill' && /^Due|^Reminder$/.test(first[0].body) && first[0].extra.task === t.id && first[0].schedule.allowWhileIdle, 'each with the task\'s title, when it\'s due, and which task it is');
+  const ch = n.channels.find((c) => c.id === first[0].channelId);
+  check(ch && ch.importance === 5 && first.every((x) => x.channelId === ch.id) && n.channels.length === 1, 'they ring on a channel of their own with sound and a pop-up (importance 5), made once');
   check(first.every((x) => Number.isInteger(x.id) && x.id > 0 && x.id <= 2147483647) && first[0].id !== first[1].id, 'each with its own whole-number id Android accepts');
   check(/Next: Pay the bill/.test(doc.querySelector('#main').textContent), 'Settings names the next one');
 
@@ -68,6 +74,17 @@ const local = (ms) => { const d = new Date(ms); const p = (x) => String(x).padSt
   PA.render();
   await tick(1700);
   check(n.scheduled.length === calls + 1, 'and nothing is re-planned when nothing changed');
+
+  // A change with no redraw (the task panel), then Butler put away at once: Android has the new time before it pauses.
+  const r0 = t.reminders.find((r) => !r.fired && new Date(r.at).getTime() === soon);
+  PA.Reminders.replace(t, r0.id, { kind: 'at', at: local(soon + 3600000) });
+  win.eval('changed')('tasks');
+  Object.defineProperty(doc, 'hidden', { configurable: true, get: () => true });
+  doc.dispatchEvent(new win.Event('visibilitychange'));
+  await tick(30);
+  check(n.pending.some((x) => x.schedule.at.getTime() === soon + 3600000) && !n.pending.some((x) => x.schedule.at.getTime() === soon), 'a changed time reaches Android even when Butler is put away straight after (no redraw, no waiting)');
+  check(n.pending.length === 2 && n.channels.length === 1, 'still two, still one channel');
+  Object.defineProperty(doc, 'hidden', { configurable: true, get: () => false });
 
   // --- Pressing one opens its task ---
   n.listeners.localNotificationActionPerformed({ actionId: 'tap', notification: { id: first[0].id, extra: { task: t.id } } });
