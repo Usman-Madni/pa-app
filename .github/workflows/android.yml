@@ -59,6 +59,16 @@ jobs:
       - name: Sync
         run: npx cap sync android
 
+      # The background check's JavaScript engine comes as a file inside its plugin; the app's build looks for it in
+      # its own libs folder.
+      - name: Background check engine
+        run: |
+          mkdir -p android/app/libs
+          AAR=$(find node_modules/@capacitor/background-runner -name 'android-js-engine-release.aar' | head -1)
+          test -n "$AAR" || { echo "android-js-engine-release.aar not found in the plugin"; find node_modules/@capacitor/background-runner -name '*.aar'; exit 1; }
+          cp "$AAR" android/app/libs/
+          ls -l android/app/libs
+
       # Reminders ring on the minute (Android otherwise lets them drift). USE_EXACT_ALARM is granted on Android 13+
       # for apps whose job is reminders; SCHEDULE_EXACT_ALARM covers Android 12.
       - name: Exact reminders
