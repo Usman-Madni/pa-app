@@ -9394,6 +9394,39 @@ const graphMs = (d) => {
 const shortHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+// ===================== The Android app =====================
+// The Android app (a Capacitor shell, in android-app/) is this same page, loaded from the live site inside the app's
+// own window, with the phone's own features beside it. There window.open would leave the app for the phone's browser,
+// so Microsoft's sign-in happens in the same window instead: Butler notes what it's signing in to (sessionStorage),
+// goes to Microsoft, and Microsoft comes back to the folder's page (index.html), which hands ?code=… on to here.
+const Native = {
+  on: !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()),
+  SIGN_IN: 'butler-signin', // sessionStorage: {key, verifier, check} while away at Microsoft
+  go(url) { location.assign(url); }, // a function of its own, so the tests can watch where it goes
+  // Back from Microsoft: take ?code=… off the address (whatever happens) and finish the sign-in it was for.
+  async finishSignIn() {
+    const q = new URLSearchParams(location.search);
+    if (!q.has('code') && !q.has('error')) return;
+    ['code', 'state', 'session_state', 'error', 'error_description', 'error_uri'].forEach((k) => q.delete(k));
+    history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + location.hash);
+    let pending = null;
+    try { pending = JSON.parse(sessionStorage.getItem(this.SIGN_IN) || 'null'); sessionStorage.removeItem(this.SIGN_IN); } catch { /* none */ }
+    const back = new URLSearchParams(this.from);
+    if (!pending) return; // not one we started (an old link, or another tab's)
+    const who = pending.key === OD.AUTH_KEY ? OD : TD;
+    try {
+      if (back.get('error')) throw new Error(back.get('error_description') || back.get('error'));
+      if (back.get('state') !== pending.check) throw new Error('The sign-in answer didn\'t match. Try again');
+      await who.token({ grant_type: 'authorization_code', code: back.get('code'), redirect_uri: who.redirectUri(), code_verifier: pending.verifier });
+      who.error = '';
+      toast(who.CONNECTED_NOTE);
+      who.afterSignIn();
+    } catch (e) { who.error = e.message; }
+    render();
+  },
+  from: location.search, // the address as the page opened, before finishSignIn tidies it
+};
+
 const TD = {
   CLIENT_ID: '011c6ecd-2984-4293-a6be-c83ebba20855', // not a secret; only works from the addresses registered in Azure
   AUTH: 'https://login.microsoftonline.com/consumers/oauth2/v2.0',
@@ -9419,19 +9452,30 @@ const TD = {
   needsSignIn() { const a = this.auth(); return !!a && !a.refresh && !(a.access && a.exp > Date.now()); },
   waitingForFile() { return !!DF.handle && DF.status !== 'ok'; }, // syncing waits until the data file is reconnected or decided
 
+  // Microsoft's sign-in page for this sign-in, with a one-off check (PKCE): {url, verifier, check}.
+  async authorizeUrl() {
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+    const check = uid();
+    const q = new URLSearchParams({
+      client_id: this.CLIENT_ID, response_type: 'code', redirect_uri: this.redirectUri(), scope: this.SCOPE,
+      code_challenge: challenge, code_challenge_method: 'S256', state: check, prompt: 'select_account',
+    });
+    return { url: `${this.AUTH}/authorize?${q}`, verifier, check };
+  },
   async signIn() {
+    if (Native.on) { // the Android app: in this same window (see Native)
+      const a = await this.authorizeUrl();
+      sessionStorage.setItem(Native.SIGN_IN, JSON.stringify({ key: this.AUTH_KEY, verifier: a.verifier, check: a.check }));
+      Native.go(a.url);
+      return;
+    }
     // Open the pop-up straight from the click, or the browser blocks it; it's pointed at Microsoft a moment later.
     const popup = window.open('', 'pa-ms-signin', 'width=480,height=640');
     if (!popup) { toast('The sign-in pop-up was blocked: allow pop-ups for this site and try again'); return; }
     try {
-      const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-      const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
-      const check = uid();
-      const q = new URLSearchParams({
-        client_id: this.CLIENT_ID, response_type: 'code', redirect_uri: this.redirectUri(), scope: this.SCOPE,
-        code_challenge: challenge, code_challenge_method: 'S256', state: check, prompt: 'select_account',
-      });
-      popup.location.href = `${this.AUTH}/authorize?${q}`;
+      const { url, verifier, check } = await this.authorizeUrl();
+      popup.location.href = url;
       const back = await this.waitForPopup(popup);
       if (back.get('error')) throw new Error(back.get('error_description') || back.get('error'));
       if (back.get('state') !== check) throw new Error('The sign-in answer didn\'t match. Try again');
@@ -11538,6 +11582,7 @@ else {
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);
   setInterval(() => TD.sync(), TD.SYNC_MS);
+  Native.finishSignIn(); // the Android app, back from Microsoft's sign-in
 }
 
 // For tests and debugging in the console.

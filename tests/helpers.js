@@ -118,6 +118,7 @@ function loadApp(opts = {}) {
       win.prompt = () => { throw new Error('the browser\'s prompt() was used'); };
       win.scrollTo = () => {};
       if (opts.fetch) win.fetch = opts.fetch; // a fake Microsoft (see test-todo-sync)
+      if (opts.before) opts.before(win); // anything else the page should find as it starts (e.g. the Android app's bridge)
       // opts.now (ms): the app's clock starts there and keeps ticking, so a test about the time of day can't depend on
       // when it's run (just after midnight, say).
       if (opts.now != null) {
