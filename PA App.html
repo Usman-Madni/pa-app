@@ -9510,16 +9510,24 @@ const Native = {
       if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
       if (list.length) {
         if (!this.channelMade) { // Android's default channel is quiet (no sound, no pop-up); reminders get a loud one
-          await LN.createChannel({ id: this.CHANNEL, name: 'Reminders', description: 'Task reminders from Butler', importance: 5, visibility: 1, vibration: true });
+          await LN.createChannel({ id: this.CHANNEL, name: 'Reminders', description: 'Task reminders from Butler', importance: 5, visibility: 1, vibration: true, ...(this.SOUND ? { sound: this.SOUND } : {}) });
+          if (this.SOUND && LN.deleteChannel) for (const id of this.OLD_CHANNELS) try { await LN.deleteChannel({ id }); } catch { /* never made */ }
           this.channelMade = true;
         }
-        await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: this.CHANNEL, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
+        await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: this.CHANNEL, ...(this.SOUND ? { sound: this.SOUND } : {}), schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
       }
       this.planned = sig;
       this.ringError = '';
     } catch (e) { this.ringError = (e && e.message) || String(e); }
   },
-  CHANNEL: 'butler-reminders', // importance 5: sound and a pop-up (a channel's importance can't change once made)
+  // The app shell's version, from the end of its browser name ("ButlerAndroid/2"); the first app said just "ButlerAndroid".
+  shell: (() => { const m = /ButlerAndroid(?:\/(\d+))?/.exec(navigator.userAgent); return m ? Number(m[1] || 1) : 0; })(),
+  // Importance 5: sound and a pop-up. A channel can't change once made, so a new sound means a new channel. From
+  // shell 2 the app carries its own chime (res/raw/butler_ring.wav), set on the channel itself: the phone's default
+  // for a new channel had rung silent on a Samsung.
+  get CHANNEL() { return this.shell >= 2 ? 'butler-ring' : 'butler-reminders'; },
+  get SOUND() { return this.shell >= 2 ? 'butler_ring.wav' : undefined; },
+  OLD_CHANNELS: ['butler-reminders'],
   channelMade: false,
   later() { // after any change or redraw: re-plan a moment later, once
     if (!this.on) return;

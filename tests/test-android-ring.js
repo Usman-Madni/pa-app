@@ -8,6 +8,7 @@ const fakeAndroid = () => {
   const n = { pending: [], scheduled: [], asked: 0, listeners: {}, channels: [] };
   n.plugin = {
     createChannel: async (c) => { n.channels.push(c); },
+    deleteChannel: async ({ id }) => { n.deleted = [...(n.deleted || []), id]; n.channels = n.channels.filter((c) => c.id !== id); },
     getPending: async () => ({ notifications: n.pending.map((x) => ({ id: x.id })) }),
     cancel: async ({ notifications }) => { n.pending = n.pending.filter((p) => !notifications.some((c) => c.id === p.id)); },
     schedule: async ({ notifications }) => {
@@ -61,6 +62,7 @@ const local = (ms) => { const d = new Date(ms); const p = (x) => String(x).padSt
   check(first[0].title === 'Pay the bill' && /^Due|^Reminder$/.test(first[0].body) && first[0].extra.task === t.id && first[0].schedule.allowWhileIdle, 'each with the task\'s title, when it\'s due, and which task it is');
   const ch = n.channels.find((c) => c.id === first[0].channelId);
   check(ch && ch.importance === 5 && first.every((x) => x.channelId === ch.id) && n.channels.length === 1, 'they ring on a channel of their own with sound and a pop-up (importance 5), made once');
+  check(!ch.sound && !first[0].sound && !(n.deleted || []).length, 'the first app (no chime inside it) isn\'t asked for one, and keeps its channel');
   check(first.every((x) => Number.isInteger(x.id) && x.id > 0 && x.id <= 2147483647) && first[0].id !== first[1].id, 'each with its own whole-number id Android accepts');
   check(/Next: Pay the bill/.test(doc.querySelector('#main').textContent), 'Settings names the next one');
 
@@ -101,6 +103,22 @@ const local = (ms) => { const d = new Date(ms); const p = (x) => String(x).padSt
   check(n.pending.length === 0, 'switching back to To Do takes Butler\'s reminders off Android');
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   app.close();
+
+  // --- The app from shell 2 carries its own chime: a channel of its own with that sound, the old silent one removed ---
+  const n2 = fakeAndroid();
+  const app2 = loadApp({ fsa: false, ua: 'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile ButlerAndroid/2', before: (w) => { w.Capacitor = { isNativePlatform: () => true, Plugins: { LocalNotifications: n2.plugin } }; w.localStorage.setItem('dev_ring', '"app"'); } });
+  await tick(50);
+  const t2 = app2.win.PA.addTask({ title: 'Ring with sound' });
+  app2.win.PA.Reminders.add(t2, { kind: 'at', at: local(soon) });
+  app2.win.eval('changed')('tasks');
+  await tick(1700);
+  const sent = n2.scheduled[n2.scheduled.length - 1] || [];
+  const ch2 = n2.channels.find((c) => c.id === (sent[0] || {}).channelId);
+  check(app2.win.eval('Native').shell === 2 && ch2 && ch2.id !== 'butler-reminders' && ch2.sound === 'butler_ring.wav' && ch2.importance === 5, 'the new app rings on a channel with Butler\'s own chime set on it');
+  check(sent.length && sent.every((x) => x.sound === 'butler_ring.wav'), 'each reminder names the chime too');
+  check((n2.deleted || []).includes('butler-reminders'), 'and the old silent channel is removed');
+  check(app2.errors.length === 0, 'no script errors (shell 2)' + (app2.errors[0] ? ': ' + app2.errors[0] : ''));
+  app2.close();
 
   // --- Not in the app: no switch, desktop notifications as before ---
   const web = loadApp({ fsa: false });

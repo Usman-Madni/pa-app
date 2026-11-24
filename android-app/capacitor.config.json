@@ -15,6 +15,13 @@
   },
   "android": {
     "allowMixedContent": false,
-    "appendUserAgent": "ButlerAndroid"
+    "appendUserAgent": "ButlerAndroid/2"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_butler",
+      "iconColor": "#0f5c57",
+      "sound": "butler_ring.wav"
+    }
   }
 }

@@ -12,6 +12,7 @@ on:
       - 'android-app/**'
       - '.github/workflows/android.yml'
       - 'icon-maskable.svg'
+    # (android-app/** covers the sound script and the status-bar icon too)
 
 permissions:
   contents: write
@@ -48,6 +49,12 @@ jobs:
           rsvg-convert -w 1024 -h 1024 ../icon-maskable.svg -o assets/icon-foreground.png
           rsvg-convert -w 1024 -h 1024 ../icon-maskable.svg -o assets/icon-background.png
           npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0f5c57' --iconBackgroundColorDark '#0f5c57' --splashBackgroundColor '#0f5c57' --splashBackgroundColorDark '#0f5c57'
+
+      - name: Reminder sound and status-bar icon
+        run: |
+          mkdir -p android/app/src/main/res/raw android/app/src/main/res/drawable
+          node make-sound.js android/app/src/main/res/raw/butler_ring.wav
+          cp res/drawable/ic_stat_butler.xml android/app/src/main/res/drawable/
 
       - name: Sync
         run: npx cap sync android
