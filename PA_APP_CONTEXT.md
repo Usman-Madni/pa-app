@@ -220,6 +220,12 @@ Per-device settings (`localStorage` `dev_<key>`; never in the data file or backu
 - After changes come in, a toast says how many, and the page and open task panel are redrawn unless you're typing.
 - Steps (checklist) aren't synced yet.
 
+## The Android app (`android-app/`, `Native`)
+- Decided 24–25 Nov: a Capacitor shell, not a rewrite. It opens the live site (`server.url`), so pushes update it as before; a new APK only when the shell changes. Microsoft pages are allowed to open inside it (`allowNavigation`); anything else opens in the phone's browser. `www/offline.html` shows if it can't reach the site and has never opened it before (after that the service worker's copy opens offline).
+- Built only by GitHub (`.github/workflows/android.yml`): `npx cap add android` each time (no Android project kept in the repo), the icon from `icon-maskable.svg`, versionCode = the run number, signed with the key in the repo secrets (`ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`; the key itself is kept outside the repo, and losing it means every phone reinstalls once), published as `Butler.apk` on the `android` release.
+- Inside the app `Native.on` is true (`Capacitor.isNativePlatform()`). `window.open` would leave the app, so sign-in (`TD.signIn`, also OneDrive's) goes to Microsoft in the same window: it keeps `{key, verifier, check}` in sessionStorage (`butler-signin`), Microsoft returns to `index.html`, which passes `?code=…` on to PA App when there's no pop-up opener, and `Native.finishSignIn` swaps it for tokens and takes it off the address. Elsewhere a stray `?code=…` is only taken off.
+- Rounds: 1 the shell and sign-in; 2 reminders from the phone itself (a per-phone switch: ring from To Do or from the app) and the camera; 3 a background check of the data file about every 15 minutes; 4 Share › Butler; 5 widgets. To Do is removed only after the app has proved itself for weeks and no family member is on an iPhone.
+
 ## Read-only mode (phones)
 - Read-only when any of these is true:
   - It's a phone or tablet (`isPhone()`: `userAgentData.mobile`, or a user-agent string mentioning Android/iPhone/iPad/Mobi, or an iPad asking for the desktop site). This holds even when that phone's Chrome can write files.

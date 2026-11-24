@@ -1,0 +1,20 @@
+{
+  "appId": "app.butler.home",
+  "appName": "Butler",
+  "webDir": "www",
+  "server": {
+    "url": "https://usman-madni.github.io/pa-app/",
+    "errorPath": "offline.html",
+    "allowNavigation": [
+      "login.microsoftonline.com",
+      "*.microsoftonline.com",
+      "login.live.com",
+      "*.live.com",
+      "*.microsoft.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "appendUserAgent": "ButlerAndroid"
+  }
+}

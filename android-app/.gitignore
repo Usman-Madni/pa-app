@@ -1,0 +1,6 @@
+# Made fresh by the GitHub build each time (npx cap add android), never kept here
+node_modules/
+android/
+assets/
+*.apk
+*.p12
