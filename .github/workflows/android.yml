@@ -83,6 +83,14 @@ jobs:
           sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="app.butler.home" android:host="auth" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
           grep -n "app.butler.home" android/app/src/main/AndroidManifest.xml
 
+      # Share › Butler: Butler is offered in Android's share sheet for any file(s) or words (round 4), and the main
+      # screen hands a share that started the app to the plugins (android-app/native/MainActivity.java).
+      - name: Share to Butler
+        run: |
+          sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.SEND" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <data android:mimeType="*/*" />\n            </intent-filter>\n            <intent-filter>\n                <action android:name="android.intent.action.SEND_MULTIPLE" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <data android:mimeType="*/*" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
+          grep -c "android.intent.action.SEND" android/app/src/main/AndroidManifest.xml
+          cp native/MainActivity.java android/app/src/main/java/app/butler/home/MainActivity.java
+
       - name: Version (one up each build, so an update installs over the last)
         run: |
           sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle

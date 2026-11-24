@@ -8637,6 +8637,32 @@ function drawAssetForm() {
     $('#modal select')?.focus();
     return;
   }
+  if (f.type === 'share') { // the Android app: files or words shared to Butler from another app (Native.received)
+    const files = f.files || [];
+    const texts = f.texts || [];
+    const to = f.to || 'new';
+    const tasks = DB.tasks.filter((t) => !t.done && People.mine(t) && !hiddenTask(t)).sort((a, b) => fullTitle(a).localeCompare(fullTitle(b)));
+    const places = [];
+    for (const top of Vault.tops()) {
+      const name = Vault.topName(top);
+      places.push([`${top}|Documents`, `${name} › Documents`]);
+      for (const p of Vault.paths(top)) if (!Vault.reserved(p) && p !== 'Documents') places.push([`${top}|${p}`, `${name} › ${p.split('/').join(' › ')}`]);
+    }
+    const first = files[0] ? files[0].name.replace(/\.[^.]+$/, '') : '';
+    const title = f.title ?? (texts[0] ? texts[0].split('\n')[0].slice(0, 120) : first);
+    const what = [files.length ? plural(files.length, 'file') : '', texts.length && !files.length ? 'some words' : ''].filter(Boolean).join(' and ');
+    const choice = (v, label, on = true) => (on ? `<label><input type="radio" name="to" value="${v}" data-share-to ${to === v ? 'checked' : ''}> ${label}</label>` : '');
+    $('#modal').innerHTML = box('Shared with Butler', `
+      <p class="meta" style="margin:0">${esc(what || 'Nothing')}${files.length ? `: ${esc(files.map((x) => x.name).join(', '))}` : ''}${f.failed ? ` (${plural(f.failed, 'file')} couldn't be read)` : ''}</p>
+      ${ro ? `<p class="form-error" style="margin:0">Read-only on this phone just now: ${OD.connected() ? 'it saves again once it has read the latest from OneDrive (be online)' : 'sign in to OneDrive'}, then share again.</p>` : ''}
+      <fieldset class="owner-box"><legend>Where it goes</legend><div class="check-row">${choice('new', 'New task')}${choice('task', 'Add to a task', files.length > 0 && tasks.length > 0)}${choice('vault', 'Vault', files.length > 0)}</div></fieldset>
+      ${to === 'new' ? `<label class="field">Task<input class="input" name="title" value="${esc(title)}" maxlength="200" required></label>${texts.length ? '<p class="meta" style="margin:0">What was shared goes in its notes.</p>' : ''}` : ''}
+      ${to === 'task' ? `<label class="field">Which task<select class="input" name="task" required>${tasks.map((t) => `<option value="${esc(t.id)}">${esc(fullTitle(t))}${t.due ? ` (${esc(fmtDay(taskDate(t)))})` : ''}</option>`).join('')}</select></label>` : ''}
+      ${to === 'vault' ? `<label class="field">Which folder<select class="input" name="place" required>${places.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>` : ''}`,
+    '', to === 'new' ? 'Add task' : 'Add', ro);
+    if (to === 'new' && !ro) $('#modal input[name="title"]')?.focus();
+    return;
+  }
   if (f.type === 'import') {
     const plan = f.plan;
     const t = plan.tables;
@@ -8923,9 +8949,44 @@ function zakatDraftChanged(form) {
 function formError(msg) { const p = $('#modal .form-error'); if (p) { p.textContent = msg; p.hidden = false; } }
 
 // Saving a pop-up. Returns quietly (the pop-up stays, with a message) when something doesn't add up.
+// What was shared to Butler goes where the sheet says: a new task (the words in its notes), a task's files, or the Vault.
+async function shareSave(f, data) {
+  const files = f.files || [];
+  const texts = f.texts || [];
+  const to = data.to || 'new';
+  if (to === 'new') {
+    const title = String(data.title || '').trim();
+    if (!title) return formError('Give the task a name.');
+    const t = addTask({ title });
+    if (texts.length) { t.notes = texts.join('\n\n'); changed('tasks'); }
+    closeAssetForm(true);
+    if (files.length) await AT.add(t, files);
+    else render();
+    toast(`Added "${title}"${files.length ? ` with ${plural(files.length, 'file')}` : ''}`);
+    openTaskDrawer(t.id);
+    return;
+  }
+  if (to === 'task') {
+    const t = DB.tasks.find((x) => x.id === data.task);
+    if (!t) return formError('Pick a task.');
+    closeAssetForm(true);
+    await AT.add(t, files);
+    openTaskDrawer(t.id);
+    return;
+  }
+  const [top, ...rest] = String(data.place || '').split('|');
+  const path = rest.join('|');
+  if (!top || !path) return formError('Pick a folder.');
+  closeAssetForm(true);
+  const made = await Vault.addFiles(top, path, files);
+  if (made.length) toast(`Added ${plural(made.length, 'file')} to ${Vault.topName(top)} › ${path.split('/').join(' › ')}`);
+  render();
+}
+
 function submitAssetForm(type, data) {
   const f = state.assetForm;
   if (!f || state.readOnly) return;
+  if (type === 'share') return shareSave(f, data);
   if (type === 'asset') {
     const a = f.id ? DB.assets.find((x) => x.id === f.id) : null;
     const kind = a ? a.kind : data.kind;
@@ -9560,6 +9621,36 @@ const Native = {
     } catch { /* an app without the background check */ }
   },
 
+  // Share › Butler (shell 4): another app shares files or words; the share plugin (CapacitorShareTarget) copies each
+  // file into the app's cache and hands over its path, which is read here (Filesystem) and then deleted. The
+  // "Shared with Butler" sheet asks where it goes. A share that started the app is held until Butler has read the
+  // latest from OneDrive, so it can be saved.
+  lastShare: '',
+  async received(ev) {
+    const list = (ev && Array.isArray(ev.files) ? ev.files : []).filter((x) => x && x.uri);
+    const texts = (ev && Array.isArray(ev.texts) ? ev.texts : []).map((x) => String(x || '').trim()).filter(Boolean);
+    const sig = JSON.stringify([list.map((x) => x.uri), texts]);
+    if (sig === this.lastShare) return; // the same share handed over twice (on starting, say)
+    this.lastShare = sig;
+    const FS = this.plug('Filesystem');
+    const files = [];
+    let failed = 0;
+    for (const x of list) {
+      try {
+        const r = await FS.readFile({ path: x.uri });
+        const bin = atob(String(r && r.data || ''));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        files.push(new File([bytes], x.name && x.name !== 'unknown' ? x.name : `Shared ${files.length + 1}`, { type: x.mimeType || '' }));
+        try { await FS.deleteFile({ path: x.uri }); } catch { /* the plugin clears its copies itself after a day */ }
+      } catch { failed++; }
+    }
+    if (!files.length && !texts.length) { toast(failed ? 'What was shared couldn\'t be read' : 'Nothing came with that share'); return; }
+    // Started by the share: wait (up to 20 s) for the latest from OneDrive, so it can be saved.
+    for (let i = 0; i < 40 && state.readOnly && OD.connected() && !OD.needsSignIn() && !OD.offline && (OD.reading || !OD.item); i++) await new Promise((ok) => setTimeout(ok, 500));
+    openAssetForm('share', { files, texts, failed });
+  },
+
   ring() { return this.on && device.get('ring', 'todo') === 'app' ? 'app' : 'todo'; },
   plugin() {
     const c = window.Capacitor;
@@ -9653,6 +9744,9 @@ const Native = {
         App.addListener('appUrlOpen', (e) => this.back(e && e.url));
         Promise.resolve(App.getLaunchUrl()).then((l) => this.back(l && l.url)).catch(() => {});
       } catch { /* no App plugin */ }
+    }
+    if (this.on && this.shell >= 4) { // Share › Butler (a share waiting from before Butler started is handed over now)
+      try { this.plug('CapacitorShareTarget').addListener('shareReceived', (e) => this.received(e)); } catch { /* no share plugin */ }
     }
     const LN = this.plugin();
     if (!this.on || !LN) return;
@@ -11764,6 +11858,13 @@ document.addEventListener('change', (e) => {
   }
   if (e.target.matches?.('[data-auto-rates]')) { device.set('autoRates', e.target.checked); if (e.target.checked) { device.remove('autoRatesDay'); autoRates(); } return; }
   if (e.target.matches?.('[data-vehicle-pick]')) { device.set('vehicleCar', e.target.value); return render(); }
+  if (e.target.matches?.('[data-share-to]') && state.assetForm && state.assetForm.type === 'share') { // keeps a typed name
+    const title = e.target.form && e.target.form.elements.title;
+    if (title) state.assetForm.title = title.value;
+    state.assetForm.to = e.target.value;
+    renderAssetForm();
+    return;
+  }
   if (e.target.dataset?.input === 'ring') { Native.setRing(e.target.value); return; } // this phone only, so even when read-only
   if (e.target.matches?.('[data-area-bucket]') && !state.readOnly) { if (e.target.value) { ButlerTasks.setBucket(e.target.dataset.areaBucket, e.target.value); toast(`${TASK_AREAS.find((x) => x.id === e.target.dataset.areaBucket).name} tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}`); } render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
