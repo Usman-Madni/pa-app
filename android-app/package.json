@@ -4,6 +4,9 @@
   "description": "Butler's Android app: a Capacitor shell around the live site. Built only by GitHub (.github/workflows/android.yml); never npm install here (synced folder).",
   "dependencies": {
     "@capacitor/android": "8.6.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/background-runner": "3.0.0",
+    "@capacitor/browser": "8.0.5",
     "@capacitor/cli": "8.6.2",
     "@capacitor/core": "8.6.2",
     "@capacitor/local-notifications": "8.3.1"

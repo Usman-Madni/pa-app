@@ -66,6 +66,13 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n\n    <application#' android/app/src/main/AndroidManifest.xml
           grep -E "EXACT_ALARM" android/app/src/main/AndroidManifest.xml
 
+      # Microsoft's sign-in comes back to app.butler.home://auth (registered in Azure as a mobile app): Android hands
+      # that address to Butler. Added to the app's main screen, beside the launcher entry.
+      - name: Sign-in return address
+        run: |
+          sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="app.butler.home" android:host="auth" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
+          grep -n "app.butler.home" android/app/src/main/AndroidManifest.xml
+
       - name: Version (one up each build, so an update installs over the last)
         run: |
           sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle

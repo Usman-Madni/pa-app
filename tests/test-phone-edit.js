@@ -67,6 +67,7 @@ const signedIn = { dev_odAuth: JSON.stringify({ access: 'od', exp: Date.now() + 
   const put = g.calls.filter((c) => c.method === 'PUT');
   check(put.length === 1 && put[0].ifMatch === '"v1"', 'saved to OneDrive a moment later, only if the file is still the version it read');
   check(g.file.content.data.tasks.some((t) => t.title === 'Added on the phone') && g.file.content.savedFrom === 'Phone', 'OneDrive has it, saved on "Phone"');
+  check(Array.isArray(g.file.content.ring), 'with the ring list beside the data (for the Android app\'s background check)');
   check(g.file.content.data.notices.some((n) => /Added/.test(n.text)), 'the phone adds to Notifications too');
 
   // --- The laptop saved meanwhile: merge and save again, quietly ---

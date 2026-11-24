@@ -15,9 +15,17 @@
   },
   "android": {
     "allowMixedContent": false,
-    "appendUserAgent": "ButlerAndroid/2"
+    "appendUserAgent": "ButlerAndroid/3"
   },
   "plugins": {
+    "BackgroundRunner": {
+      "label": "app.butler.home.check",
+      "src": "runners/check.js",
+      "event": "check",
+      "repeat": true,
+      "interval": 15,
+      "autoStart": true
+    },
     "LocalNotifications": {
       "smallIcon": "ic_stat_butler",
       "iconColor": "#0f5c57",

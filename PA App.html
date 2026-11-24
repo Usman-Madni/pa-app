@@ -3383,6 +3383,7 @@ const DF = {
       savedAt: new Date().toISOString(), // instant, not a calendar date
       savedFrom: deviceName(),
       data: DB.exportAll(),
+      ring: Reminders.ringList(DB.tasks), // the coming reminders, for the Android app's background check
     };
     const w = await this.handle.createWritable(); // writes to a temp copy, swapped in on close
     if (gen != null && gen !== this.saveGen) { try { await w.abort(); } catch { /* the temp copy is dropped anyway */ } return; } // this save gave up meanwhile
@@ -4641,6 +4642,25 @@ const Reminders = {
   fromToDo(t, sent, newTime) {
     for (const r of t.reminders) if (sameMinute(this.time(t, r), sent)) r.fired = true;
     if (newTime != null && !t.reminders.some((r) => sameMinute(this.time(t, r), newTime))) t.reminders.push(this.exact(newTime)); // never twice
+  },
+  // Each reminder still to come on a task you're on, soonest first: [{key: '<task>:<reminder>', at (ms), title, body,
+  // task}]. The Android app rings these; every save also writes the next RING_DAYS of them into the data file
+  // (`ring`), so the app's background check knows them without Butler's own code. skip: keys not to list.
+  RING_DAYS: 14,
+  RING_MAX: 200,
+  ringList(tasks, now = Date.now(), skip = new Set()) {
+    const out = [];
+    const until = now + this.RING_DAYS * 86400000;
+    for (const t of tasks) {
+      if (t.done || !People.mine(t)) continue;
+      for (const r of t.reminders) {
+        const key = `${t.id}:${r.id}`;
+        if (r.fired || skip.has(key)) continue;
+        const at = this.time(t, r);
+        if (at != null && at > now && at <= until) out.push({ key, at, title: fullTitle(t), body: reminderWhen(t), task: t.id });
+      }
+    }
+    return out.sort((a, b) => a.at - b.at).slice(0, this.RING_MAX);
   },
   // [{t, r, at}] whose time has come (not gone off yet, not in `shown`: the keys a read-only device has shown).
   due(tasks, now = Date.now(), shown = new Set()) {
@@ -9467,6 +9487,79 @@ const Native = {
   planned: null, // what Android was last given, so it's only re-planned when something changed
   allowed: '', // 'granted' / 'denied' / 'prompt': whether Android lets Butler show notifications
   ringError: '',
+  plug(name) { // one of the app's plugins, by name (no JS packages: the page is the live site)
+    const c = window.Capacitor;
+    if (!c) return null;
+    return (c.Plugins && c.Plugins[name]) || (typeof c.registerPlugin === 'function' ? c.registerPlugin(name) : null);
+  },
+
+  // Signing in from shell 3: Microsoft's page opens in a Chrome sheet over the app and comes back to
+  // app.butler.home://auth (registered in Azure as a mobile app), which Android hands to the app. Microsoft treats that
+  // as an app sign-in, which stays signed in for weeks (a website's lasts a day), so the background check keeps working.
+  // Its tokens must be fetched through Android's own networking (`post`): Microsoft refuses them to a web page's request.
+  REDIRECT: 'app.butler.home://auth',
+  pending: null,
+  async signInVia(who) {
+    const a = await who.authorizeUrl(this.REDIRECT);
+    this.pending = { key: who.AUTH_KEY, verifier: a.verifier, check: a.check };
+    try { sessionStorage.setItem(this.SIGN_IN, JSON.stringify(this.pending)); } catch { /* kept in memory */ }
+    await this.plug('Browser').open({ url: a.url });
+  },
+  // Android opened app.butler.home://auth?code=…: close the sheet and finish the sign-in it was for.
+  async back(url) {
+    if (!url || !String(url).startsWith(this.REDIRECT)) return;
+    try { await this.plug('Browser').close(); } catch { /* closed already */ }
+    let pending = this.pending;
+    try { pending = pending || JSON.parse(sessionStorage.getItem(this.SIGN_IN) || 'null'); sessionStorage.removeItem(this.SIGN_IN); } catch { /* none */ }
+    this.pending = null;
+    if (!pending) return; // not one we started
+    const back = new URLSearchParams(String(url).split('?')[1] || '');
+    const who = pending.key === OD.AUTH_KEY ? OD : TD;
+    try {
+      if (back.get('error')) throw new Error(back.get('error_description') || back.get('error'));
+      if (back.get('state') !== pending.check) throw new Error('The sign-in answer didn\'t match. Try again');
+      await who.token({ grant_type: 'authorization_code', code: back.get('code'), redirect_uri: this.REDIRECT, code_verifier: pending.verifier });
+      who.error = '';
+      toast(who.CONNECTED_NOTE);
+      who.afterSignIn();
+    } catch (e) { who.error = e.message; }
+    render();
+  },
+  // A form POST through Android's networking (CapacitorHttp): {ok, json}.
+  async post(url, form) {
+    const r = await this.plug('CapacitorHttp').request({ url, method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, data: form });
+    let j = r && r.data;
+    if (typeof j === 'string') try { j = JSON.parse(j); } catch { j = {}; }
+    return { ok: !!r && r.status >= 200 && r.status < 300, json: j || {} };
+  },
+
+  // The background check (shell 3): about every 15 minutes, even with Butler closed, Android runs
+  // android-app/www/runners/check.js. It reads the data file's ring list from OneDrive and hands Android any reminder due
+  // in the next ~20 minutes that it doesn't have yet. It can't take one back, so Butler leaves those to it (runnerGave).
+  // `runnerSync` swaps what each side knows: the OneDrive sign-in (the newer wins: either side may have renewed it),
+  // this phone's choice, and the reminders each has given Android.
+  RUNNER: 'app.butler.home.check',
+  lastPlan: [],
+  async runnerSync() {
+    if (!this.on || this.shell < 3) return;
+    const BR = this.plug('BackgroundRunner');
+    if (!BR) return;
+    const given = {};
+    for (const n of this.lastPlan) given[n.key] = n.at;
+    try {
+      const details = { auth: OD.auth(), ring: this.ring(), given, channel: this.CHANNEL };
+      const r = await Promise.race([BR.dispatchEvent({ label: this.RUNNER, event: 'sync', details }), new Promise((ok) => setTimeout(() => ok(null), 3000))]);
+      if (!r || typeof r !== 'object') return;
+      const mine = OD.auth();
+      if (mine && r.auth && r.auth.refresh && (r.auth.got || 0) > (mine.got || 0)) device.set(OD.AUTH_KEY, r.auth); // it renewed the sign-in
+      if (r.gave && typeof r.gave === 'object' && JSON.stringify(r.gave) !== JSON.stringify(this.runnerGave)) {
+        this.runnerGave = r.gave;
+        this.planned = null;
+        this.later();
+      }
+    } catch { /* an app without the background check */ }
+  },
+
   ring() { return this.on && device.get('ring', 'todo') === 'app' ? 'app' : 'todo'; },
   plugin() {
     const c = window.Capacitor;
@@ -9474,24 +9567,21 @@ const Native = {
     return (c.Plugins && c.Plugins.LocalNotifications) || (typeof c.registerPlugin === 'function' ? c.registerPlugin('LocalNotifications') : null);
   },
   // A reminder's number for Android (a 32-bit whole number), the same every time for the same task and reminder.
+  // The background check (android-app/www/runners/check.js) works it out the same way: keep the two identical.
   numId(key) {
     let h = 0;
-    for (const ch of key) h = (Math.imul(h, 31) + ch.codePointAt(0)) | 0;
+    for (let i = 0; i < key.length; i++) h = (Math.imul(h, 31) + key.charCodeAt(i)) | 0;
     return (h & 0x7fffffff) || 1;
   },
-  // Each reminder still to come on a task you're on, soonest first: [{id, at (ms), title, body, task}].
+  // The reminders to hand Android, soonest first: [{key, id, at (ms), title, body, task}]. One the background check
+  // has already given Android for the same time is left to it (Butler can't take those back, so it never doubles them).
   plan(now = Date.now()) {
-    const out = [];
-    for (const t of DB.tasks) {
-      if (t.done || !People.mine(t)) continue;
-      for (const r of t.reminders) {
-        if (r.fired || state.remindedHere.has(`${t.id}:${r.id}`)) continue;
-        const at = Reminders.time(t, r);
-        if (at != null && at > now) out.push({ id: this.numId(`${t.id}:${r.id}`), at, title: fullTitle(t), body: reminderWhen(t), task: t.id });
-      }
-    }
-    return out.sort((a, b) => a.at - b.at).slice(0, this.RING_MAX);
+    return Reminders.ringList(DB.tasks, now, state.remindedHere)
+      .filter((n) => this.runnerGave[n.key] !== n.at)
+      .slice(0, this.RING_MAX)
+      .map((n) => ({ ...n, id: this.numId(n.key) }));
   },
+  runnerGave: {}, // {key: at} the background check gave Android (from its last report)
   // Gives Android the reminders to ring (none when To Do rings them), replacing what it had. One at a time, so two
   // never cross and double up.
   schedule() {
@@ -9509,16 +9599,22 @@ const Native = {
       const old = (pending && pending.notifications) || [];
       if (old.length) await LN.cancel({ notifications: old.map((n) => ({ id: n.id })) });
       if (list.length) {
-        if (!this.channelMade) { // Android's default channel is quiet (no sound, no pop-up); reminders get a loud one
-          await LN.createChannel({ id: this.CHANNEL, name: 'Reminders', description: 'Task reminders from Butler', importance: 5, visibility: 1, vibration: true, ...(this.SOUND ? { sound: this.SOUND } : {}) });
-          if (this.SOUND && LN.deleteChannel) for (const id of this.OLD_CHANNELS) try { await LN.deleteChannel({ id }); } catch { /* never made */ }
-          this.channelMade = true;
-        }
+        await this.channel(LN);
         await LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: this.CHANNEL, ...(this.SOUND ? { sound: this.SOUND } : {}), schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { task: n.task } })) });
       }
       this.planned = sig;
+      this.lastPlan = list;
       this.ringError = '';
-    } catch (e) { this.ringError = (e && e.message) || String(e); }
+    } catch (e) { this.ringError = (e && e.message) || String(e); return; }
+    this.runnerSync(); // the background check learns what Android now has (and this phone's choice)
+  },
+  // Android's default channel is quiet (no sound, no pop-up); reminders get a loud one of their own. Made before the
+  // first reminder, and on opening when the phone rings them, since the background check can't make one.
+  async channel(LN) {
+    if (this.channelMade) return;
+    await LN.createChannel({ id: this.CHANNEL, name: 'Reminders', description: 'Task reminders from Butler', importance: 5, visibility: 1, vibration: true, ...(this.SOUND ? { sound: this.SOUND } : {}) });
+    if (this.SOUND && LN.deleteChannel) for (const id of this.OLD_CHANNELS) try { await LN.deleteChannel({ id }); } catch { /* never made */ }
+    this.channelMade = true;
   },
   // The app shell's version, from the end of its browser name ("ButlerAndroid/2"); the first app said just "ButlerAndroid".
   shell: (() => { const m = /ButlerAndroid(?:\/(\d+))?/.exec(navigator.userAgent); return m ? Number(m[1] || 1) : 0; })(),
@@ -9551,8 +9647,17 @@ const Native = {
   },
   // On opening the app: pressing a reminder opens its task; see whether notifications are allowed; plan.
   start() {
+    if (this.on && this.shell >= 3) { // the sign-in coming back from its Chrome sheet (or having started the app)
+      const App = this.plug('App');
+      try {
+        App.addListener('appUrlOpen', (e) => this.back(e && e.url));
+        Promise.resolve(App.getLaunchUrl()).then((l) => this.back(l && l.url)).catch(() => {});
+      } catch { /* no App plugin */ }
+    }
     const LN = this.plugin();
     if (!this.on || !LN) return;
+    if (this.ring() === 'app') this.channel(LN).catch(() => {});
+    this.runnerSync();
     try {
       LN.addListener('localNotificationActionPerformed', (a) => {
         const id = a && a.notification && a.notification.extra && a.notification.extra.task;
@@ -9590,18 +9695,19 @@ const TD = {
   waitingForFile() { return !!DF.handle && DF.status !== 'ok'; }, // syncing waits until the data file is reconnected or decided
 
   // Microsoft's sign-in page for this sign-in, with a one-off check (PKCE): {url, verifier, check}.
-  async authorizeUrl() {
+  async authorizeUrl(redirect = this.redirectUri()) {
     const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
     const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
     const check = uid();
     const q = new URLSearchParams({
-      client_id: this.CLIENT_ID, response_type: 'code', redirect_uri: this.redirectUri(), scope: this.SCOPE,
+      client_id: this.CLIENT_ID, response_type: 'code', redirect_uri: redirect, scope: this.SCOPE,
       code_challenge: challenge, code_challenge_method: 'S256', state: check, prompt: 'select_account',
     });
     return { url: `${this.AUTH}/authorize?${q}`, verifier, check };
   },
   async signIn() {
-    if (Native.on) { // the Android app: in this same window (see Native)
+    if (Native.on && Native.shell >= 3) return Native.signInVia(this); // the Android app: a Chrome sheet, an app sign-in
+    if (Native.on) { // the first Android apps: in this same window (see Native)
       const a = await this.authorizeUrl();
       sessionStorage.setItem(Native.SIGN_IN, JSON.stringify({ key: this.AUTH_KEY, verifier: a.verifier, check: a.check }));
       Native.go(a.url);
@@ -9657,16 +9763,23 @@ const TD = {
     });
   },
   async token(params) {
-    const res = await fetch(`${this.AUTH}/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: this.CLIENT_ID, scope: this.SCOPE, ...params }).toString(),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split('\n')[0] : 'Microsoft sign-in failed');
+    const form = { client_id: this.CLIENT_ID, scope: this.SCOPE, ...params };
     const old = this.auth() || {};
-    // scope: what Microsoft granted (e.g. whether the phone's sign-in includes To Do)
-    device.set(this.AUTH_KEY, { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '', scope: j.scope || old.scope || '' });
+    // An app sign-in (Native.REDIRECT) is renewed through Android's networking for as long as it lasts.
+    const viaApp = Native.on && (params.redirect_uri === Native.REDIRECT || (params.grant_type === 'refresh_token' && !!old.native));
+    let ok = false;
+    let j = {};
+    if (viaApp) ({ ok, json: j } = await Native.post(`${this.AUTH}/token`, form));
+    else {
+      const res = await fetch(`${this.AUTH}/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(form).toString() });
+      ok = res.ok;
+      j = await res.json().catch(() => ({}));
+    }
+    if (!ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split('\n')[0] : 'Microsoft sign-in failed');
+    // scope: what Microsoft granted (e.g. whether the phone's sign-in includes To Do); got: when, so the newer of two
+    // copies wins (the Android app's background check renews it too)
+    device.set(this.AUTH_KEY, { access: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, refresh: j.refresh_token || old.refresh || '', scope: j.scope || old.scope || '', got: Date.now(), ...(viaApp ? { native: true } : {}) });
+    if (this.AUTH_KEY === OD.AUTH_KEY) Native.runnerSync();
   },
   async accessToken() {
     const a = this.auth();
@@ -10186,7 +10299,7 @@ const OD = Object.assign(Object.create(TD), {
       for (let tries = 0; tries < 3; tries++) {
         const edits = this.edits;
         Stamps.touch(RECORD_KEYS);
-        const payload = { app: 'PA App', version: 2, saveToken: uid(), savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() };
+        const payload = { app: 'PA App', version: 2, saveToken: uid(), savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll(), ring: Reminders.ringList(DB.tasks) };
         try {
           const saved = await this.graph('PUT', `/me/drive/items/${this.item.id}/content`, payload, { 'If-Match': this.item.eTag });
           this.item = { ...this.item, eTag: saved.eTag };
@@ -10354,6 +10467,7 @@ const OD = Object.assign(Object.create(TD), {
   disconnect() {
     device.remove(this.AUTH_KEY);
     this.empty = false;
+    Native.runnerSync(); // the background check signs out too
     toast('Signed out of OneDrive. The last copy stays on this phone');
     render();
   },
