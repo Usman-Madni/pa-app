@@ -384,7 +384,15 @@ button:disabled { cursor: not-allowed; }
   .tabs-extra { margin-left: 0; }
 }
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
-.split-row .field { margin: 0; }
+.split-row .field, .modal .split-row .field, .modal .bu-row .field { margin: 0; min-width: 0; } /* beats .modal .field's 130px */
+.split-row .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.bu-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; align-items: end; }
+.bu-row.bu-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+.bu-row .field { margin: 0; min-width: 0; }
+.bu-row .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.bu-what { display: flex; align-items: flex-start; gap: 6px; padding-bottom: 10px; }
+.bu-what .meta { display: block; }
+@media (max-width: 520px) { .bu-row.bu-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .bu-row.bu-new .bu-item { grid-column: 1 / -1; order: -1; } }
 .split-car { display: flex; align-items: center; gap: 4px; padding-bottom: 10px; }
 @media (max-width: 520px) { .split-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } .split-car { grid-column: 1 / -1; padding: 0; } }
 .file-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; vertical-align: middle; }
@@ -2973,7 +2981,7 @@ const SCHEMA = {
     ['period', 'Period', 'text', false], ['split', 'Split by what it fuels', 'list'], ['task', 'Task', 'ref:tasks', false], ['note', 'Note', 'text'], ['attachments', 'Files', 'list']] },
   upkeep: { label: 'Upkeep log', kind: 'entry', open: 'upkeep', fields: [
     ['date', 'Date', 'date'], ['asset', 'For', 'ref:assets'], ['type', 'Type', 'text'], ['item', 'Item', 'text'], ['cost', 'Cost', 'money'], ['vendor', 'Vendor', 'text'], ['km', 'Km', 'num'],
-    ['qty', 'How many', 'num', false], ['notes', 'Notes', 'text', false], ['attachments', 'Files', 'list'], ['imported', 'Imported', 'bool', false], ['created', 'Added', 'ms', false]] },
+    ['qty', 'How many', 'num', false], ['notes', 'Notes', 'text', false], ['attachments', 'Files', 'list'], ['bill', 'On the fuel bill', 'ref:bills', false], ['imported', 'Imported', 'bool', false], ['created', 'Added', 'ms', false]] },
   rates: { label: 'Rates', kind: 'entry', open: 'rates', fields: [['date', 'Date', 'date'], ['gold', 'Gold a tola', 'obj'], ['silver', 'Silver a tola', 'money'], ['fx', 'Currencies', 'obj'], ['auto', 'Filled in by Butler', 'bool']] },
   zakat: { label: 'Zakat years', kind: 'entry', open: 'zakat-record', fields: [
     ['person', 'Whose', 'ref:people'], ['hyear', 'Islamic year', 'num'], ['date', 'Zakat day', 'date'], ['status', 'Status', 'text'], ['total', 'Counted', 'money'], ['nisab', 'Nisab', 'money'], ['due', 'Due', 'money'],
@@ -7011,7 +7019,7 @@ function vehicleLog(shown, car, picker) {
     total: (r) => Number(r.e.cost) || 0,
     row: (r) => `<li class="item"><span class="tl-mark" title="${esc(Upkeep.type(r.e.type).name)}">${ic(Upkeep.type(r.e.type).icon)}</span>
       <div class="body clickable" data-action="upkeep-entry" data-id="${esc(r.e.id)}"><div class="title">${esc(r.e.item)}${shown.length > 1 ? ` <span class="meta">${esc(r.car)}</span>` : ''}</div>
-      <div class="meta"><span>${esc(fmtDate(r.e.date))}</span>${r.e.km ? `<span>${fmtKm(r.e.km)}</span>` : ''}${r.e.vendor ? `<span>${esc(r.e.vendor)}</span>` : ''}${(r.e.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${r.e.attachments.length}</span>` : ''}</div></div>
+      <div class="meta"><span>${esc(fmtDate(r.e.date))}</span>${r.e.km ? `<span>${fmtKm(r.e.km)}</span>` : ''}${r.e.vendor ? `<span>${esc(r.e.vendor)}</span>` : ''}${Utilities.onBill(r.e) ? `<span>${ic('receipt', 'sm')}On the fuel bill (${esc(Utilities.onBill(r.e).period)})</span>` : ''}${(r.e.attachments || []).length ? `<span>${ic('paperclip', 'sm')}${r.e.attachments.length}</span>` : ''}</div></div>
       <span class="asset-value">${r.e.cost ? rupees(r.e.cost) : ''}</span></li>`,
     empty: 'Nothing logged yet',
   });
@@ -7565,6 +7573,29 @@ const Utilities = {
   // Besides cars, what a fuel connection fuels ("Generator"): names only, `c.fuels`; a bill's split line for one is
   // {what, amount, litres} where a car's is {car, amount, litres, km}.
   fuels(c) { return (c.fuels || []).filter(Boolean); },
+  // Upkeep on a fuel bill (25 Nov): the pump's statement often carries an oil change or a wash too, whose cost is only
+  // known then. What the bill offers for its month and the month before, for the pump's cars: entries already on it,
+  // logged entries with no cost and on no bill, and jobs ticked but not logged (Upkeep.unlogged). Each {key, a, item,
+  // date, cost, e (the entry) or job}. A cost typed puts it on the bill: the entry gets `bill` (the bill's id).
+  billUpkeep(c, b, month) {
+    if (!this.isFuel(c) || !month) return [];
+    const cars = (c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean);
+    const ids = new Set(cars.map((a) => a.id));
+    const from = ymAdd(month, -1);
+    const near = (d) => { const m = ymOf(d || todayISO()); return m >= from && m <= month; };
+    const out = [];
+    const carOf = (id) => DB.assets.find((a) => a.id === id);
+    for (const e of DB.upkeep) {
+      const on = b && e.bill === b.id;
+      if (on || (ids.has(e.asset) && !this.onBill(e) && !(Number(e.cost) > 0) && near(e.date))) out.push({ key: e.id, a: carOf(e.asset), item: e.item, date: e.date, cost: Number(e.cost) || 0, e });
+    }
+    for (const u of Upkeep.unlogged(cars)) if (near(u.date)) out.push({ key: `t-${u.t.id}`, a: u.a, item: u.p.item, date: u.date, cost: 0, job: u });
+    return out.filter((x) => x.a).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  },
+  // The bill an entry is on, if that bill is still there (a bill in the Bin isn't).
+  onBill(e) { return (e.bill && DB.bills.find((b) => b.id === e.bill)) || null; },
+  upkeepOn(b) { return b && b.id ? DB.upkeep.filter((e) => e.bill === b.id) : []; },
+  upkeepSum(b) { return this.upkeepOn(b).reduce((t, e) => t + (Number(e.cost) || 0), 0); },
   // A fuel connection's year by what it fuels: each car and each named thing with its amount and litres (in the order
   // set up, then any no longer listed), and "Not split" for what the bills' totals hold beyond their split lines.
   fuelParts(c, year = new Date().getFullYear()) {
@@ -7573,8 +7604,11 @@ const Utilities = {
     for (const id of c.cars || []) { const a = DB.assets.find((x) => x.id === id); if (a) put(id, a.name); }
     for (const w of this.fuels(c)) put('w:' + w.toLowerCase(), w);
     let rest = 0;
+    let upkeep = 0;
     for (const b of this.bills(c).filter((x) => Number(this.monthOf(x).slice(0, 4)) === year)) {
-      let inSplit = 0;
+      const up = this.upkeepSum(b);
+      upkeep += up;
+      let inSplit = up;
       for (const x of b.split || []) {
         const p = x.car ? put(x.car, DB.assets.find((a) => a.id === x.car)?.name || 'A removed car') : put('w:' + String(x.what || '').toLowerCase(), x.what || 'Other');
         p.amount += Number(x.amount) || 0;
@@ -7584,6 +7618,7 @@ const Utilities = {
       rest += Math.max(0, (Number(b.amount) || 0) - inSplit);
     }
     const out = [...parts.values()].filter((p) => p.amount || p.litres);
+    if (upkeep) out.push({ label: 'Upkeep', car: false, upkeep: true, amount: upkeep, litres: 0 });
     if (out.length && rest) out.push({ label: 'Not split', car: false, amount: rest, litres: 0, rest: true });
     return out;
   },
@@ -7663,7 +7698,8 @@ const Utilities = {
     const amount = Number(b.amount) || 0;
     const credit = Number(b.credit) || 0;
     const eff = amount - credit;
-    return { units, amount, credit, eff, rate: units ? amount / units : null, effRate: units ? eff / units : null };
+    const up = this.upkeepSum(b); // upkeep on a fuel bill isn't fuel: the price a litre leaves it out
+    return { units, amount, credit, eff, upkeep: up, rate: units ? (amount - up) / units : null, effRate: units ? (eff - up) / units : null };
   }, // the month a bill is for (bills from before: the month paid)
   bills(c) { return DB.bills.filter((b) => b.utility === c.id).sort((a, b) => this.monthOf(b).localeCompare(this.monthOf(a)) || (b.date || '').localeCompare(a.date || '')); },
   addBill(data) {
@@ -7682,7 +7718,7 @@ const Utilities = {
   // had a bill.
   over(cs, year, upto = 12) {
     const bs = this.billsFor(cs).filter((b) => year === 'all' || (Number(this.monthOf(b).slice(0, 4)) === year && Number(this.monthOf(b).slice(5, 7)) <= upto));
-    const t = bs.reduce((a, b) => { const x = this.figures(b); return { eff: a.eff + x.eff, amount: a.amount + x.amount, credit: a.credit + x.credit, units: a.units + x.units }; }, { eff: 0, amount: 0, credit: 0, units: 0 });
+    const t = bs.reduce((a, b) => { const x = this.figures(b); return { eff: a.eff + x.eff, amount: a.amount + x.amount, credit: a.credit + x.credit, units: a.units + x.units, upkeep: a.upkeep + x.upkeep }; }, { eff: 0, amount: 0, credit: 0, units: 0, upkeep: 0 });
     t.months = new Set(bs.map((b) => this.monthOf(b))).size;
     return t;
   },
@@ -7839,10 +7875,23 @@ function utilityCard(c) {
       <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn inline-link" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `<span>due ${esc(fmtDate(t.due))}</span>` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
       <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}</div>
-      ${Utilities.isFuel(c) && Utilities.fuelParts(c, y).length ? `<div class="meta fuel-parts" data-fuel-parts><b>This year:</b> ${Utilities.fuelParts(c, y).map((p) => `<span>${ic(p.rest ? 'receipt' : p.car ? 'car' : 'bolt', 'sm')} ${esc(p.label)} ${rupees(p.amount)}${p.litres ? ` · ${p.litres.toLocaleString('en-IN')} L` : ''}</span>`).join('')}</div>` : ''}
+      ${Utilities.isFuel(c) && Utilities.fuelParts(c, y).length ? `<div class="meta fuel-parts" data-fuel-parts><b>This year:</b> ${Utilities.fuelParts(c, y).map((p) => `<span>${ic(p.rest ? 'receipt' : p.upkeep ? 'tool' : p.car ? 'car' : 'bolt', 'sm')} ${esc(p.label)} ${rupees(p.amount)}${p.litres ? ` · ${p.litres.toLocaleString('en-IN')} L` : ''}</span>`).join('')}</div>` : ''}
       <div class="value-history">${billsTable(c, 6)}</div>
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
+}
+// A fuel bill's "Upkeep on this bill": the cars' upkeep with no cost yet (logged, or ticked and not logged) from the
+// bill's month and the one before, and what's already on it, each with a Cost; and one row for something else (a wash).
+function billUpkeepBox(c, b, month) {
+  const cars = (c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter((a) => a && (!a.closed || a.closed >= `${month}-01`));
+  if (!cars.length) return '';
+  const list = Utilities.billUpkeep(c, b, month);
+  const items = [...new Set(cars.flatMap((a) => [...(a.plan || []).map((p) => p.item), ...Upkeep.used('item', a.id)]))];
+  return `<fieldset class="owner-box" data-bill-upkeep><legend>Upkeep on this bill <span class="meta">(optional: what each cost)</span></legend>
+    ${list.map((x) => `<div class="bu-row"><span class="bu-what">${ic('tool', 'sm')}<span>${esc(x.item)}<span class="meta">${esc(x.a.name)}, ${esc(shortDate(x.date))}${x.job ? ', ticked, not logged' : ''}</span></span></span><label class="field">Cost<input class="input" ${amountAttrs(x.cost || '')} name="bu-${esc(x.key)}-cost"></label></div>`).join('')}
+    ${list.length ? '<p class="meta" style="margin:4px 0 0">Something else on the bill (a wash, say):</p>' : ''}
+    <div class="bu-row bu-new"><label class="field">Car<select class="input" name="bu-new-car">${cars.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></label><label class="field bu-item">Item<input class="input" name="bu-new-item" list="bu-items" maxlength="80" placeholder="e.g. Car wash"><datalist id="bu-items">${items.slice(0, 60).map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label><label class="field">Cost<input class="input" ${amountAttrs('')} name="bu-new-cost"></label></div>
+    <p class="meta" style="margin:0">${list.length ? 'Listed: upkeep from this month and the one before with no cost yet. ' : ''}A cost puts it on this bill and in the car's upkeep log; jobs ticked but not logged are logged. Left empty above, the bill adds these in.</p></fieldset>`;
 }
 // The bill pop-up's worked-out line: rate, effective bill, effective rate (as you type).
 function billFiguresText(c, v) {
@@ -7861,7 +7910,7 @@ function billsTable(c, limit = 0) {
   const credit = all.some((b) => Number(b.credit));
   return `<div class="ledger-wrap"><table class="ledger bills"><thead><tr><th>Month</th>${u ? `<th>${esc(u)}</th>` : ''}<th>Bill</th>${credit ? `<th>${esc(Utilities.creditLabel(c.type).replace(' credit', ''))}</th>` : ''}${u ? '<th>Rate</th>' : ''}${credit ? `<th>Effective bill</th>${u ? '<th>Effective rate</th>' : ''}` : ''}<th>Paid on</th></tr></thead><tbody>
     ${bills.map((b) => { const x = Utilities.figures(b); return `<tr data-action="asset-form" data-form-type="bill" data-id="${esc(b.id)}"><td>${esc(ymLabel(Utilities.monthOf(b)))}${Utilities.billFiles(b).length ? ` ${ic('paperclip', 'sm')}` : ''}</td>${u ? `<td>${x.units ? x.units.toLocaleString('en-IN') : ''}</td>` : ''}<td>${rupees(x.amount)}</td>${credit ? `<td>${x.credit ? rupees(x.credit) : ''}</td>` : ''}${u ? `<td>${perUnit(x.rate)}</td>` : ''}${credit ? `<td>${rupees(x.eff)}</td>${u ? `<td>${perUnit(x.effRate)}</td>` : ''}` : ''}<td>${b.date ? esc(shortDate(b.date)) : '<span class="pill zk-left">Unpaid</span>'}</td></tr>`; }).join('')}
-    </tbody>${limit && all.length > limit ? '' : (() => { const t = bills.map((b) => Utilities.figures(b)).reduce((a, x) => ({ units: a.units + x.units, amount: a.amount + x.amount, credit: a.credit + x.credit, eff: a.eff + x.eff }), { units: 0, amount: 0, credit: 0, eff: 0 }); return `<tfoot><tr><td>Total</td>${u ? `<td>${t.units.toLocaleString('en-IN')}</td>` : ''}<td>${rupees(t.amount)}</td>${credit ? `<td>${rupees(t.credit)}</td>` : ''}${u ? `<td>${t.units ? perUnit(t.amount / t.units) : ''}</td>` : ''}${credit ? `<td>${rupees(t.eff)}</td>${u ? `<td>${t.units ? perUnit(t.eff / t.units) : ''}</td>` : ''}` : ''}<td></td></tr></tfoot>`; })()}</table></div>${limit && all.length > limit ? `<button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">All ${all.length} bills</button>` : ''}`;
+    </tbody>${limit && all.length > limit ? '' : (() => { const t = bills.map((b) => Utilities.figures(b)).reduce((a, x) => ({ units: a.units + x.units, amount: a.amount + x.amount, credit: a.credit + x.credit, eff: a.eff + x.eff, upkeep: a.upkeep + x.upkeep }), { units: 0, amount: 0, credit: 0, eff: 0, upkeep: 0 }); return `<tfoot><tr><td>Total</td>${u ? `<td>${t.units.toLocaleString('en-IN')}</td>` : ''}<td>${rupees(t.amount)}</td>${credit ? `<td>${rupees(t.credit)}</td>` : ''}${u ? `<td>${t.units ? perUnit((t.amount - t.upkeep) / t.units) : ''}</td>` : ''}${credit ? `<td>${rupees(t.eff)}</td>${u ? `<td>${t.units ? perUnit((t.eff - t.upkeep) / t.units) : ''}</td>` : ''}` : ''}<td></td></tr></tfoot>`; })()}</table></div>${limit && all.length > limit ? `<button type="button" class="link-btn" data-action="asset-form" data-form-type="utility" data-id="${esc(c.id)}">All ${all.length} bills</button>` : ''}`;
 }
 // Across the top of a connection's sheet: what it cost, and what you can do.
 function utilityTop(c) {
@@ -7927,7 +7976,7 @@ function sparkline(values) {
 function utilColumns(type) {
   const u = Utilities.unitsLabel(type);
   const cols = [];
-  if (u) cols.push({ head: u, val: (x) => (x.units ? x.units.toLocaleString('en-IN') : '–') }, { head: u === 'Litres' ? 'Price a litre' : 'Rate', val: (x) => (x.units ? perUnit(x.eff / x.units) : '–') });
+  if (u) cols.push({ head: u, val: (x) => (x.units ? x.units.toLocaleString('en-IN') : '–') }, { head: u === 'Litres' ? 'Price a litre' : 'Rate', val: (x) => (x.units ? perUnit((x.eff - (x.upkeep || 0)) / x.units) : '–') });
   if (sameName(type, 'Electricity')) cols.push({ head: 'Net metering', val: (x) => (x.credit ? rupees(x.credit) : '–') });
   return cols;
 }
@@ -8471,7 +8520,7 @@ function upkeepBlock(a) {
       ${car ? `<p class="meta" style="margin:0">${km ? `Latest reading ${fmtKm(km)}${Upkeep.kmPerDay(a) ? `, about ${fmtKm(Upkeep.kmPerDay(a) * 30)} a month` : ''}` : 'No reading yet'}</p>` : ''}
       ${planBlock(a)}
       ${log.length ? `<div class="row upkeep-filter"><select class="input" data-upkeep-filter aria-label="Show which"><option value="">All ${log.length} ${log.length === 1 ? 'entry' : 'entries'}</option>${UPKEEP_TYPES.filter((t) => log.some((e) => e.type === t.id)).map((t) => `<option value="${t.id}" ${filter === t.id ? 'selected' : ''}>${esc(t.name)} (${log.filter((e) => e.type === t.id).length})</option>`).join('')}</select></div>
-        <div class="upkeep-log">${shown.map((e) => `<button type="button" class="upkeep-row" data-action="upkeep-entry" data-id="${esc(e.id)}"><span class="ur-ico" title="${esc(Upkeep.type(e.type).name)}">${ic(Upkeep.type(e.type).icon, 'sm')}</span><span class="ur-main"><span>${esc(e.item)}</span><span class="meta">${esc(fmtDate(e.date))}${e.km ? `, ${fmtKm(e.km)}` : ''}${e.vendor ? `, ${esc(e.vendor)}` : ''}${(e.attachments || []).length ? ` ${ic('paperclip', 'sm')}` : ''}</span></span><span class="ur-cost">${e.cost ? rupees(e.cost) : ''}</span></button>`).join('')}</div>` : ''}
+        <div class="upkeep-log">${shown.map((e) => `<button type="button" class="upkeep-row" data-action="upkeep-entry" data-id="${esc(e.id)}"><span class="ur-ico" title="${esc(Upkeep.type(e.type).name)}">${ic(Upkeep.type(e.type).icon, 'sm')}</span><span class="ur-main"><span>${esc(e.item)}</span><span class="meta">${esc(fmtDate(e.date))}${e.km ? `, ${fmtKm(e.km)}` : ''}${e.vendor ? `, ${esc(e.vendor)}` : ''}${Utilities.onBill(e) ? `, on the fuel bill (${esc(Utilities.onBill(e).period)})` : ''}${(e.attachments || []).length ? ` ${ic('paperclip', 'sm')}` : ''}</span></span><span class="ur-cost">${e.cost ? rupees(e.cost) : ''}</span></button>`).join('')}</div>` : ''}
       <div class="row edit-only">
         <button type="button" class="btn small" data-action="upkeep-entry" data-asset="${esc(a.id)}">${ic('plus', 'sm')}Add entry</button>
         ${car ? `<button type="button" class="btn small" data-action="asset-form" data-form-type="reading" data-asset="${esc(a.id)}">${ic('gauge', 'sm')}Update reading</button>` : ''}
@@ -8700,6 +8749,7 @@ function drawAssetForm() {
         <label class="field">${esc(Utilities.creditLabel(c.type))}<input class="input" ${amountAttrs(v.credit || '')} name="credit"></label>
       </div>
       ${Utilities.isFuel(c) && ((c.cars || []).length || Utilities.fuels(c).length) ? `<fieldset class="owner-box" data-fuel-split><legend>${Utilities.fuels(c).length ? 'By what it fuels' : 'By car'} <span class="meta">(optional, as the pump's statement shows it)</span></legend>${(c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean).map((a) => { const x = (v.split || []).find((y) => y.car === a.id) || {}; return `<div class="split-row"><span class="split-car">${ic('car', 'sm')} ${esc(a.name)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="split-${esc(a.id)}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="split-${esc(a.id)}-litres"></label><label class="field">Reading (km)<input class="input" ${amountAttrs(x.km || '')} name="split-${esc(a.id)}-km"></label></div>`; }).join('')}${Utilities.fuels(c).map((w, i) => { const x = (v.split || []).find((y) => y.what && sameName(y.what, w)) || {}; return `<div class="split-row"><span class="split-car">${ic('bolt', 'sm')} ${esc(w)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="also-${i}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="also-${i}-litres"></label></div>`; }).join('')}<p class="meta" style="margin:0">Left empty above, the bill and litres are these added up.</p></fieldset>` : ''}
+      ${Utilities.isFuel(c) ? billUpkeepBox(c, b, v.month) : ''}
       <div class="meta bill-figures" aria-live="polite">${billFiguresText(c, v)}</div>
       <label class="field">Paid on <span class="meta">(leave empty if it isn't paid yet)</span><input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
@@ -8761,6 +8811,7 @@ function drawAssetForm() {
       ${inStore && !e ? '<p class="meta" style="margin:0">Supplies bought for the cars and kept until used (oil, filters, wipers). Use on a car moves them into its log at what they cost.</p>' : ''}
       ${choosing ? `<label class="field">Vehicle<select class="input" name="asset">${vehicles().map((x) => `<option value="${esc(x.id)}" ${x === a ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
       ${f.fromTask ? `<p class="banner" style="margin:0">Done? Fill in what it cost${Upkeep.vehicle(a) ? ' and the reading' : ''}; the next one counts from here.</p>` : ''}
+      ${e && Utilities.onBill(e) ? `<p class="meta" style="margin:0" data-on-bill>${ic('receipt', 'sm')} On the fuel bill for ${esc(Utilities.onBill(e).period)}: <button type="button" class="link-btn inline-link" data-action="asset-form" data-form-type="bill" data-id="${esc(e.bill)}">open the bill</button> (its scan is kept there)</p>` : ''}
       <div class="row">
         <label class="field">Date<input class="input" type="date" name="date" value="${esc(v.date)}" required></label>
         ${inStore ? `<label class="field">How many<input class="input" type="number" min="1" step="any" name="qty" value="${esc(v.qty || 1)}"></label>` : ''}
@@ -9344,14 +9395,36 @@ function submitAssetForm(type, data) {
       ...(bc ? Utilities.fuels(bc) : []).map((what, i) => ({ what, amount: Number(data[`also-${i}-amount`]) || 0, litres: Number(data[`also-${i}-litres`]) || 0 })),
       ...(b?.split || []).filter((x) => x.what && !Utilities.fuels(bc || {}).some((w) => sameName(w, x.what))), // no longer listed: kept as it was
     ].filter((x) => x.amount || x.litres || x.km);
-    if (!data.amount && split.length) { data.amount = split.reduce((t, x) => t + x.amount, 0); if (!data.units) data.units = split.reduce((t, x) => t + x.litres, 0); }
-    if (!b && (data.amount === '' || data.amount == null || data.amount === 0)) { closeAssetForm(); return; } // skipped
     const month = data.month || ymOf(data.date || todayISO());
+    // Upkeep on a fuel bill: a cost typed puts that item on the bill (what was offered when the pop-up opened, by the
+    // month it showed), plus one more typed in the Something else row
+    const shownMonth = b ? Utilities.monthOf(b) : month;
+    const ups = bc ? Utilities.billUpkeep(bc, b, shownMonth).map((u) => ({ u, cost: Number(data[`bu-${u.key}-cost`]) || 0 })) : [];
+    const newCar = bc && (bc.cars || []).includes(data['bu-new-car']) && DB.assets.find((a) => a.id === data['bu-new-car']);
+    const extra = newCar && (data['bu-new-item'] || '').trim() && Number(data['bu-new-cost']) > 0 ? { a: newCar, item: data['bu-new-item'].trim(), cost: Number(data['bu-new-cost']) } : null;
+    const upSum = ups.reduce((t, x) => t + x.cost, 0) + (extra ? extra.cost : 0);
+    if (!data.amount && (split.length || upSum)) { data.amount = split.reduce((t, x) => t + x.amount, 0) + upSum; if (!data.units) data.units = split.reduce((t, x) => t + x.litres, 0); }
+    if (!b && (data.amount === '' || data.amount == null || data.amount === 0)) { closeAssetForm(); return; } // skipped
     const fields = { split, amount: Number(data.amount) || 0, units: Number(data.units) || 0, credit: Number(data.credit) || 0, date: data.date || '', month, period: ymLabel(month), note: (data.note || '').trim() };
     const pending = [...($('#modal [data-pending-files]')?.files || [])];
     let saved = b;
     if (b) Object.assign(b, fields); else saved = Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
+    if (ups.length || extra) {
+      const when = fields.date || todayISO();
+      const vendor = bc.provider || bc.name;
+      for (const { u, cost } of ups) {
+        if (u.e) { // logged: the cost from the bill, or off the bill again when emptied
+          if (cost) { u.e.cost = cost; u.e.bill = saved.id; } else if (u.e.bill === saved.id) { u.e.cost = 0; delete u.e.bill; }
+        } else if (cost) { // ticked, not logged: logged now, on the day it was ticked
+          const e = Upkeep.add({ asset: u.a.id, date: u.date, type: 'service', item: u.item, cost, vendor: Upkeep.lastVendor(u.a, u.job.p) || vendor });
+          e.bill = saved.id;
+        }
+      }
+      if (extra) { const e = Upkeep.add({ asset: extra.a.id, date: when, type: (extra.a.plan || []).some((p) => Upkeep.same(p.item, extra.item)) ? 'service' : 'other', item: extra.item, cost: extra.cost, vendor }); e.bill = saved.id; }
+      changed('upkeep');
+      upkeepTasks(); // a job logged here starts its next round
+    }
     for (const x of split) { const car = DB.assets.find((a) => a.id === x.car); if (car && x.km) { Upkeep.addReading(car, fields.date || todayISO(), x.km); changed('assets'); } } // the reading counts for the car too
     const stay = () => { if (state.assetForm && state.assetForm.type === 'bill' && state.assetForm.id === saved.id) renderAssetForm(); };
     if (pending.length) Utilities.addBillFiles(saved, pending).then((made) => { if (made.length) toast(`Kept ${plural(made.length, 'file')} with the bill`); stay(); render(); });
