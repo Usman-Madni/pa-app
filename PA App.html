@@ -2877,14 +2877,18 @@ function answerAsk(yes) {
 // ===================== Per-device settings =====================
 // Things that belong to this browser only (theme, open screen, save bookkeeping). They never go
 // into the data file or backups, otherwise one computer's flags would overwrite another's.
+// The widgets' hidden refresh (the Android app from shell 6, Hidden below): Butler opened by Android with no screen,
+// sharing the app's own storage. It may renew a sign-in (…Auth) but must change nothing else the app keeps.
+const HIDDEN = !!window.ButlerHidden && new URLSearchParams(location.search).has('widgets');
 const device = {
   get(key, fallback) {
     try { const v = localStorage.getItem('dev_' + key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
   },
   set(key, value) {
+    if (HIDDEN && !/Auth$/.test(key)) return;
     try { localStorage.setItem('dev_' + key, JSON.stringify(value)); } catch { /* private mode: settings just won't stick */ }
   },
-  remove(key) { try { localStorage.removeItem('dev_' + key); } catch { /* ignore */ } },
+  remove(key) { if (HIDDEN) return; try { localStorage.removeItem('dev_' + key); } catch { /* ignore */ } },
 };
 const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Computer');
 
@@ -9696,8 +9700,9 @@ const Native = {
     } catch (e) { who.error = e.message; }
     render();
   },
-  // A form POST through Android's networking (CapacitorHttp): {ok, json}.
+  // A form POST through Android's networking (CapacitorHttp; in the hidden refresh, its own bridge): {ok, json}.
   async post(url, form) {
+    if (HIDDEN) return Hidden.post(url, form);
     const r = await this.plug('CapacitorHttp').request({ url, method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, data: form });
     let j = r && r.data;
     if (typeof j === 'string') try { j = JSON.parse(j); } catch { j = {}; }
@@ -9789,15 +9794,18 @@ const Native = {
     }
     return out;
   },
+  widgetData() {
+    return JSON.stringify({
+      day: toISO(new Date()), myDay: this.widgetRows(), lists: this.listRows(),
+      buckets: [...DB.buckets].sort((a, b) => a.order - b.order).map((b) => ({ id: b.id, name: b.name })),
+    });
+  },
   widgetsSent: '',
   async widgets() {
     if (!this.on || this.shell < 5) return;
     const W = this.plug('ButlerWidgets');
     if (!W) return;
-    const json = JSON.stringify({
-      day: toISO(new Date()), myDay: this.widgetRows(), lists: this.listRows(),
-      buckets: [...DB.buckets].sort((a, b) => a.order - b.order).map((b) => ({ id: b.id, name: b.name })),
-    });
+    const json = this.widgetData();
     if (json === this.widgetsSent) return;
     try { await W.update({ data: json }); this.widgetsSent = json; } catch { /* sent again next time */ }
   },
@@ -9927,6 +9935,39 @@ const Native = {
   },
 };
 
+// The widgets' hidden refresh (shell 6): the widgets' ↻, and about every 15 minutes, Android opens this page with no
+// screen (?readonly&widgets, android-app/native/HiddenRefresh.java), with window.ButlerHidden as its link back. It
+// reads the latest from OneDrive as the phone does on opening, works the rows out with the same code as the app
+// (Native.widgetData: todayPlan for My Day, so no drift), hands them over and is closed. It's read-only and changes
+// nothing the app keeps (device.set), only renewing the sign-in, through Android's networking like the app does.
+const Hidden = {
+  async run() {
+    const B = window.ButlerHidden;
+    try {
+      if (OD.connected() && !OD.needsSignIn()) await OD.open();
+      if (OD.item) B.update(Native.widgetData()); // only the latest: a failed read leaves the widgets as they were
+    } catch { /* the widgets keep what they had */ } finally { B.done(); }
+  },
+  calls: {},
+  n: 0,
+  post(url, form) {
+    return new Promise((ok) => {
+      const id = String(++this.n);
+      this.calls[id] = ok;
+      window.ButlerHidden.post(id, url, new URLSearchParams(form).toString());
+    });
+  },
+  // Android's answer to a post: called by HiddenRefresh.java.
+  posted(id, status, body) {
+    const ok = this.calls[id];
+    delete this.calls[id];
+    let json = {};
+    try { json = JSON.parse(body) || {}; } catch { /* not JSON */ }
+    if (ok) ok({ ok: status >= 200 && status < 300, json });
+  },
+};
+window.Hidden = Hidden;
+
 const TD = {
   CLIENT_ID: '011c6ecd-2984-4293-a6be-c83ebba20855', // not a secret; only works from the addresses registered in Azure
   AUTH: 'https://login.microsoftonline.com/consumers/oauth2/v2.0',
@@ -10024,7 +10065,7 @@ const TD = {
     const form = { client_id: this.CLIENT_ID, scope: this.SCOPE, ...params };
     const old = this.auth() || {};
     // An app sign-in (Native.REDIRECT) is renewed through Android's networking for as long as it lasts.
-    const viaApp = Native.on && (params.redirect_uri === Native.REDIRECT || (params.grant_type === 'refresh_token' && !!old.native));
+    const viaApp = (Native.on || HIDDEN) && (params.redirect_uri === Native.REDIRECT || (params.grant_type === 'refresh_token' && !!old.native));
     let ok = false;
     let j = {};
     if (viaApp) ({ ok, json: j } = await Native.post(`${this.AUTH}/token`, form));
@@ -12094,9 +12135,10 @@ else {
   autoRates(); // today's world prices, if no rate is typed yet
   ButlerTasks.placeOld(); // tasks made before they had a bucket go in it
   // The offline copy (sw.js), where the browser allows one: the live site, or this computer's test server.
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { /* opens online only */ });
+  if (!HIDDEN && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { /* opens online only */ });
   render();
-  if (state.phone) {
+  if (HIDDEN) Hidden.run(); // the widgets' hidden refresh: read, hand over the rows, done
+  else if (state.phone) {
     // Signed in to OneDrive: read the latest on opening, and again on coming back to it (at most once a minute).
     OD.open();
     // A phone's date or time picker hides the page for a moment; reading then would redraw the box being picked and
@@ -12109,8 +12151,7 @@ else {
   // To Do waits until the data file has loaded, so it never works from an out-of-date copy.
   Promise.resolve(DF.init()).finally(() => TD.sync());
   AT.init();
-  checkReminders();
-  setInterval(checkReminders, 20000);
+  if (!HIDDEN) { checkReminders(); setInterval(checkReminders, 20000); } // (no screen: nothing to remind on)
   setInterval(() => { zakatTasks(); vaultTasks(); upkeepTasks(); rentalTasks(); autoRates(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);

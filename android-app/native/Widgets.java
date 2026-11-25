@@ -1,4 +1,4 @@
-// Butler's home-screen widgets (round 5): My Day and One list. They only DRAW the rows Butler's page sends
+// Butler's home-screen widgets (round 5; refresh, round 6): My Day and One list. They only DRAW the rows Butler's page sends
 // (Native.widgets in PA App.html: My Day's rows come from todayPlan, the My Day page's own code), so the widget and
 // the app never drift apart. Never sort, filter or date tasks here.
 // Stored in SharedPreferences "butler_widgets": data = {day, myDay: [rows], lists: {bucket id: {name, rows}},
@@ -29,7 +29,28 @@ public final class Widgets {
 
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE); }
 
-    static void save(Context c, String data) { prefs(c).edit().putString("data", data).apply(); }
+    static void save(Context c, String data) { prefs(c).edit().putString("data", data).remove("busy").apply(); }
+
+    // The refresh button pressed: "Bringing this up to date…" until the hidden refresh is done (HiddenRefresh), for
+    // two minutes at most (offline, it waits for a connection).
+    static final String REFRESH = "app.butler.home.REFRESH";
+    static void busy(Context c) { prefs(c).edit().putLong("busy", System.currentTimeMillis()).apply(); }
+    static void idle(Context c) { prefs(c).edit().remove("busy").apply(); }
+    static boolean isBusy(Context c) { return System.currentTimeMillis() - prefs(c).getLong("busy", 0) < 120000; }
+
+    // A widget's refresh button (MyDayWidget / ListWidget onReceive).
+    static void refreshNow(Context c) {
+        busy(c);
+        refreshAll(c);
+        HiddenRefresh.now(c);
+    }
+
+    // The last widget of one kind removed: with none of either kind left, the 15-minute refresh stops.
+    static void lastGone(Context c) {
+        AppWidgetManager m = AppWidgetManager.getInstance(c);
+        if (m.getAppWidgetIds(new ComponentName(c, MyDayWidget.class)).length == 0
+            && m.getAppWidgetIds(new ComponentName(c, ListWidget.class)).length == 0) HiddenRefresh.stop(c);
+    }
 
     static JSONObject data(Context c) {
         try { return new JSONObject(prefs(c).getString("data", "{}")); } catch (Exception e) { return new JSONObject(); }
@@ -66,8 +87,9 @@ public final class Widgets {
             title = b == null ? "One list" : b.optString("name", "One list");
         }
         v.setTextViewText(R.id.widget_title, title);
-        String note = !d.has("day") ? "Open Butler once to fill this in"
-            : !today().equals(d.optString("day")) ? "Open Butler to bring this up to date" : "";
+        String note = isBusy(c) ? "Bringing this up to date…"
+            : !d.has("day") ? "Open Butler once to fill this in"
+            : !today().equals(d.optString("day")) ? "Not up to date: press ↻ (be signed in and online)" : "";
         v.setTextViewText(R.id.widget_note, note);
         v.setViewVisibility(R.id.widget_note, note.isEmpty() ? View.GONE : View.VISIBLE);
 
@@ -81,6 +103,8 @@ public final class Widgets {
             : bucket.isEmpty() ? "Hold this widget to pick a bucket" : "Nothing open in this list");
 
         v.setOnClickPendingIntent(R.id.widget_head, open(c, myDay ? "view=today" : "view=tasks", id * 2));
+        Intent r = new Intent(c, myDay ? MyDayWidget.class : ListWidget.class).setAction(REFRESH);
+        v.setOnClickPendingIntent(R.id.widget_refresh, PendingIntent.getBroadcast(c, id * 2, r, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         Intent tpl = new Intent(Intent.ACTION_VIEW);
         tpl.setPackage(c.getPackageName());
         v.setPendingIntentTemplate(R.id.widget_list,

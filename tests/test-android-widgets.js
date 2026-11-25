@@ -90,7 +90,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return is
 
   // --- The Android side only draws: no sorting, comparing or date maths of its own ---
   const dir = path.join(path.dirname(APP_FILE), 'android-app', 'native');
-  for (const f of ['Widgets.java', 'WidgetService.java', 'MyDayWidget.java', 'ListWidget.java']) {
+  for (const f of ['Widgets.java', 'WidgetService.java', 'MyDayWidget.java', 'ListWidget.java', 'HiddenRefresh.java']) {
     const src = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\/.*$/gm, '');
     check(!/\bsort|Comparator|compareTo|Calendar|getTime\(|overdue|isLate/.test(src), `${f} never sorts, compares or dates tasks (it only draws Butler's rows)`);
   }

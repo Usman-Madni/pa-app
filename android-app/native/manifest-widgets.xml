@@ -12,6 +12,8 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/list_widget_info" />
         </receiver>
         <service android:name=".WidgetService" android:permission="android.permission.BIND_REMOTEVIEWS" android:exported="false" />
+        <!-- The widgets' hidden refresh (round 6): Butler's page with no screen, on ↻ and about every 15 minutes -->
+        <service android:name=".HiddenRefresh" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <activity android:name=".ListConfigActivity" android:label="Which bucket?" android:exported="true"
             android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
             <intent-filter>
