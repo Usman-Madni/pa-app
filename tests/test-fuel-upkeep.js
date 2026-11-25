@@ -3,7 +3,7 @@
 // month before; a cost puts it on the bill (entry.bill) and in the car's log, a ticked job is logged, and one more can
 // be typed in. The car rows stay fuel only: the price a litre leaves upkeep out, the bill adds it in when left empty,
 // This year shows it as Upkeep, and the log says which bill it was on.
-const { loadApp, submitForm, check, done } = require('./helpers');
+const { loadApp, submitForm, answer, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp();
@@ -75,6 +75,7 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   const f2 = doc.querySelector('#modal form');
   check(Number(f2.elements[`bu-${filter.id}-cost`].value.replace(/,/g, '')) === 1500 && f2.elements[`bu-${wash.id}-cost`], 'the bill reopens with what\'s on it');
   submitForm(win, 'asset-bill', { [`bu-${filter.id}-cost`]: '' });
+  await answer(win, true); // the bill no longer adds up: Save anyway
   check(filter.bill === undefined && filter.cost === 0 && oil.bill === bill.id, 'emptying a cost takes that one off the bill, the rest stay');
 
   // A bill in the Bin: the log no longer points at it

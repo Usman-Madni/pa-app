@@ -1,7 +1,7 @@
 // A fuel connection can also fuel things that aren't cars ("Also fuels": Generator). Each gets a row in the bill
 // (amount, litres), the bill adds them up when left empty, and the Fuel tab shows the year by car and by each of
 // them, with "Not split" for what the bills hold beyond their rows. Older bills and connections load as they are.
-const { loadApp, submitForm, check, done } = require('./helpers');
+const { loadApp, submitForm, answer, check, done } = require('./helpers');
 
 (async () => {
   const app = loadApp();
@@ -43,6 +43,7 @@ const { loadApp, submitForm, check, done } = require('./helpers');
   // A bill typed as one figure, more than its rows
   win.eval('openAssetForm')('bill', { utility: pump.id });
   submitForm(win, 'asset-bill', { month: `${y}-02`, date: `${y}-03-05`, amount: '20000', units: '', [`split-${civic.id}-amount`]: '12000', [`split-${civic.id}-litres`]: '40', 'also-0-amount': '5000', 'also-0-litres': '15' });
+  await answer(win, true); // the parts don't add up: Save anyway
   win.eval('closeAssetForm')(true);
 
   // The year by car and by the generator
