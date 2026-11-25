@@ -3083,6 +3083,113 @@ const Stamps = {
   },
 };
 
+// ===================== Ctrl+Z =====================
+// Undo the last change of any kind, a few steps back. Each changed() is a step: before Stamps stamps it, `record`
+// notes every record it added, changed or removed, as it looked before (Stamps.seen keeps each record as it last
+// looked) and after. `undo` puts those records back, then saves through changed() like any edit, so the restored
+// records are stamped newer and win the merge between devices. A record changed again since (by a later step that's
+// already been undone, it can't be; by the other device, merged in) is left as it is. Messages (notices) aren't
+// steps. A step that took a file away can't be undone (the file is gone): it says so and is dropped. A delete still
+// waiting for its own Undo is undone first (PendingDelete).
+const Undo = {
+  MAX: 20,
+  JOIN_MS: 5000, // typing pauses in the same record join into one step
+  SKIP: new Set(['notices', 'deleted']),
+  steps: [],
+  busy: false,
+  record(keys, now = Date.now()) {
+    if (this.busy) return;
+    const changes = [];
+    const order = {};
+    for (const k of keys) {
+      if (this.SKIP.has(k) || !RECORD_KEYS.includes(k)) continue;
+      const before = Stamps.seen[k];
+      if (!before) continue;
+      const here = new Map(DB[k].map((r) => [r.id, Stamps.sig(r)]));
+      let any = false;
+      for (const [id, s] of here) if (before.get(id) !== s && (!before.has(id) || this.bare(before.get(id)) !== this.bare(s))) { changes.push({ key: k, id, before: before.get(id) ?? null, after: s }); any = true; }
+      for (const [id, s] of before) if (!here.has(id)) { changes.push({ key: k, id, before: s, after: null }); any = true; }
+      if (any) order[k] = [...before.keys()];
+    }
+    if (!changes.length) return;
+    const last = this.steps[this.steps.length - 1];
+    const same = (a, b) => a.length === b.length && a.every((c, i) => c.key === b[i].key && c.id === b[i].id && c.before !== null && c.after !== null && b[i].before !== null && b[i].after !== null);
+    if (last && now - last.at < this.JOIN_MS && same(last.changes, changes)) { // the same records edited again: one step
+      last.changes.forEach((c, i) => { c.after = changes[i].after; });
+      last.at = now;
+      return;
+    }
+    this.steps.push({ at: now, changes, order });
+    if (this.steps.length > this.MAX) this.steps.shift();
+  },
+  // A record without where its files sit: moving or renaming a file (Files.repoint) is bookkeeping, not a step,
+  // and a record whose files moved since still counts as unchanged. Restored records keep their files' places now.
+  bare(sig) {
+    if (sig === null) return null;
+    try { const r = JSON.parse(sig); if (Array.isArray(r.attachments)) r.attachments = r.attachments.map(({ file, name, ...a }) => a); return JSON.stringify(r); } catch { return sig; }
+  },
+  name(sig) { try { const r = JSON.parse(sig); return r.title || r.name || r.text || r.item || ''; } catch { return ''; } },
+  // What a step did, for the message: 'the change to "Pay the bill"', 'adding "Milk"', '3 changes'.
+  says(step) {
+    const c = step.changes.filter((x) => x.key !== 'trash');
+    const one = c.length === 1 ? c[0] : null;
+    if (!one) return plural(c.length || step.changes.length, 'change');
+    const n = this.name(one.after || one.before);
+    const q = n ? ` "${n}"` : '';
+    if (one.before === null) return `adding${q}`;
+    if (one.after === null) return `deleting${q}`;
+    return `the change to${q || ' it'}`;
+  },
+  files(sig) { try { return (JSON.parse(sig).attachments || []).map((a) => a.file).filter(Boolean); } catch { return []; } },
+  async undo() {
+    if (state.readOnly) return false;
+    const waiting = [...PendingDelete.groups.keys()].pop();
+    if (waiting) { PendingDelete.undo(waiting); toast('Undone: the delete'); return true; }
+    const step = this.steps.pop();
+    if (!step) { toast('Nothing to undo'); return false; }
+    // A file this step took away (and nothing uses now) is gone from the folder: that can't come back.
+    const used = new Set([...['tasks', 'docs', 'assets', 'upkeep', 'musings'].flatMap((k) => DB[k]), ...DB.trash.map((e) => e.item || {})].flatMap((r) => (r.attachments || []).map((a) => a.file)));
+    const lost = step.changes.some((c) => c.before && this.files(c.before).some((f) => !(c.after && this.files(c.after).includes(f)) && !used.has(f)));
+    if (lost) { toast(`Can't undo ${this.says(step)}: a file was removed with it`); return false; }
+    const keys = [...new Set(step.changes.map((c) => c.key))];
+    let kept = 0;
+    for (const k of keys) {
+      const now = new Map(DB[k].map((r) => [r.id, r]));
+      const mine = new Map(step.changes.filter((c) => c.key === k).map((c) => [c.id, c]));
+      const back = new Map();
+      for (const [id, c] of mine) {
+        const cur = now.get(id);
+        if (this.bare(cur ? Stamps.sig(cur) : null) !== this.bare(c.after)) { kept++; continue; } // changed again since: left as it is
+        const r = c.before === null ? null : JSON.parse(c.before);
+        if (r && cur && Array.isArray(r.attachments)) { // each file where it is now
+          const at = new Map((cur.attachments || []).map((a) => [a.id, a]));
+          r.attachments = r.attachments.map((a) => (at.has(a.id) ? { ...a, file: at.get(a.id).file, name: at.get(a.id).name } : a));
+        }
+        if (r && cur) { for (const f of Object.keys(cur)) delete cur[f]; Object.assign(cur, r); back.set(id, cur); } // the same object, changed back
+        else back.set(id, r);
+      }
+      const out = [];
+      const seen = new Set();
+      const put = (id) => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        const r = back.has(id) ? back.get(id) : now.get(id);
+        if (r) out.push(r);
+      };
+      (step.order[k] || []).forEach(put);
+      [...now.keys()].forEach(put);
+      DB[k] = out;
+    }
+    this.busy = true;
+    try { changed(...keys); } finally { this.busy = false; }
+    if (state.openTask && !DB.tasks.some((t) => t.id === state.openTask)) closeTaskDrawer();
+    render();
+    if (state.openTask) renderDrawer();
+    toast(`Undone: ${this.says(step)}${kept ? ` (${plural(kept, 'record')} changed since, left as ${kept === 1 ? 'it is' : 'they are'})` : ''}`);
+    return true;
+  },
+};
+
 // Two copies of the data (this browser's and the data file's, saved elsewhere since) as one: record by record, the
 // newer change wins the whole record; a record deleted on one side stays deleted unless it was changed after that.
 function mergeData(mine, theirs, now = Date.now()) {
@@ -3111,6 +3218,7 @@ function mergeData(mine, theirs, now = Date.now()) {
 // Every edit goes through here: save in the browser, then queue a save to the data file (the phone: to OneDrive).
 function changed(...keys) {
   if (state.readOnly) return;
+  Undo.record(keys); // before Stamps takes this as the new starting point
   if (Stamps.touch(keys) && !keys.includes('deleted')) keys = [...keys, 'deleted'];
   keys.forEach((k) => DB.persist(k));
   if (state.phone) OD.markDirty(); else DF.markDirty();
@@ -11466,6 +11574,14 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   stepBack(e.target);
 });
+// Ctrl+Z (⌘Z on a Mac): undo the last change (Undo). In a box you're typing in, the box's own undo; not while a
+// pop-up or question is open.
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+  if (e.target.closest?.('input, textarea, select, [contenteditable="true"]') || asking || state.assetForm || state.donePrompt) return;
+  e.preventDefault();
+  Undo.undo();
+});
 // Esc on the laptop, and the phone's back gesture in the Android app (Native.start): close the top thing open, or step
 // back from a sub-page to its parent. False when there was nothing to close (the app then leaves Butler).
 // `from`: the element Esc was pressed in (null for the back gesture).
@@ -11514,7 +11630,7 @@ function shortcut(e) {
     $('#main [data-input="global-search"]')?.focus();
     return true;
   }
-  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Data, N Notifications (the bell), M the ⋮ menu, B the Bin. Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above.'); return true; }
+  if (e.key === '?') { toast('Shortcuts: 1 My Day, 2 Tasks, 3 Calendar, 4 Notes, 5 Assets, 6 Utilities, 7 Musings, 8 Zakat, 9 Vault, 0 Data, N Notifications (the bell), M the ⋮ menu, B the Bin. Q W E R T…: this screen\'s buttons in order. A S D F G…: its tabs in order. /: search. Esc: close, or back to the screen above. Ctrl+Z: undo the last change.'); return true; }
   return false;
 }
 document.addEventListener('keydown', (e) => { if (shortcut(e)) e.preventDefault(); });

@@ -29,6 +29,7 @@ Personal working rules live in `CLAUDE.local.md`, which is git-ignored. **This r
 - **Utility rules live in `Utilities`** (connections, their folder in the Vault, bill tasks made by `makeTask`, `sync` keeping their Files go to in step, bills and their sums).
 - **Rental rules live in `Rentals`** (terms, the ledger month by month, what's owed, payments and write-offs, renewing, the Collect rent task made by `makeCollect` and the Renew tasks made only by `Rentals.ensureTasks`).
 - **Upkeep rules live in `Upkeep`** (the log, readings, costs, the plan and its tasks, made only by `Upkeep.ensureTasks`). A job's log entries are matched by item name, any case.
+- **Ctrl+Z is `Undo`**: every `changed()` is a step it can take back, so an edit that skips `changed()` can't be undone either.
 - **Reminder rules live in `Reminders`** (when, wording, adding, re-arming, copying, which are due, the one To Do holds). Ask it rather than reading or changing `t.reminders` directly.
 
 ## Running commands (keeps permission prompts down)
