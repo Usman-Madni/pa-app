@@ -3346,7 +3346,8 @@ const DF = {
   async reconnect() {
     try {
       if ((await this.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('Permission not given: data is only saving in this browser');
-      if (this.backupDir) await this.backupDir.requestPermission({ mode: 'readwrite' }).catch(() => {});
+      // A backup folder Chrome has stopped answering about mustn't hold up Reconnect (see backupNow)
+      if (this.backupDir) await Promise.race([this.backupDir.requestPermission({ mode: 'readwrite' }).catch(() => {}), new Promise((r) => setTimeout(r, this.BACKUP_LIMIT_MS))]);
       if (AT.status === 'reconnect') await AT.reconnect(); // one click brings the attachments folder back too
       await this.check();
     } catch (e) { this.fail(e); }
@@ -3506,7 +3507,7 @@ const DF = {
     this.fileInfo = { savedAt: payload.savedAt, savedFrom: payload.savedFrom };
     this.status = 'ok';
     this.error = '';
-    await this.dailyBackup(payload);
+    this.backupLater(payload); // never waited for: a stuck backup folder must not hold up the save
   },
 
   async keepMine() {
@@ -3526,9 +3527,38 @@ const DF = {
       this.backupDir = await window.showDirectoryPicker({ mode: 'readwrite' });
       await idb.set('backups', this.backupDir);
       device.remove('lastBackupDay');
-      await this.dailyBackup({ app: 'PA App', version: 2, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() });
+      this.backupStuck = false; // a freshly chosen folder is Chrome's new link to it: worth trying again
+      await this.backupNow({ app: 'PA App', version: 2, savedAt: new Date().toISOString(), savedFrom: deviceName(), data: DB.exportAll() });
       render();
     } catch (e) { if (e.name !== 'AbortError') this.fail(e); }
+  },
+
+  // Chrome can stop answering about the backup folder altogether (its stored link to the folder goes bad; seen 25 Nov,
+  // after which every save waited on it and showed Save problem). So a backup has its own time limit, runs after the
+  // save rather than inside it, and once stuck isn't tried again until the folder is chosen again (or a reload).
+  BACKUP_LIMIT_MS: 20000,
+  backupStuck: false,
+  backingUp: false,
+  BACKUP_STUCK: 'Daily backup didn\'t finish: Chrome stopped answering about the backup folder. Choose it again in Settings › Daily backups (saving carries on as normal)',
+
+  backupLater(payload) {
+    if (this.backingUp || this.backupStuck || !this.backupDir || device.get('lastBackupDay', '') === todayISO()) return;
+    this.backupNow(payload);
+  },
+
+  async backupNow(payload) {
+    this.backingUp = true;
+    let limit = null;
+    try {
+      await Promise.race([
+        this.dailyBackup(payload),
+        new Promise((_, no) => { limit = setTimeout(() => no(new Error('stuck')), this.BACKUP_LIMIT_MS); }),
+      ]);
+    } catch {
+      this.backupStuck = true;
+      toast(this.BACKUP_STUCK);
+      if (state.view === 'settings') render();
+    } finally { clearTimeout(limit); this.backingUp = false; }
   },
 
   // First save of each day also drops a dated copy in the backups folder. Never overwrites a backup.
@@ -9528,6 +9558,7 @@ function dataFileCard() {
     </div>
     <h2 style="margin-top:18px">Daily backups</h2>
     <p class="sub">${DF.backupDir ? `Backing up to the <b>${esc(DF.backupDir.name)}</b> folder: one dated copy on the first save of each day.` : 'Pick a folder and the first save of each day also writes a dated backup there.'}</p>
+    ${DF.backupStuck ? '<p class="sub" data-backup-stuck><span class="status-dot bad"></span>Today\'s backup didn\'t finish: Chrome stopped answering about this folder. Choose it again (the same folder is fine).</p>' : ''}
     <button class="btn" data-action="df-backup-folder">${DF.backupDir ? 'Change backup folder' : 'Choose backup folder'}</button>`;
 }
 

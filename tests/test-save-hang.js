@@ -49,6 +49,31 @@ const later = () => { let go; const p = new Promise((r) => { go = r; }); return 
   await tick(100);
   check(PA.DF.status === 'ok' && file.writes === writesNow + 1 && file.json().data.tasks.some((t) => t.title === 'Second try'), 'Try again saves that one too');
 
+  // --- The backup folder stops answering (Chrome's link to it gone bad, 25 Nov): saving carries on ---
+  const { fakeFolder } = require('./helpers');
+  const folder = fakeFolder('Backups');
+  win.showDirectoryPicker = async () => folder;
+  const asked = later();
+  folder.queryPermission = () => asked.p; // never answers
+  PA.DF.BACKUP_LIMIT_MS = 150;
+  const choosing = PA.DF.pickBackupFolder();
+  submitForm(win, 'quick-add', { title: 'Saved while the backup folder hung' });
+  await PA.DF.save();
+  check(PA.DF.status === 'ok' && !PA.DF.error && file.json().data.tasks.some((t) => t.title === 'Saved while the backup folder hung'), 'a backup folder that never answers doesn\'t hold up the save, and it isn\'t a Save problem');
+  await choosing;
+  check(PA.DF.backupStuck && /Daily backup didn't finish/.test(win.document.body.textContent), 'it says the backup didn\'t finish, and how to fix it');
+  let askedAgain = 0;
+  folder.queryPermission = () => { askedAgain++; return asked.p; };
+  submitForm(win, 'quick-add', { title: 'And another' });
+  await PA.DF.save();
+  check(PA.DF.status === 'ok' && askedAgain === 0, 'later saves don\'t wait on it again');
+  PA.state.view = 'settings';
+  PA.render();
+  check(win.document.querySelector('[data-backup-stuck]'), 'Settings › Daily backups says to choose the folder again');
+  folder.queryPermission = async () => 'granted';
+  await PA.DF.pickBackupFolder();
+  check(!PA.DF.backupStuck && Object.keys(folder.files).length === 1, 'choosing the folder again backs up');
+
   check(app.errors.length === 0, 'no script errors' + (app.errors[0] ? ': ' + app.errors[0] : ''));
   done();
 })();
