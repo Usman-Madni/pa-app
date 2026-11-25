@@ -323,6 +323,8 @@ button:disabled { cursor: not-allowed; }
 .ledger.bills td:last-child { min-width: 0; white-space: nowrap; }
 .link-btn.inline-link { flex: none; width: auto; }
 .util-task { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.fuel-parts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0; }
+.fuel-parts > span { display: inline-flex; align-items: center; gap: 4px; }
 .prop-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
 .prop-row:first-of-type { border-top: 0; }
 .prop-main { min-width: 0; overflow-wrap: anywhere; }
@@ -2938,8 +2940,9 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // folders: {id, area:'vault', top: a person's id or 'shared', path: 'Car/Insurance'} — a Vault folder kept even with nothing
 //           in it yet (see Vault). Docs carry folder: their path in their person's Vault ('' the top) and plain: true for
 //           a plain file (a bill, an agreement: no dates), cat 'file'.
-// utilities: {id, type, name, provider, account, property, people, notes, created} — electricity, gas… (see Utilities);
-//           tasks may carry utility: its id. bills: {id, utility, date, period, amount, task, note} — what each came to.
+// utilities: {id, type, name, provider, account, property, people, notes, created, cars?, fuels?: [names, fuel only]} —
+//           electricity, gas… (see Utilities); tasks may carry utility: its id. bills: {id, utility, date, period, amount,
+//           task, note, split?: [{car, amount, litres, km} | {what, amount, litres}]} — what each came to.
 // rentals: {id, name, properties, tenant, phone, deposit, dueDay, renewMonths, people, notes, ended, terms: [{id, start,
 //           months, rent, note}], payments: [{id, month, amount, date, note, writeOff?}], created} (see Rentals); tasks may
 //           carry rental (and rentKind 'collect').
@@ -2967,7 +2970,7 @@ const SCHEMA = {
   notes: { label: 'Notes', kind: 'entry', fields: [['title', 'Title', 'text'], ['body', 'Text', 'text', false], ['people', 'Whose', 'people']] },
   bills: { label: 'Bills', kind: 'entry', open: 'bill', fields: [
     ['month', 'Month', 'month'], ['utility', 'Connection', 'ref:utilities'], ['units', 'Units', 'num'], ['amount', 'Amount', 'money'], ['credit', 'Credit', 'money'], ['date', 'Paid on', 'date'],
-    ['period', 'Period', 'text', false], ['split', 'Split by car', 'list'], ['task', 'Task', 'ref:tasks', false], ['note', 'Note', 'text'], ['attachments', 'Files', 'list']] },
+    ['period', 'Period', 'text', false], ['split', 'Split by what it fuels', 'list'], ['task', 'Task', 'ref:tasks', false], ['note', 'Note', 'text'], ['attachments', 'Files', 'list']] },
   upkeep: { label: 'Upkeep log', kind: 'entry', open: 'upkeep', fields: [
     ['date', 'Date', 'date'], ['asset', 'For', 'ref:assets'], ['type', 'Type', 'text'], ['item', 'Item', 'text'], ['cost', 'Cost', 'money'], ['vendor', 'Vendor', 'text'], ['km', 'Km', 'num'],
     ['qty', 'How many', 'num', false], ['notes', 'Notes', 'text', false], ['attachments', 'Files', 'list'], ['imported', 'Imported', 'bool', false], ['created', 'Added', 'ms', false]] },
@@ -2991,7 +2994,7 @@ const SCHEMA = {
     ['fromTask', 'From task', 'ref:tasks', false], ['created', 'Added', 'ms', false]] },
   utilities: { label: 'Connections', kind: 'list', open: 'utility', fields: [
     ['name', 'Name', 'text'], ['type', 'Type', 'text'], ['provider', 'Provider', 'text'], ['account', 'Account', 'text'], ['property', 'Property', 'ref:assets'], ['billDay', 'Bill day', 'text'], ['billFor', 'Bill is for', 'text'],
-    ['cars', 'Cars', 'refs:assets'], ['people', 'Whose', 'people'], ['notes', 'Notes', 'text', false], ['created', 'Added', 'ms', false]] },
+    ['cars', 'Cars', 'refs:assets'], ['fuels', 'Also fuels', 'list', false], ['people', 'Whose', 'people'], ['notes', 'Notes', 'text', false], ['created', 'Added', 'ms', false]] },
   rentals: { label: 'Agreements', kind: 'list', open: 'rental', fields: [
     ['name', 'Name', 'text'], ['properties', 'Properties', 'refs:assets'], ['tenant', 'Tenant', 'text'], ['phone', 'Phone', 'text'], ['deposit', 'Deposit', 'money'], ['dueDay', 'Rent day', 'num'], ['renewMonths', 'Remind (months)', 'num'],
     ['terms', 'Terms', 'list'], ['payments', 'Payments', 'list'], ['shares', 'Shares', 'obj', false], ['ended', 'Ended', 'date'], ['people', 'Whose', 'people'], ['notes', 'Notes', 'text', false], ['created', 'Added', 'ms', false]] },
@@ -7492,7 +7495,7 @@ const Utilities = {
   icon(type) { return UTILITY_TYPES.find((u) => sameName(u.id, type))?.icon || 'receipt'; },
   list(type) { return DB.utilities.filter((c) => People.shows(c) && (!type || sameName(c.type, type))).sort((a, b) => a.name.localeCompare(b.name)); },
   add(data) {
-    const c = { billDay: data.billDay || '', billFor: data.billFor || 'same', cars: data.cars || [], id: uid(), type: (data.type || 'Electricity').trim(), name: (data.name || '').trim() || (data.type || 'Electricity').trim(), provider: data.provider || '', account: data.account || '', property: data.property || '', people: data.people || People.forNew(), notes: data.notes || '', created: Date.now() };
+    const c = { billDay: data.billDay || '', billFor: data.billFor || 'same', cars: data.cars || [], ...(data.fuels?.length ? { fuels: data.fuels } : {}), id: uid(), type: (data.type || 'Electricity').trim(), name: (data.name || '').trim() || (data.type || 'Electricity').trim(), provider: data.provider || '', account: data.account || '', property: data.property || '', people: data.people || People.forNew(), notes: data.notes || '', created: Date.now() };
     DB.utilities.push(c);
     return c;
   },
@@ -7559,6 +7562,31 @@ const Utilities = {
   },
   monthOf(b) { return b.month || ymOf(b.date); },
   isFuel(c) { return sameName(c.type, 'Fuel'); },
+  // Besides cars, what a fuel connection fuels ("Generator"): names only, `c.fuels`; a bill's split line for one is
+  // {what, amount, litres} where a car's is {car, amount, litres, km}.
+  fuels(c) { return (c.fuels || []).filter(Boolean); },
+  // A fuel connection's year by what it fuels: each car and each named thing with its amount and litres (in the order
+  // set up, then any no longer listed), and "Not split" for what the bills' totals hold beyond their split lines.
+  fuelParts(c, year = new Date().getFullYear()) {
+    const parts = new Map();
+    const put = (key, label) => { if (!parts.has(key)) parts.set(key, { label, car: !key.startsWith('w:'), amount: 0, litres: 0 }); return parts.get(key); };
+    for (const id of c.cars || []) { const a = DB.assets.find((x) => x.id === id); if (a) put(id, a.name); }
+    for (const w of this.fuels(c)) put('w:' + w.toLowerCase(), w);
+    let rest = 0;
+    for (const b of this.bills(c).filter((x) => Number(this.monthOf(x).slice(0, 4)) === year)) {
+      let inSplit = 0;
+      for (const x of b.split || []) {
+        const p = x.car ? put(x.car, DB.assets.find((a) => a.id === x.car)?.name || 'A removed car') : put('w:' + String(x.what || '').toLowerCase(), x.what || 'Other');
+        p.amount += Number(x.amount) || 0;
+        p.litres += Number(x.litres) || 0;
+        inSplit += Number(x.amount) || 0;
+      }
+      rest += Math.max(0, (Number(b.amount) || 0) - inSplit);
+    }
+    const out = [...parts.values()].filter((p) => p.amount || p.litres);
+    if (out.length && rest) out.push({ label: 'Not split', car: false, amount: rest, litres: 0, rest: true });
+    return out;
+  },
   // A car's fuel, from the pump bills split by car: [{ date, month, amount, litres, km }], oldest first.
   fuelOf(carId) {
     const out = [];
@@ -7811,6 +7839,7 @@ function utilityCard(c) {
       <div class="meta util-task">${t ? `${ic('repeat', 'sm')} <button type="button" class="link-btn inline-link" data-action="files-go" data-key="tasks" data-id="${esc(t.id)}">${esc(fullTitle(t))}</button>${t.due ? `<span>due ${esc(fmtDate(t.due))}</span>` : ''}`
         : `<span>No bill task.</span> <button type="button" class="btn small edit-only" data-action="utility-task" data-id="${esc(c.id)}">${ic('plus', 'sm')}Make its bill task</button>`}</div>
       <div class="upkeep-sum"><div><span class="meta">This year</span><b>${rupees(Utilities.sum([c], y))}</b></div><div><span class="meta">Last year</span><b>${rupees(Utilities.sum([c], y - 1))}</b></div>${bills[0] ? `<div><span class="meta">Last bill (${esc(ymLabel(Utilities.monthOf(bills[0])))})</span><b>${rupees(Utilities.figures(bills[0]).eff)}</b></div>` : ''}</div>
+      ${Utilities.isFuel(c) && Utilities.fuelParts(c, y).length ? `<div class="meta fuel-parts" data-fuel-parts><b>This year:</b> ${Utilities.fuelParts(c, y).map((p) => `<span>${ic(p.rest ? 'receipt' : p.car ? 'car' : 'bolt', 'sm')} ${esc(p.label)} ${rupees(p.amount)}${p.litres ? ` · ${p.litres.toLocaleString('en-IN')} L` : ''}</span>`).join('')}</div>` : ''}
       <div class="value-history">${billsTable(c, 6)}</div>
       <div class="row edit-only"><button type="button" class="btn small" data-action="asset-form" data-form-type="bill" data-utility="${esc(c.id)}">${ic('plus', 'sm')}Add a bill</button></div>
     </div>`;
@@ -8635,6 +8664,7 @@ function drawAssetForm() {
       ${props.length ? `<label class="field">For property (optional)<select class="input" name="property"><option value="">None</option>${props.map((a) => `<option value="${esc(a.id)}" ${a.id === v.property ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
       ${People.several() ? `<fieldset class="owner-box"><legend>Whose</legend><div class="check-row">${People.list().map((p) => `<label><input type="checkbox" name="u-p-${esc(p.id)}" ${on.includes(p.id) ? 'checked' : ''}> ${avatar(p.id)}${esc(p.name)}</label>`).join('')}</div></fieldset>` : ''}
       ${sameName(v.type, 'Fuel') && vehicles().length ? `<fieldset class="owner-box"><legend>Cars it fuels</legend><div class="check-row">${vehicles().filter((a) => !a.closed || (v.cars || []).includes(a.id)).map((a) => `<label><input type="checkbox" name="u-car-${esc(a.id)}" ${(v.cars || []).includes(a.id) ? 'checked' : ''}> ${ic('car', 'sm')}${esc(a.name)}</label>`).join('')}</div></fieldset>` : ''}
+      ${sameName(v.type, 'Fuel') ? `<label class="field">Also fuels <span class="meta">(optional, e.g. Generator; more than one: separate with commas)</span><input class="input" name="fuels" value="${esc((v.fuels || []).join(', '))}" maxlength="120" autocomplete="off"></label>` : ''}
       <div class="row">
         <label class="field">Bill due each month on<select class="input" name="day"><option value="">${c ? 'Not set' : 'No bill task'}</option>${Array.from({ length: 31 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${String(v.billDay) === String(n) ? 'selected' : ''}>the ${ordinal(n)}</option>`).join('')}<option value="last" ${v.billDay === 'last' ? 'selected' : ''}>the last day of the month</option></select></label>
         <label class="field grow">The bill due then is for<select class="input" name="billFor">${[['same', 'that month'], ['after', 'the month before (due the month after it)'], ['before', 'the month after (due the month before it)']].map(([k, l]) => `<option value="${k}" ${(v.billFor || 'same') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -8669,7 +8699,7 @@ function drawAssetForm() {
         ${Utilities.unitsLabel(c.type) ? `<label class="field">${esc(Utilities.unitsLabel(c.type))}<input class="input" ${amountAttrs(v.units || '')} name="units"></label>` : ''}
         <label class="field">${esc(Utilities.creditLabel(c.type))}<input class="input" ${amountAttrs(v.credit || '')} name="credit"></label>
       </div>
-      ${Utilities.isFuel(c) && (c.cars || []).length ? `<fieldset class="owner-box"><legend>By car <span class="meta">(optional, as the pump's statement shows it)</span></legend>${(c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean).map((a) => { const x = (v.split || []).find((y) => y.car === a.id) || {}; return `<div class="split-row"><span class="split-car">${ic('car', 'sm')} ${esc(a.name)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="split-${esc(a.id)}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="split-${esc(a.id)}-litres"></label><label class="field">Reading (km)<input class="input" ${amountAttrs(x.km || '')} name="split-${esc(a.id)}-km"></label></div>`; }).join('')}<p class="meta" style="margin:0">Left empty above, the bill and litres are these added up.</p></fieldset>` : ''}
+      ${Utilities.isFuel(c) && ((c.cars || []).length || Utilities.fuels(c).length) ? `<fieldset class="owner-box" data-fuel-split><legend>${Utilities.fuels(c).length ? 'By what it fuels' : 'By car'} <span class="meta">(optional, as the pump's statement shows it)</span></legend>${(c.cars || []).map((id) => DB.assets.find((a) => a.id === id)).filter(Boolean).map((a) => { const x = (v.split || []).find((y) => y.car === a.id) || {}; return `<div class="split-row"><span class="split-car">${ic('car', 'sm')} ${esc(a.name)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="split-${esc(a.id)}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="split-${esc(a.id)}-litres"></label><label class="field">Reading (km)<input class="input" ${amountAttrs(x.km || '')} name="split-${esc(a.id)}-km"></label></div>`; }).join('')}${Utilities.fuels(c).map((w, i) => { const x = (v.split || []).find((y) => y.what && sameName(y.what, w)) || {}; return `<div class="split-row"><span class="split-car">${ic('bolt', 'sm')} ${esc(w)}</span><label class="field">Amount<input class="input" ${amountAttrs(x.amount || '')} name="also-${i}-amount"></label><label class="field">Litres<input class="input" ${amountAttrs(x.litres || '')} name="also-${i}-litres"></label></div>`; }).join('')}<p class="meta" style="margin:0">Left empty above, the bill and litres are these added up.</p></fieldset>` : ''}
       <div class="meta bill-figures" aria-live="polite">${billFiguresText(c, v)}</div>
       <label class="field">Paid on <span class="meta">(leave empty if it isn't paid yet)</span><input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
@@ -9279,10 +9309,13 @@ function submitAssetForm(type, data) {
     if (!(data.type || '').trim()) return formError('Say what it is (electricity, gas…).');
     const billDay = data.day === 'last' ? 'last' : Number(data.day) || '';
     const cars = vehicles().filter((a) => data[`u-car-${a.id}`] === 'on').map((a) => a.id);
-    const fields = { cars, type: data.type.trim(), name: (data.name || '').trim() || data.type.trim(), provider: (data.provider || '').trim(), account: (data.account || '').trim(), property: data.property || '', people, notes: data.notes || '', billDay, billFor: data.billFor || 'same' };
+    const fuels = [];
+    for (const w of String(data.fuels || '').split(',').map((x) => x.trim()).filter(Boolean)) if (!fuels.some((x) => sameName(x, w))) fuels.push(w);
+    const fields = { cars, ...(sameName(data.type, 'Fuel') && (fuels.length || f.id) ? { fuels } : {}), type: data.type.trim(), name: (data.name || '').trim() || data.type.trim(), provider: (data.provider || '').trim(), account: (data.account || '').trim(), property: data.property || '', people, notes: data.notes || '', billDay, billFor: data.billFor || 'same' };
     let c = f.id ? DB.utilities.find((x) => x.id === f.id) : null;
     const was = c ? `${c.billDay}|${c.billFor}` : '';
     if (c) Object.assign(c, fields); else c = Utilities.add(fields);
+    if (c.fuels && !c.fuels.length) delete c.fuels; // only kept while it names something
     changed('utilities');
     if (!f.id && billDay) Utilities.makeTask(c);
     else if (f.id && was !== `${c.billDay}|${c.billFor}` && Utilities.retime(c)) toast(`Its next bill task moves to ${c.billDay === 'last' ? 'the last day of the month' : `the ${ordinal(c.billDay)}`}`);
@@ -9306,7 +9339,11 @@ function submitAssetForm(type, data) {
   } else if (type === 'bill') {
     const b = f.id ? DB.bills.find((x) => x.id === f.id) : null;
     const bc = DB.utilities.find((x) => x.id === (b ? b.utility : f.utility));
-    const split = (bc?.cars || []).map((car) => ({ car, amount: Number(data[`split-${car}-amount`]) || 0, litres: Number(data[`split-${car}-litres`]) || 0, km: Number(data[`split-${car}-km`]) || 0 })).filter((x) => x.amount || x.litres || x.km);
+    const split = [
+      ...(bc?.cars || []).map((car) => ({ car, amount: Number(data[`split-${car}-amount`]) || 0, litres: Number(data[`split-${car}-litres`]) || 0, km: Number(data[`split-${car}-km`]) || 0 })),
+      ...(bc ? Utilities.fuels(bc) : []).map((what, i) => ({ what, amount: Number(data[`also-${i}-amount`]) || 0, litres: Number(data[`also-${i}-litres`]) || 0 })),
+      ...(b?.split || []).filter((x) => x.what && !Utilities.fuels(bc || {}).some((w) => sameName(w, x.what))), // no longer listed: kept as it was
+    ].filter((x) => x.amount || x.litres || x.km);
     if (!data.amount && split.length) { data.amount = split.reduce((t, x) => t + x.amount, 0); if (!data.units) data.units = split.reduce((t, x) => t + x.litres, 0); }
     if (!b && (data.amount === '' || data.amount == null || data.amount === 0)) { closeAssetForm(); return; } // skipped
     const month = data.month || ymOf(data.date || todayISO());
