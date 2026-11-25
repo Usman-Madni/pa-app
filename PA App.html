@@ -1277,7 +1277,8 @@ const People = {
     const p = this.stored(id);
     if (!p) return;
     const keep = since === undefined ? p.zakat?.since || '' : since || '';
-    p.zakat = day && month ? { day: Number(day), month: Number(month), ...(keep ? { since: keep } : {}) } : null;
+    const skip = p.zakat?.skip?.length ? { skip: p.zakat.skip } : {}; // years with no record (Zakat.skip) stay skipped
+    p.zakat = day && month ? { day: Number(day), month: Number(month), ...(keep ? { since: keep } : {}), ...skip } : null;
     changed('people');
   },
   // What would be left with nobody if this person went (those records become yours), assets they own outright included.
@@ -1676,9 +1677,27 @@ const Zakat = {
     for (let y = from; y <= hy; y++) {
       const date = Hijri.toISO(y, p.zakat.month, p.zakat.day);
       if (since && date <= since) continue;
-      if (date <= today && !this.recordFor(person, y)) out.push({ hyear: y, date });
+      if (date <= today && !this.recordFor(person, y) && !this.skipped(person).includes(y)) out.push({ hyear: y, date });
     }
     return out;
+  },
+  // Zakat days you chose to keep no record for (the "No record" button): Islamic years on the person's zakat day,
+  // `zakat.skip`. They're only left out of openDays (no banner, not offered to Make record); nothing is due for them.
+  skipped(person) { return this.person(person)?.zakat?.skip || []; },
+  skip(person, hy) {
+    const p = People.stored(person);
+    if (!p?.zakat || this.skipped(person).includes(hy)) return false;
+    p.zakat.skip = [...this.skipped(person), hy].sort((a, b) => a - b);
+    changed('people');
+    return true;
+  },
+  unskip(person, hy) {
+    const p = People.stored(person);
+    if (!p?.zakat || !this.skipped(person).includes(hy)) return false;
+    const rest = p.zakat.skip.filter((y) => y !== hy);
+    if (rest.length) p.zakat.skip = rest; else delete p.zakat.skip;
+    changed('people');
+    return true;
   },
   // What may be out of date for a record on this day: rates more than 3 days older, or an account's balance more than
   // a month older (only the person's zakatable ones). Empty = all fresh.
@@ -2902,7 +2921,7 @@ const deviceName = () => device.get('name', /Android|iPhone|iPad/i.test(navigato
 // notices: {id, at: ms, text, task?: id, read} — every message shown, kept 30 days (see Notices)
 // deleted: {key, id, at: ms} — a record deleted here, kept 30 days so a merge doesn't bring it back (see Stamps)
 // trash:   {id, kind:'tasks'|'notes'|'assets'|'docs'|'rates'|'zakat'|'zakatPay', item: the record as it was, at: ms} — deleted things kept 30 days to restore (see Trash)
-// people:  {id, name, zakat: {day, month, since?} | null, color?: a label colour's hex} — whose tasks, notes and events they are (see People)
+// people:  {id, name, zakat: {day, month, since?, skip?: [Islamic years with no record]} | null, color?: a label colour's hex} — whose tasks, notes and events they are (see People)
 // Tasks, notes and events may carry people: [person ids]; none means yours ('me').
 // assets:  {id, kind, name, karat, grams, currency, values: [{date, amount}], owners: [{from, people: [{id, share}]}],
 //           acquired, closed, notes, created, unit:'g'|'tola', zakat: true|false|null} — what people own or owe (see Assets)
@@ -6817,7 +6836,7 @@ function renderZakat() {
 function zakatOverview(who) {
   const people = People.list().filter((p) => p.zakat && (who === 'all' || p.id === who));
   const missing = zakatMissing(who);
-  const banner = zakatSuggestions(who) + missing.map(({ p, d }) => `<div class="banner warn"><span>${ic('calendar-event')}<span>${People.several() ? `${esc(p.name)}: ` : ''}${esc(bothDates(d.date))} has no record yet.</span></span><button class="btn small edit-only" data-action="asset-form" data-form-type="zakat-make" data-person="${esc(p.id)}" data-hyear="${d.hyear}">Make record</button></div>`).join('');
+  const banner = zakatSuggestions(who) + missing.map(({ p, d }) => `<div class="banner warn"><span>${ic('calendar-event')}<span>${People.several() ? `${esc(p.name)}: ` : ''}${esc(bothDates(d.date))} has no record yet.</span></span><span class="row"><button class="btn small edit-only" data-action="zakat-skip" data-person="${esc(p.id)}" data-hyear="${d.hyear}">No record</button><button class="btn small edit-only" data-action="asset-form" data-form-type="zakat-make" data-person="${esc(p.id)}" data-hyear="${d.hyear}">Make record</button></span></div>`).join('');
   if (!people.length) {
     if (banner) return banner;
     const p = who === 'all' ? People.get(ME) : People.get(who);
@@ -6866,6 +6885,12 @@ function zakatBars(recs, named) {
 
 function zakatRecordsTab(who) {
   const STATE = { draft: 'Drafts', overdue: 'Overdue', left: 'Still to pay', paid: 'Paid' };
+  // Zakat days marked "No record", each with Bring back (its banner returns and it can be recorded after all)
+  const skipped = People.list().filter((p) => p.zakat && (who === 'all' || p.id === who))
+    .flatMap((p) => Zakat.skipped(p.id).map((hy) => ({ p, hy })));
+  const skips = skipped.length ? `<div class="zk-skipped" data-zakat-skipped><p class="meta" style="margin:18px 0 6px">No record kept for</p><div class="card"><ul class="list">${skipped.map(({ p, hy }) => `
+    <li class="item"><span class="tl-mark">${ic('calendar-event')}</span><div class="body"><div class="title">${People.several() ? `${esc(p.name)}: ` : ''}${esc(bothDates(Zakat.dayFor(p.id, hy)))}</div></div>
+    <button class="btn small edit-only" data-action="zakat-unskip" data-person="${esc(p.id)}" data-hyear="${hy}">Bring back</button></li>`).join('')}</ul></div></div>` : '';
   return listTools('zakatRecords', Zakat.records(who), {
     group: { none: 'No grouping', status: 'Status', person: 'Person' },
     sort: { date: 'Newest first', old: 'Oldest first', due: 'Most due first' },
@@ -6882,7 +6907,7 @@ function zakatRecordsTab(who) {
       </div>
       ${zakatStatus(r)}
     </li>`,
-  });
+  }) + skips;
 }
 
 function zakatPaymentsTab(who) {
@@ -10944,7 +10969,7 @@ const EDIT_ACTIONS = new Set([
   'repeat-day', 'at-folder', 'at-reconnect', 'at-tidy', 'remove-attach', 'board-add', 'delete-reminder', 'clear-time',
   'rename-attach', 'toggle-keep', 'edit-reminder', 'new-task', 'duplicate-task', 'clear-due', 'clear-repeat', 'clear-done-time',
   'td-connect', 'td-sync', 'td-disconnect', 'clear-notices', 'person-off', 'rename-person', 'remove-person',
-  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
+  'asset-form', 'delete-asset', 'asset-value-off', 'delete-rates', 'zakat-delete', 'zakat-reopen', 'zpay-delete', 'zakat-adopt', 'zakat-skip', 'zakat-unskip', 'trash-undo', 'upkeep-delete', 'plan-delete', 'not-a-car', 'upkeep-log-ticked', 'upkeep-skip', 'musing-new', 'musing-edit', 'musing-delete', 'musing-cover-off',
   'delete-doc', 'unlink-doc', 'rec-file-remove', 'utility-task', 'utility-delete', 'bill-delete', 'plain-remove', 'rental-delete', 'rent-pay-remove', 'rental-collect', 'rent-term-delete', 'rental-renew-task', 'vault-folder-new', 'vault-folder-rename', 'vault-folder-delete',
 ]);
 
@@ -11405,6 +11430,20 @@ document.addEventListener('click', (e) => {
       zakatTasks();
       toast(`${p.id === ME && !People.several() ? 'Your' : `${p.name}'s`} zakat day is ${ordinal(Number(btn.dataset.zday))} ${HIJRI_MONTHS[Number(btn.dataset.zmonth) - 1]}`);
       render();
+      break;
+    }
+    case 'zakat-skip': { // a zakat day you don't want a record for: its banner goes (Bring back is on Records)
+      const hy = Number(btn.dataset.hyear);
+      const when = bothDates(Zakat.dayFor(btn.dataset.person, hy));
+      const person = btn.dataset.person;
+      ask(`No zakat record for ${when}? The reminder goes; you can bring it back from Records.`, { yes: 'No record' }).then((yes) => {
+        if (yes && Zakat.skip(person, hy)) { toast(`No record for ${when}`); render(); }
+      });
+      break;
+    }
+    case 'zakat-unskip': {
+      const hy = Number(btn.dataset.hyear);
+      if (Zakat.unskip(btn.dataset.person, hy)) { toast(`${bothDates(Zakat.dayFor(btn.dataset.person, hy))} is back on the Overview, ready for a record`); render(); }
       break;
     }
     case 'open-zpay': openAssetForm('zakat-pay', { id }); break;
