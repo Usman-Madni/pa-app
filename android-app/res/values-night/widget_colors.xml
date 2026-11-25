@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Butler's colours for the widgets in dark mode (PA App.html :root, dark). -->
+<resources>
+    <color name="widget_bg">#23211D</color>
+    <color name="widget_text">#ECE6DA</color>
+    <color name="widget_muted">#A39C8E</color>
+    <color name="widget_accent">#6CC3BA</color>
+    <color name="widget_late">#E8866F</color>
+</resources>

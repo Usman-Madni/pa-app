@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Butler's colours for the widgets (DESIGN.md / PA App.html :root, light). values-night has the dark ones. -->
+<resources>
+    <color name="widget_bg">#FDFBF7</color>
+    <color name="widget_text">#26231E</color>
+    <color name="widget_muted">#6B6457</color>
+    <color name="widget_accent">#0F5C57</color>
+    <color name="widget_late">#B3452F</color>
+</resources>

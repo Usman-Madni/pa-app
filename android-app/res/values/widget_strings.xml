@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_myday_desc">Late, today and coming up, as on Butler\'s My Day</string>
+    <string name="widget_list_desc">The open tasks in one bucket</string>
+</resources>

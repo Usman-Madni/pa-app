@@ -9651,6 +9651,55 @@ const Native = {
     openAssetForm('share', { files, texts, failed });
   },
 
+  // Home-screen widgets (shell 5): My Day and One list. Android only draws the rows Butler sends here: the My Day
+  // widget's come from todayPlan, the My Day page's own code, so the two never drift apart (CLAUDE.md). Sent after a
+  // change or redraw, and when Butler goes to the background, only when something in them changed.
+  // Rows: {h: heading} or {t: title, s: the line under it, id: task id ('' for an event), late}.
+  widgetRows(now = new Date()) {
+    const p = todayPlan(now);
+    const rows = [];
+    const section = (h, items) => { if (items.length) rows.push({ h }, ...items); };
+    const task = (t, s = '', late = false) => ({ t: fullTitle(t), s, id: t.id, late });
+    const event = (e, s = '') => ({ t: e.title, s, id: '', late: false });
+    const at = (x) => (x.time ? fmtTime(x.time) : '');
+    const row = (x, s) => (x.kind === 'task' ? task(x.t, s) : event(x.e, s));
+    section('Late', p.late.map((t) => task(t, fmtDay(taskDate(t)), true)));
+    section('Today', p.timed.map((x) => row(x, at(x))));
+    section(p.timed.length ? 'Any time today' : 'Today', p.anyTime.map((x) => row(x, '')));
+    section('Coming up', p.coming.map((x) => row(x, `${fmtDay(x.date)}${x.time ? ` ${fmtTime(x.time)}` : ''}`)));
+    return rows;
+  },
+  // Each bucket's open tasks, soonest due first (sortTasks, as the app sorts by due date): {bucket id: {name, rows}}.
+  listRows() {
+    const out = {};
+    const due = (t) => (t.due ? `${taskDate(t) === todayISO() ? 'Today' : fmtDay(taskDate(t))}${taskTime(t) ? ` ${fmtTime(taskTime(t))}` : ''}` : '');
+    for (const b of DB.buckets) {
+      const open = DB.tasks.filter((t) => !t.done && t.bucket === b.id && !hiddenTask(t));
+      out[b.id] = { name: b.name, rows: sortTasks(open, 'due').slice(0, 60).map((t) => ({ t: fullTitle(t), s: due(t), id: t.id, late: isOverdue(t) })) };
+    }
+    return out;
+  },
+  widgetsSent: '',
+  async widgets() {
+    if (!this.on || this.shell < 5) return;
+    const W = this.plug('ButlerWidgets');
+    if (!W) return;
+    const json = JSON.stringify({
+      day: toISO(new Date()), myDay: this.widgetRows(), lists: this.listRows(),
+      buckets: [...DB.buckets].sort((a, b) => a.order - b.order).map((b) => ({ id: b.id, name: b.name })),
+    });
+    if (json === this.widgetsSent) return;
+    try { await W.update({ data: json }); this.widgetsSent = json; } catch { /* sent again next time */ }
+  },
+  // A widget pressed: app.butler.home://open?task=… opens that task, ?view=today My Day.
+  openLink(url) {
+    if (!url || !String(url).startsWith('app.butler.home://open')) return;
+    const q = new URLSearchParams(String(url).split('?')[1] || '');
+    const id = q.get('task');
+    if (id && DB.tasks.some((t) => t.id === id)) { setView('tasks'); openTaskDrawer(id); return; }
+    setView(q.get('view') === 'tasks' ? 'tasks' : 'today');
+  },
+
   ring() { return this.on && device.get('ring', 'todo') === 'app' ? 'app' : 'todo'; },
   plugin() {
     const c = window.Capacitor;
@@ -9719,14 +9768,15 @@ const Native = {
   later() { // after any change or redraw: re-plan a moment later, once
     if (!this.on) return;
     clearTimeout(this.laterTimer);
-    this.laterTimer = setTimeout(() => this.schedule(), 1500);
+    this.laterTimer = setTimeout(() => { this.laterTimer = null; this.schedule(); this.widgets(); }, 1500);
   },
   // Butler going to the background: Android pauses it, so a re-plan still waiting happens now.
-  flush() {
-    if (!this.on || !this.laterTimer) return;
+  flush() { // always: it costs nothing when nothing changed, and Android may not wake Butler again for hours
+    if (!this.on) return;
     clearTimeout(this.laterTimer);
     this.laterTimer = null;
     this.schedule();
+    this.widgets();
   },
   async setRing(v) {
     device.set('ring', v === 'app' ? 'app' : 'todo');
@@ -9741,8 +9791,8 @@ const Native = {
     if (this.on && this.shell >= 3) { // the sign-in coming back from its Chrome sheet (or having started the app)
       const App = this.plug('App');
       try {
-        App.addListener('appUrlOpen', (e) => this.back(e && e.url));
-        Promise.resolve(App.getLaunchUrl()).then((l) => this.back(l && l.url)).catch(() => {});
+        App.addListener('appUrlOpen', (e) => { this.back(e && e.url); this.openLink(e && e.url); });
+        Promise.resolve(App.getLaunchUrl()).then((l) => { this.back(l && l.url); this.openLink(l && l.url); }).catch(() => {});
       } catch { /* no App plugin */ }
     }
     if (this.on && this.shell >= 4) { // Share › Butler (a share waiting from before Butler started is handed over now)

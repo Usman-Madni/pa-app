@@ -50,11 +50,13 @@ jobs:
           rsvg-convert -w 1024 -h 1024 ../icon-maskable.svg -o assets/icon-background.png
           npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0f5c57' --iconBackgroundColorDark '#0f5c57' --splashBackgroundColor '#0f5c57' --splashBackgroundColorDark '#0f5c57'
 
-      - name: Reminder sound and status-bar icon
+      # Butler's own Android pieces in res/ (status-bar bell, widget layouts, colours light and dark, widget info),
+      # and the reminder sound, made here.
+      - name: Butler's resources and reminder sound
         run: |
-          mkdir -p android/app/src/main/res/raw android/app/src/main/res/drawable
+          mkdir -p android/app/src/main/res/raw
+          cp -r res/. android/app/src/main/res/
           node make-sound.js android/app/src/main/res/raw/butler_ring.wav
-          cp res/drawable/ic_stat_butler.xml android/app/src/main/res/drawable/
 
       - name: Sync
         run: npx cap sync android
@@ -76,11 +78,11 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n\n    <application#' android/app/src/main/AndroidManifest.xml
           grep -E "EXACT_ALARM" android/app/src/main/AndroidManifest.xml
 
-      # Microsoft's sign-in comes back to app.butler.home://auth (registered in Azure as a mobile app): Android hands
-      # that address to Butler. Added to the app's main screen, beside the launcher entry.
-      - name: Sign-in return address
+      # Microsoft's sign-in comes back to app.butler.home://auth (registered in Azure as a mobile app), and a widget
+      # opens app.butler.home://open?…: Android hands those addresses to Butler. Added to the app's main screen.
+      - name: Sign-in return address and widget links
         run: |
-          sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="app.butler.home" android:host="auth" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
+          sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="app.butler.home" android:host="auth" />\n                <data android:scheme="app.butler.home" android:host="open" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
           grep -n "app.butler.home" android/app/src/main/AndroidManifest.xml
 
       # Share › Butler: Butler is offered in Android's share sheet for any file(s) or words (round 4), and the main
@@ -89,7 +91,15 @@ jobs:
         run: |
           sed -i '0,/<\/activity>/s#</activity>#    <intent-filter>\n                <action android:name="android.intent.action.SEND" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <data android:mimeType="*/*" />\n            </intent-filter>\n            <intent-filter>\n                <action android:name="android.intent.action.SEND_MULTIPLE" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <data android:mimeType="*/*" />\n            </intent-filter>\n        </activity>#' android/app/src/main/AndroidManifest.xml
           grep -c "android.intent.action.SEND" android/app/src/main/AndroidManifest.xml
-          cp native/MainActivity.java android/app/src/main/java/app/butler/home/MainActivity.java
+
+      # Butler's own Java (android-app/native/): the main screen (over the generated one), the widgets and their
+      # plugin, and the widgets' entries in the manifest.
+      - name: Butler's native code and widgets
+        run: |
+          cp native/*.java android/app/src/main/java/app/butler/home/
+          awk -v f=native/manifest-widgets.xml '/<\/application>/ { while ((getline line < f) > 0) print line } { print }' android/app/src/main/AndroidManifest.xml > manifest.tmp
+          mv manifest.tmp android/app/src/main/AndroidManifest.xml
+          grep -n "Widget\|ListConfig" android/app/src/main/AndroidManifest.xml
 
       - name: Version (one up each build, so an update installs over the last)
         run: |

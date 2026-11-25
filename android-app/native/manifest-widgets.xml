@@ -1,0 +1,20 @@
+        <!-- Butler's home-screen widgets (added before </application> by .github/workflows/android.yml) -->
+        <receiver android:name=".MyDayWidget" android:label="My Day" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/myday_widget_info" />
+        </receiver>
+        <receiver android:name=".ListWidget" android:label="One list" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/list_widget_info" />
+        </receiver>
+        <service android:name=".WidgetService" android:permission="android.permission.BIND_REMOTEVIEWS" android:exported="false" />
+        <activity android:name=".ListConfigActivity" android:label="Which bucket?" android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
