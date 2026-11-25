@@ -99,13 +99,27 @@ const fakeApp = () => {
   // --- Words shared (a link from a message): a task with them in its notes ---
   await a.listeners.shareReceived({ title: '', texts: ['Book the car service https://example.com/booking'], files: [] });
   await tick(20);
-  check(!sheet().querySelector('input[name="to"][value="vault"]') && !sheet().querySelector('input[name="to"][value="task"]'), 'words alone: only New task is offered');
+  check(!sheet().querySelector('input[name="to"][value="vault"]') && sheet().querySelector('input[name="to"][value="task"]'), 'words alone: New task or Add to a task (no Vault: it keeps files)');
   check(sheet().elements.title.value === 'Book the car service https://example.com/booking', 'named after the words');
   sheet().elements.title.value = 'Book the car service';
   submit();
   await tick(100);
   const w = PA.DB.tasks.find((x) => x.title === 'Book the car service');
   check(w && /example\.com\/booking/.test(w.notes), 'and what was shared goes in its notes');
+  win.eval('closeTaskDrawer')();
+
+  // --- A link added to a task already there: it goes under that task's notes, which are kept ---
+  ins.notes = 'Ask about the excess.';
+  ins.updated = 1;
+  await a.listeners.shareReceived({ title: '', texts: ['https://example.com/policy-terms'], files: [] });
+  await tick(20);
+  pick('task');
+  sheet().elements.task.value = 'a';
+  check(/added to its notes/.test(sheet().textContent), 'the sheet says the words go in its notes');
+  submit();
+  await tick(100);
+  check(ins.notes === 'Ask about the excess.\n\nhttps://example.com/policy-terms' && ins.attachments.length === 2, 'the link is added below the task\'s own notes (nothing else changed)');
+  check(PA.state.openTask === 'a' && ins.updated > 1, 'the task opens, and the change is stamped (saved through changed)');
   win.eval('closeTaskDrawer')();
 
   // --- The same share handed over twice: one sheet ---

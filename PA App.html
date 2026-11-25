@@ -8655,10 +8655,10 @@ function drawAssetForm() {
     $('#modal').innerHTML = box('Shared with Butler', `
       <p class="meta" style="margin:0">${esc(what || 'Nothing')}${files.length ? `: ${esc(files.map((x) => x.name).join(', '))}` : ''}${f.failed ? ` (${plural(f.failed, 'file')} couldn't be read)` : ''}</p>
       ${ro ? `<p class="form-error" style="margin:0">Read-only on this phone just now: ${OD.connected() ? 'it saves again once it has read the latest from OneDrive (be online)' : 'sign in to OneDrive'}, then share again.</p>` : ''}
-      <fieldset class="owner-box"><legend>Where it goes</legend><div class="check-row">${choice('new', 'New task')}${choice('task', 'Add to a task', files.length > 0 && tasks.length > 0)}${choice('vault', 'Vault', files.length > 0)}</div></fieldset>
+      <fieldset class="owner-box"><legend>Where it goes</legend><div class="check-row">${choice('new', 'New task')}${choice('task', 'Add to a task', tasks.length > 0)}${choice('vault', 'Vault', files.length > 0)}</div></fieldset>
       ${to === 'new' ? `<label class="field">Task<input class="input" name="title" value="${esc(title)}" maxlength="200" required></label>${texts.length ? '<p class="meta" style="margin:0">What was shared goes in its notes.</p>' : ''}` : ''}
-      ${to === 'task' ? `<label class="field">Which task<select class="input" name="task" required>${tasks.map((t) => `<option value="${esc(t.id)}">${esc(fullTitle(t))}${t.due ? ` (${esc(fmtDay(taskDate(t)))})` : ''}</option>`).join('')}</select></label>` : ''}
-      ${to === 'vault' ? `<label class="field">Which folder<select class="input" name="place" required>${places.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>` : ''}`,
+      ${to === 'task' ? `<label class="field">Which task<select class="input" name="task" required>${tasks.map((t) => `<option value="${esc(t.id)}">${esc(fullTitle(t))}${t.due ? ` (${esc(fmtDay(taskDate(t)))})` : ''}</option>`).join('')}</select></label>${texts.length ? '<p class="meta" style="margin:0">What was shared is added to its notes.</p>' : ''}` : ''}
+      ${to === 'vault' ? `<label class="field">Which folder<select class="input" name="place" required>${places.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>${texts.length ? '<p class="meta" style="margin:0">Only the files go in the Vault; the shared words aren\'t kept.</p>' : ''}` : ''}`,
     '', to === 'new' ? 'Add task' : 'Add', ro);
     if (to === 'new' && !ro) $('#modal input[name="title"]')?.focus();
     return;
@@ -8969,8 +8969,10 @@ async function shareSave(f, data) {
   if (to === 'task') {
     const t = DB.tasks.find((x) => x.id === data.task);
     if (!t) return formError('Pick a task.');
+    if (texts.length) { t.notes = [String(t.notes || '').trimEnd(), ...texts].filter(Boolean).join('\n\n'); changed('tasks'); }
     closeAssetForm(true);
-    await AT.add(t, files);
+    if (files.length) await AT.add(t, files);
+    else { render(); toast(`Added to "${fullTitle(t)}"`); }
     openTaskDrawer(t.id);
     return;
   }
