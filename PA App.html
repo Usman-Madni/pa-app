@@ -9700,6 +9700,7 @@ const Native = {
     setView(q.get('view') === 'tasks' ? 'tasks' : 'today');
   },
 
+  leave() { const App = this.plug('App'); Promise.resolve(App && App.minimizeApp && App.minimizeApp()).catch(() => {}); },
   ring() { return this.on && device.get('ring', 'todo') === 'app' ? 'app' : 'todo'; },
   plugin() {
     const c = window.Capacitor;
@@ -9793,6 +9794,9 @@ const Native = {
       try {
         App.addListener('appUrlOpen', (e) => { this.back(e && e.url); this.openLink(e && e.url); });
         Promise.resolve(App.getLaunchUrl()).then((l) => { this.back(l && l.url); this.openLink(l && l.url); }).catch(() => {});
+        // The phone's back gesture does what Esc does on the laptop; with nothing open, it leaves Butler (which stays
+        // in the background, so it opens again at once).
+        App.addListener('backButton', () => { if (!stepBack()) this.leave(); });
       } catch { /* no App plugin */ }
     }
     if (this.on && this.shell >= 4) { // Share › Butler (a share waiting from before Butler started is handed over now)
@@ -11458,20 +11462,27 @@ document.addEventListener('input', (e) => {
 document.addEventListener('keydown', (e) => {
   if (Viewer.on() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); Viewer.step(e.key === 'ArrowLeft' ? -1 : 1); return; }
   if (e.key !== 'Escape') return;
-  if (Viewer.on()) { Viewer.close(); return; } // the photo first, then the pop-up under it
-  if (ActMenu.isOpen()) { ActMenu.close(); $('.act-toggle')?.focus(); return; }
-  if (state.bellOpen) { Bell.close(); $('.bell-btn')?.focus(); return; }
-  if (asking) { answerAsk(false); return; }
-  if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return; } // the task stays not done
-  if (state.openTask && state.assetForm) { closeTaskDrawer(); return; } // the task panel over a pop-up: it first
-  if (state.assetForm) { closeAssetForm(); return; }
-  if (state.moreOpen) { state.moreOpen = false; renderMore(); return; }
-  if (state.boardAdd !== null && e.target.closest?.('.add-card')) { state.boardAdd = null; render(); return; }
-  if (Selection.on() && !state.openTask) { Selection.stop(); return; }
-  if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return; }
-  if (state.openTask) { closeTaskDrawer(); return; }
-  if (PARENT_OF[state.view] && !e.target.closest?.('input, textarea, select')) setView(PARENT_OF[state.view]); // a sub-page: back to its parent
+  stepBack(e.target);
 });
+// Esc on the laptop, and the phone's back gesture in the Android app (Native.start): close the top thing open, or step
+// back from a sub-page to its parent. False when there was nothing to close (the app then leaves Butler).
+// `from`: the element Esc was pressed in (null for the back gesture).
+function stepBack(from = null) {
+  if (Viewer.on()) { Viewer.close(); return true; } // the photo first, then the pop-up under it
+  if (ActMenu.isOpen()) { ActMenu.close(); $('.act-toggle')?.focus(); return true; }
+  if (state.bellOpen) { Bell.close(); $('.bell-btn')?.focus(); return true; }
+  if (asking) { answerAsk(false); return true; }
+  if (state.donePrompt) { closeDonePrompt(); render(); renderDrawer(); return true; } // the task stays not done
+  if (state.openTask && state.assetForm) { closeTaskDrawer(); return true; } // the task panel over a pop-up: it first
+  if (state.assetForm) { closeAssetForm(); return true; }
+  if (state.moreOpen) { state.moreOpen = false; renderMore(); return true; }
+  if (state.boardAdd !== null && (!from || from.closest?.('.add-card'))) { state.boardAdd = null; render(); return true; }
+  if (Selection.on() && !state.openTask) { Selection.stop(); return true; }
+  if (state.daySheet && !state.openTask && state.view === 'calendar') { state.daySheet = false; render(); return true; }
+  if (state.openTask) { closeTaskDrawer(); return true; }
+  if (PARENT_OF[state.view] && !from?.closest?.('input, textarea, select')) { setView(PARENT_OF[state.view]); return true; } // a sub-page: back to its parent
+  return false;
+}
 // Keyboard shortcuts, for when you're not typing in a box: 1 to 9 the screens in the sidebar's order and 0 Data, N
 // the bell, M the ⋮ menu, B the Bin, Q W E R T Y U I O P the open screen's buttons in order (Add asset, Add rates…), A S D F G H J K L its
 // tabs in order, / search, ? lists them. (Esc, above, closes or steps back.)
