@@ -7691,10 +7691,28 @@ const Utilities = {
     DB.bills = DB.bills.filter((b) => !(b.utility === c.id && months.has(this.monthOf(b))));
     for (const x of rows) this.addBill({ utility: c.id, month: x.month, date: this.dateIn(x.month, c.billDay || 1), amount: x.amount, units: x.units, credit: x.credit });
   },
+  // A bill's files: those on it (bill), and for bills from before 28 Nov the files of the task it came from that were
+  // never asked about (no bill at all; '' is "left on the task").
   billFiles(b) {
     const t = b.task && DB.tasks.find((x) => x.id === b.task);
     const fromTask = new Set(t ? t.attachments.map((a) => a.file) : []);
-    return DB.docs.filter((d) => d.bill === b.id || (fromTask.size && (d.attachments || []).some((a) => fromTask.has(a.file))));
+    return DB.docs.filter((d) => d.bill === b.id || (d.bill === undefined && fromTask.size && (d.attachments || []).some((a) => fromTask.has(a.file))));
+  },
+  // The files of a bill task (kept in the connection's folder) not on any bill yet: offered when its bill is added,
+  // each ticked to go on it (28 Nov).
+  taskFiles(t) {
+    const files = new Set((t?.attachments || []).map((a) => a.file));
+    return files.size ? DB.docs.filter((d) => d.bill === undefined && (d.attachments || []).some((a) => files.has(a.file))) : [];
+  },
+  // Put the ticked ones on the bill (named like its other files), the others left on the task.
+  takeTaskFiles(b, t, ticked) {
+    const c = DB.utilities.find((x) => x.id === b.utility);
+    const docs = this.taskFiles(t);
+    for (const d of docs) {
+      if (ticked.has(d.id)) { d.bill = b.id; if (c) { d.name = `${c.name} ${ymLabel(this.monthOf(b))}`; d.named = true; } } else d.bill = '';
+    }
+    if (docs.length) changed('docs');
+    return docs.filter((d) => d.bill === b.id);
   },
   async addBillFiles(b, files) {
     const c = DB.utilities.find((x) => x.id === b.utility);
@@ -8805,6 +8823,7 @@ function drawAssetForm() {
       <label class="field">Paid on <span class="meta">(leave empty if it isn't paid yet)</span><input class="input" type="date" name="date" value="${esc(v.date)}"></label>
       <label class="field">The bill for<input class="input" type="month" name="month" value="${esc(v.month)}" required></label>
       <label class="field">Note<input class="input" name="note" value="${esc(v.note)}" maxlength="120"></label>
+      ${!b && Utilities.taskFiles(t).length ? `<fieldset class="owner-box" data-task-files><legend>Files from the task <span class="meta">(ticked: they go on this bill)</span></legend><div class="check-row">${Utilities.taskFiles(t).map((d) => { const a = d.attachments.find((x) => t.attachments.some((y) => y.file === x.file)) || d.attachments[0]; return `<label><input type="checkbox" name="tf-${esc(d.id)}" checked> ${fileMark(a, 'docs', d)} ${esc(a.name)}</label>`; }).join('')}</div></fieldset>` : ''}
       ${b ? '' : `<label class="field">The bill itself <span class="meta">(optional: a scan or photo, kept in Vault › ${esc(Utilities.folder(c).split('/').join(' › '))})</span><input class="input" type="file" multiple accept="image/*,application/pdf" data-pending-files></label>`}`,
     b ? '<button type="button" class="btn danger edit-only" data-action="bill-delete" style="margin-right:auto">Delete</button>' : '', 'Save', ro,
     b ? `<div class="value-history"><div class="meta">The bill itself</div>${Utilities.billFiles(b).map((d) => { const a = d.attachments[0]; return a ? `<div class="vh-row"><button type="button" class="link-btn" data-action="rec-file-open" data-key="docs" data-rec="${esc(d.id)}" data-att="${esc(a.id)}">${fileMark(a, 'docs', d)} ${esc(a.name)}</button><span class="meta">${fmtSize(a.size)}</span><button type="button" class="icon-btn edit-only" data-action="plain-remove" data-id="${esc(d.id)}" aria-label="Delete" title="Delete">${ic('x', 'sm')}</button></div>` : ''; }).join('')}<div class="row edit-only"><label class="btn small">${ic('paperclip', 'sm')}Add file<input type="file" multiple data-input="bill-files" data-id="${esc(b.id)}" hidden></label>${state.phone ? `<label class="btn small">${ic('camera', 'sm')}Take photo<input type="file" accept="image/*" capture="environment" data-input="bill-files" data-id="${esc(b.id)}" hidden></label>` : ''}</div></div>` : '');
@@ -9256,7 +9275,7 @@ function formError(msg) { const p = $('#modal .form-error'); if (p) { p.textCont
 // "Shared with Butler" picker (search, and chips to narrow it). Each target is {kind, value ('kind:id'), title, where,
 // files (takes files), words (takes words: added to its notes or text)}; add() puts what was shared there, through
 // the same places those records keep files already (AT by key, Vault folders, a bill's scan, a connection's or an
-// agreement's folder). Only what the person picker shows; tasks only yours and open.
+// agreement's folder). Only what the person picker shows; tasks only open ones.
 const ShareTo = {
   KINDS: [['tasks', 'Tasks'], ['assets', 'Assets'], ['utilities', 'Connections'], ['bills', 'Bills'], ['vault', 'Vault'], ['upkeep', 'Upkeep'], ['rentals', 'Agreements'], ['notes', 'Notes'], ['musings', 'Musings']],
   list(withFiles, withWords) {
@@ -9264,8 +9283,11 @@ const ShareTo = {
     // files shared: only what keeps files (words then go in its notes where it has them); words alone: what keeps words
     const put = (kind, id, title, where, files, words) => { if (withFiles ? files : !withWords || words) out.push({ kind, value: `${kind}:${id}`, title: title || 'Untitled', where, files, words }); };
     const today = todayISO();
-    DB.tasks.filter((t) => !t.done && People.mine(t) && !hiddenTask(t)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || fullTitle(a).localeCompare(fullTitle(b)))
-      .forEach((t) => put('tasks', t.id, fullTitle(t), t.due ? `Task · ${taskDate(t) < today ? 'late, ' : ''}${fmtDay(taskDate(t))}` : 'Task', true, true));
+    // tasks of the person shown, like everything else here (28 Nov: someone else's bill task too), saying whose when
+    // it isn't only yours
+    const whose = (t) => (People.several() && !(People.of(t).length === 1 && People.mine(t)) ? ` · ${People.of(t).map((id) => People.name(id)).join(', ')}` : '');
+    DB.tasks.filter((t) => !t.done && People.shows(t) && !hiddenTask(t) && !PendingDelete.has(t.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || fullTitle(a).localeCompare(fullTitle(b)))
+      .forEach((t) => put('tasks', t.id, fullTitle(t), `${t.due ? `Task · ${taskDate(t) < today ? 'late, ' : ''}${fmtDay(taskDate(t))}` : 'Task'}${whose(t)}`, true, true));
     Assets.list(People.viewing()).filter((a) => !a.closed).sort((a, b) => a.name.localeCompare(b.name))
       .forEach((a) => put('assets', a.id, a.name, `Assets › ${Assets.kind(a.kind).name}`, true, true));
     const conns = DB.utilities.filter((c) => People.shows(c)).sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
@@ -9548,6 +9570,8 @@ function submitAssetForm(type, data) {
     let saved = b;
     if (b) Object.assign(b, fields); else saved = Utilities.addBill({ ...fields, utility: f.utility, task: f.task || '' });
     changed('bills');
+    const billTask = !b && f.task && DB.tasks.find((x) => x.id === f.task);
+    if (billTask) Utilities.takeTaskFiles(saved, billTask, new Set(Object.keys(data).filter((k) => k.startsWith('tf-') && data[k] === 'on').map((k) => k.slice(3)))); // ticked: on the bill; unticked: left on the task
     if (ups.length || extra) {
       const when = fields.date || todayISO();
       const vendor = bc.provider || bc.name;
