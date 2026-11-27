@@ -75,9 +75,10 @@ const fakeApp = () => {
   a.cache['/c/3.tmp'] = 'PDF-TWO!';
   await a.listeners.shareReceived({ files: [{ uri: '/c/2.tmp', name: 'Policy.pdf', mimeType: 'application/pdf' }, { uri: '/c/3.tmp', name: 'Schedule.pdf', mimeType: 'application/pdf' }] });
   await tick(20);
-  pick('task');
-  check(sheet().elements.task && [...sheet().elements.task.options].some((o) => o.value === 'a'), 'Add to a task lists your open tasks');
-  sheet().elements.task.value = 'a';
+  pick('pick');
+  const target = (v) => { const r = sheet().querySelector(`input[name="target"][value="${v}"]`); r.checked = true; return r; };
+  check(sheet().querySelector('input[name="target"][value="tasks:a"]'), 'Add to… lists your open tasks');
+  target('tasks:a');
   submit();
   await tick(150);
   const ins = PA.DB.tasks.find((x) => x.id === 'a');
@@ -87,19 +88,32 @@ const fakeApp = () => {
   a.cache['/c/4.tmp'] = 'PASSPORT';
   await a.listeners.shareReceived({ files: [{ uri: '/c/4.tmp', name: 'Passport.pdf', mimeType: 'application/pdf' }] });
   await tick(20);
-  pick('vault');
-  const opts = [...sheet().elements.place.options].map((o) => o.value);
-  check(opts.length && opts.every((v) => !/\|(Assets|Tasks|Upkeep|Musings)(\/|$)/.test(v)), 'Vault lists its folders (never Butler\'s own Assets, Tasks, Upkeep or Musings)');
-  sheet().elements.place.value = opts[0];
+  pick('pick');
+  const opts = [...sheet().querySelectorAll('input[name="target"]')].map((o) => o.value).filter((v) => v.startsWith('vault:folder|'));
+  check(opts.length && opts.every((v) => !/\|(Assets|Tasks|Upkeep|Musings)(\/|$)/.test(v)), 'Vault folders are listed (never Butler\'s own Assets, Tasks, Upkeep or Musings)');
+  // narrowing it down: the Vault chip, then the search box
+  const kind = sheet().querySelector('[data-share-kind][value="vault"]');
+  kind.checked = true;
+  kind.dispatchEvent(new win.Event('change', { bubbles: true }));
+  const shown = () => [...sheet().querySelectorAll('.share-list li')].filter((li) => !li.hidden);
+  check(shown().length && shown().every((li) => li.dataset.kind === 'vault'), 'the Vault chip shows only the Vault');
+  const q = sheet().querySelector('[data-share-q]');
+  q.value = 'zzz nothing';
+  q.dispatchEvent(new win.Event('input', { bubbles: true }));
+  check(!shown().length && !sheet().querySelector('.share-none').hidden, 'a search with no match says so');
+  q.value = 'documents';
+  q.dispatchEvent(new win.Event('input', { bubbles: true }));
+  check(shown().length && shown().every((li) => /documents/.test(li.dataset.find)), 'the search narrows it to what matches');
+  target(opts[0]);
   submit();
   await tick(200);
   const doc1 = PA.DB.docs.find((d) => d.name === 'Passport');
-  check(doc1 && doc1.plain && doc1.attachments.length === 1 && doc1.folder === opts[0].split('|')[1], 'the file goes into that Vault folder');
+  check(doc1 && doc1.plain && doc1.attachments.length === 1 && doc1.folder === opts[0].split('|')[2], 'the file goes into that Vault folder');
 
   // --- Words shared (a link from a message): a task with them in its notes ---
   await a.listeners.shareReceived({ title: '', texts: ['Book the car service https://example.com/booking'], files: [] });
   await tick(20);
-  check(!sheet().querySelector('input[name="to"][value="vault"]') && sheet().querySelector('input[name="to"][value="task"]'), 'words alone: New task or Add to a task (no Vault: it keeps files)');
+  check(sheet().querySelector('input[name="to"][value="note"]') && sheet().querySelector('input[name="to"][value="pick"]'), 'words alone: New task, New note, or Add to…');
   check(sheet().elements.title.value === 'Book the car service https://example.com/booking', 'named after the words');
   sheet().elements.title.value = 'Book the car service';
   submit();
@@ -113,14 +127,59 @@ const fakeApp = () => {
   ins.updated = 1;
   await a.listeners.shareReceived({ title: '', texts: ['https://example.com/policy-terms'], files: [] });
   await tick(20);
-  pick('task');
-  sheet().elements.task.value = 'a';
+  pick('pick');
+  check(!sheet().querySelector('input[name="target"][value^="vault:folder|"]'), 'words alone: no Vault folders (they keep only files)');
+  target('tasks:a');
   check(/added to its notes/.test(sheet().textContent), 'the sheet says the words go in its notes');
   submit();
   await tick(100);
   check(ins.notes === 'Ask about the excess.\n\nhttps://example.com/policy-terms' && ins.attachments.length === 2, 'the link is added below the task\'s own notes (nothing else changed)');
   check(PA.state.openTask === 'a' && ins.updated > 1, 'the task opens, and the change is stamped (saved through changed)');
   win.eval('closeTaskDrawer')();
+
+  // --- Anywhere that keeps files: an asset, a connection's bill, an upkeep entry ---
+  const Assets = win.eval('Assets');
+  const car = Assets.add({ kind: 'vehicle', name: 'Civic' });
+  const pump = win.eval('Utilities').add({ type: 'Fuel', name: 'Pump', cars: [car.id] });
+  const bill = win.eval('Utilities').addBill({ utility: pump.id, month: '2026-11', date: '', amount: 5000, period: 'Nov 2026' });
+  const oil = win.eval('Upkeep').add({ asset: car.id, item: 'Oil change', date: '2026-11-20', cost: 0 });
+  win.eval('changed')('assets', 'utilities', 'bills', 'upkeep');
+  const shareFile = async (name) => { a.cache[`/c/${name}`] = 'DATA'; await a.listeners.shareReceived({ files: [{ uri: `/c/${name}`, name, mimeType: 'image/jpeg' }] }); await tick(20); pick('pick'); };
+  await shareFile('Civic papers.jpg');
+  const all = [...sheet().querySelectorAll('input[name="target"]')].map((o) => o.value);
+  check([`assets:${car.id}`, `utilities:${pump.id}`, `bills:${bill.id}`, `upkeep:${oil.id}`].every((v) => all.includes(v)) && !all.some((v) => v.startsWith('notes:')), 'files: assets, connections, bills and upkeep are offered (notes aren\'t: they keep no files)');
+  const sk = (k) => { const r = sheet().querySelector(`[data-share-kind][value="${k}"]`); r.checked = true; r.dispatchEvent(new win.Event('change', { bubbles: true })); };
+  sk('assets');
+  check(shown().every((li) => li.dataset.kind === 'assets') && shown().some((li) => /civic/.test(li.dataset.find)), 'the Assets chip narrows it to assets');
+  target(`assets:${car.id}`);
+  submit();
+  await tick(200);
+  check(car.attachments.length === 1 && car.attachments[0].original === 'Civic papers.jpg', 'a file shared to an asset is in its files');
+  win.eval('closeAssetForm')(true);
+  await shareFile('Fuel Nov.jpg');
+  target(`bills:${bill.id}`);
+  submit();
+  await tick(200);
+  check(PA.DB.docs.some((d) => d.bill === bill.id), 'to a bill: kept as the bill\'s scan');
+  win.eval('closeAssetForm')(true);
+  await a.listeners.shareReceived({ texts: ['Synthetic 5W-30, 4 litres'], files: [] });
+  await tick(20);
+  pick('pick');
+  target(`upkeep:${oil.id}`);
+  submit();
+  await tick(100);
+  check(/Synthetic 5W-30/.test(oil.notes), 'words to an upkeep entry go in its notes');
+  win.eval('closeAssetForm')(true);
+
+  // --- Words to a new note ---
+  await a.listeners.shareReceived({ texts: ['Garage: call before 5, ask for the manager'], files: [] });
+  await tick(20);
+  pick('note');
+  sheet().elements.title.value = 'Garage number';
+  submit();
+  await tick(50);
+  const note = PA.DB.notes.find((n) => n.title === 'Garage number');
+  check(note && /call before 5/.test(note.body) && PA.state.view === 'notes' && PA.state.activeNote === note.id, 'New note: a note with the words, and it opens');
 
   // --- The same share handed over twice: one sheet ---
   win.eval('closeAssetForm')(true);

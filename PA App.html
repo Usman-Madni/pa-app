@@ -386,6 +386,21 @@ button:disabled { cursor: not-allowed; }
 .split-row { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .split-row .field, .modal .split-row .field, .modal .bu-row .field { margin: 0; min-width: 0; } /* beats .modal .field's 130px */
 .split-row .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.share-pick { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.share-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.share-kind { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: var(--t-sm); cursor: pointer; background: var(--panel); color: var(--text); }
+.share-kind input { position: absolute; opacity: 0; pointer-events: none; }
+.share-kind:has(input:checked) { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+.share-kind:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.share-list { list-style: none; margin: 0; padding: 0; min-height: min(36vh, 280px); max-height: min(52vh, 420px); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+.share-list li + li { border-top: 1px solid var(--border); }
+.share-list label { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; min-width: 0; }
+.share-list label:hover { background: var(--panel-2); }
+.share-list label:has(input:checked) { background: var(--accent-soft); }
+.share-list input { flex: 0 0 auto; margin: 0; }
+.sl-main { display: flex; flex-direction: column; min-width: 0; }
+.sl-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-main .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bill-parts { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .bu-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; align-items: end; }
 .bu-row.bu-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); }
@@ -8926,26 +8941,28 @@ function drawAssetForm() {
     const files = f.files || [];
     const texts = f.texts || [];
     const to = f.to || 'new';
-    const tasks = DB.tasks.filter((t) => !t.done && People.mine(t) && !hiddenTask(t)).sort((a, b) => fullTitle(a).localeCompare(fullTitle(b)));
-    const places = [];
-    for (const top of Vault.tops()) {
-      const name = Vault.topName(top);
-      places.push([`${top}|Documents`, `${name} › Documents`]);
-      for (const p of Vault.paths(top)) if (!Vault.reserved(p) && p !== 'Documents') places.push([`${top}|${p}`, `${name} › ${p.split('/').join(' › ')}`]);
-    }
+    const targets = ShareTo.list(files.length > 0, texts.length > 0);
     const first = files[0] ? files[0].name.replace(/\.[^.]+$/, '') : '';
     const title = f.title ?? (texts[0] ? texts[0].split('\n')[0].slice(0, 120) : first);
     const what = [files.length ? plural(files.length, 'file') : '', texts.length && !files.length ? 'some words' : ''].filter(Boolean).join(' and ');
     const choice = (v, label, on = true) => (on ? `<label><input type="radio" name="to" value="${v}" data-share-to ${to === v ? 'checked' : ''}> ${label}</label>` : '');
+    const kinds = ShareTo.KINDS.filter(([k]) => targets.some((x) => x.kind === k));
+    const kindName = Object.fromEntries(ShareTo.KINDS);
     $('#modal').innerHTML = box('Shared with Butler', `
       <p class="meta" style="margin:0">${esc(what || 'Nothing')}${files.length ? `: ${esc(files.map((x) => x.name).join(', '))}` : ''}${f.failed ? ` (${plural(f.failed, 'file')} couldn't be read)` : ''}</p>
       ${ro ? `<p class="form-error" style="margin:0">Read-only on this phone just now: ${OD.connected() ? 'it saves again once it has read the latest from OneDrive (be online)' : 'sign in to OneDrive'}, then share again.</p>` : ''}
-      <fieldset class="owner-box"><legend>Where it goes</legend><div class="check-row">${choice('new', 'New task')}${choice('task', 'Add to a task', tasks.length > 0)}${choice('vault', 'Vault', files.length > 0)}</div></fieldset>
-      ${to === 'new' ? `<label class="field">Task<input class="input" name="title" value="${esc(title)}" maxlength="200" required></label>${texts.length ? '<p class="meta" style="margin:0">What was shared goes in its notes.</p>' : ''}` : ''}
-      ${to === 'task' ? `<label class="field">Which task<select class="input" name="task" required>${tasks.map((t) => `<option value="${esc(t.id)}">${esc(fullTitle(t))}${t.due ? ` (${esc(fmtDay(taskDate(t)))})` : ''}</option>`).join('')}</select></label>${texts.length ? '<p class="meta" style="margin:0">What was shared is added to its notes.</p>' : ''}` : ''}
-      ${to === 'vault' ? `<label class="field">Which folder<select class="input" name="place" required>${places.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>${texts.length ? '<p class="meta" style="margin:0">Only the files go in the Vault; the shared words aren\'t kept.</p>' : ''}` : ''}`,
-    '', to === 'new' ? 'Add task' : 'Add', ro);
+      <fieldset class="owner-box"><legend>Where it goes</legend><div class="check-row">${choice('new', 'New task')}${choice('note', 'New note', texts.length > 0 && !files.length)}${choice('pick', 'Add to…', targets.length > 0)}</div></fieldset>
+      ${to === 'new' || to === 'note' ? `<label class="field">${to === 'note' ? 'Note' : 'Task'}<input class="input" name="title" value="${esc(title)}" maxlength="200" ${to === 'new' ? 'required' : ''}></label>${texts.length ? `<p class="meta" style="margin:0">What was shared goes in its ${to === 'note' ? 'text' : 'notes'}.</p>` : ''}` : ''}
+      ${to === 'pick' ? `<div class="share-pick" data-share-pick>
+        <input class="input" type="search" placeholder="Search: a task, a car, a bill, a folder…" data-share-q aria-label="Search where it goes" autocomplete="off">
+        <div class="share-kinds" role="radiogroup" aria-label="Narrow it down">${[['all', 'All'], ...kinds].map(([k, l]) => `<label class="share-kind"><input type="radio" name="kind" value="${k}" data-share-kind ${k === 'all' ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
+        <ul class="share-list" role="radiogroup" aria-label="Where it goes">${targets.map((x) => `<li data-kind="${esc(x.kind)}" data-find="${esc(`${x.title} ${x.where} ${kindName[x.kind] || ''}`.toLowerCase())}"><label><input type="radio" name="target" value="${esc(x.value)}" required> ${ic({ tasks: 'list-check', assets: 'coins', utilities: 'bolt', bills: 'receipt', vault: x.value.includes('folder|') ? 'folder' : 'id', upkeep: 'tool', rentals: 'home', notes: 'note', musings: 'pencil' }[x.kind] || 'file-text', 'sm')}<span class="sl-main"><span class="sl-title">${esc(x.title)}</span><span class="meta">${esc(x.where)}${texts.length && files.length && !x.words ? ' · files only' : ''}</span></span></label></li>`).join('')}</ul>
+        <p class="meta share-none" hidden>Nothing matches.</p>
+        ${texts.length ? `<p class="meta" style="margin:0">${files.length ? 'The files go there; the words go in its notes (a Vault folder keeps only the files).' : 'What was shared is added to its notes or text.'}</p>` : ''}
+      </div>` : ''}`,
+    '', to === 'new' ? 'Add task' : to === 'note' ? 'Add note' : 'Add', ro);
     if (to === 'new' && !ro) $('#modal input[name="title"]')?.focus();
+    if (to === 'pick') $('#modal [data-share-q]')?.focus();
     return;
   }
   if (f.type === 'import') {
@@ -9235,6 +9252,72 @@ function formError(msg) { const p = $('#modal .form-error'); if (p) { p.textCont
 
 // Saving a pop-up. Returns quietly (the pop-up stays, with a message) when something doesn't add up.
 // What was shared to Butler goes where the sheet says: a new task (the words in its notes), a task's files, or the Vault.
+// Where something shared with Butler can go (27 Nov): every kind of record that keeps files or words, for the
+// "Shared with Butler" picker (search, and chips to narrow it). Each target is {kind, value ('kind:id'), title, where,
+// files (takes files), words (takes words: added to its notes or text)}; add() puts what was shared there, through
+// the same places those records keep files already (AT by key, Vault folders, a bill's scan, a connection's or an
+// agreement's folder). Only what the person picker shows; tasks only yours and open.
+const ShareTo = {
+  KINDS: [['tasks', 'Tasks'], ['assets', 'Assets'], ['utilities', 'Connections'], ['bills', 'Bills'], ['vault', 'Vault'], ['upkeep', 'Upkeep'], ['rentals', 'Agreements'], ['notes', 'Notes'], ['musings', 'Musings']],
+  list(withFiles, withWords) {
+    const out = [];
+    // files shared: only what keeps files (words then go in its notes where it has them); words alone: what keeps words
+    const put = (kind, id, title, where, files, words) => { if (withFiles ? files : !withWords || words) out.push({ kind, value: `${kind}:${id}`, title: title || 'Untitled', where, files, words }); };
+    const today = todayISO();
+    DB.tasks.filter((t) => !t.done && People.mine(t) && !hiddenTask(t)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || fullTitle(a).localeCompare(fullTitle(b)))
+      .forEach((t) => put('tasks', t.id, fullTitle(t), t.due ? `Task · ${taskDate(t) < today ? 'late, ' : ''}${fmtDay(taskDate(t))}` : 'Task', true, true));
+    Assets.list(People.viewing()).filter((a) => !a.closed).sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((a) => put('assets', a.id, a.name, `Assets › ${Assets.kind(a.kind).name}`, true, true));
+    const conns = DB.utilities.filter((c) => People.shows(c)).sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+    conns.forEach((c) => put('utilities', c.id, c.name, `Utilities › ${c.type}`, true, true));
+    const ids = new Set(conns.map((c) => c.id));
+    DB.bills.filter((b) => ids.has(b.utility)).sort((a, b) => Utilities.monthOf(b).localeCompare(Utilities.monthOf(a))).slice(0, 60)
+      .forEach((b) => { const c = DB.utilities.find((x) => x.id === b.utility); put('bills', b.id, `${c.name} bill, ${b.period}`, `Utilities › ${c.type} › Bills`, true, true); });
+    for (const top of Vault.tops()) {
+      const name = Vault.topName(top);
+      for (const p of ['Documents', ...Vault.paths(top).filter((x) => !Vault.reserved(x) && x !== 'Documents')]) put('vault', `folder|${top}|${p}`, p.split('/').pop(), `Vault folder › ${name} › ${p.split('/').join(' › ')}`, true, false);
+    }
+    DB.docs.filter((d) => !d.plain && People.shows(d)).sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((d) => put('vault', d.id, d.name, `Vault › ${Vault.topName(Vault.topOf(d))} › ${Vault.folderOf(d).split('/').join(' › ')}`, true, true));
+    const cars = new Map(Assets.list(People.viewing()).map((a) => [a.id, a.name]));
+    DB.upkeep.filter((e) => cars.has(e.asset)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 80)
+      .forEach((e) => put('upkeep', e.id, e.item, `Upkeep · ${cars.get(e.asset)}, ${fmtDate(e.date)}`, true, true));
+    DB.rentals.filter((r) => People.shows(r) && !r.ended).sort((a, b) => a.name.localeCompare(b.name)).forEach((r) => put('rentals', r.id, r.name, 'Agreements', true, true));
+    DB.notes.filter((n) => People.shows(n)).sort((a, b) => (b.updated || 0) - (a.updated || 0)).forEach((n) => put('notes', n.id, n.title, 'Note', false, true));
+    DB.musings.filter((m) => People.shows(m)).sort((a, b) => (b.written || '').localeCompare(a.written || '')).forEach((m) => put('musings', m.id, m.title, 'Musing', true, true));
+    return out;
+  },
+  // The record behind a target, and the field its words go in.
+  find(value) {
+    const [kind, ...rest] = String(value || '').split(':');
+    const id = rest.join(':');
+    if (kind === 'vault' && id.startsWith('folder|')) { const [, top, ...p] = id.split('|'); return { kind, folder: { top, path: p.join('|') } }; }
+    const store = { tasks: 'tasks', assets: 'assets', utilities: 'utilities', bills: 'bills', vault: 'docs', upkeep: 'upkeep', rentals: 'rentals', notes: 'notes', musings: 'musings' }[kind];
+    const rec = store && (DB[store] || []).find((x) => x.id === id);
+    const field = { bills: 'note', notes: 'body', musings: 'body' }[kind] || 'notes';
+    return rec ? { kind, store, rec, field } : null;
+  },
+  // Put what was shared there. Returns a line to show ("Added 2 files to …").
+  async add(value, files, texts) {
+    const t = this.find(value);
+    if (!t) return null;
+    if (t.folder) {
+      const made = await Vault.addFiles(t.folder.top, t.folder.path, files);
+      return made.length ? `Added ${plural(made.length, 'file')} to ${Vault.topName(t.folder.top)} › ${t.folder.path.split('/').join(' › ')}` : '';
+    }
+    const { kind, store, rec, field } = t;
+    if (texts.length) { rec[field] = [String(rec[field] || '').trimEnd(), ...texts].filter(Boolean).join('\n\n'); changed(store); }
+    if (files.length) {
+      if (kind === 'bills') await Utilities.addBillFiles(rec, files);
+      else if (kind === 'utilities') { const folder = Utilities.folder(rec); Vault.keepFolder(Vault.topOf(rec), folder); const made = await Vault.addFiles(Vault.topOf(rec), folder, files); if (made.length) changed('docs'); }
+      else if (kind === 'rentals') { Vault.keepFolder(Vault.topOf(rec), Rentals.folder(rec)); const made = await Vault.addFiles(Vault.topOf(rec), Rentals.folder(rec), files); made.forEach((d) => { d.rental = rec.id; }); if (made.length) changed('docs'); }
+      else await AT.add(rec, files, store === 'docs' ? 'docs' : store, true);
+    }
+    const name = this.list(false, false).find((x) => x.value === value)?.title || 'it';
+    return `Added ${[files.length ? plural(files.length, 'file') : '', texts.length ? (files.length ? 'the words' : 'what was shared') : ''].filter(Boolean).join(' and ')} to ${name}`;
+  },
+};
+
 async function shareSave(f, data) {
   const files = f.files || [];
   const texts = f.texts || [];
@@ -9251,23 +9334,27 @@ async function shareSave(f, data) {
     openTaskDrawer(t.id);
     return;
   }
-  if (to === 'task') {
-    const t = DB.tasks.find((x) => x.id === data.task);
-    if (!t) return formError('Pick a task.');
-    if (texts.length) { t.notes = [String(t.notes || '').trimEnd(), ...texts].filter(Boolean).join('\n\n'); changed('tasks'); }
+  if (to === 'note') { // words only: a new note with them
+    const n = { id: uid(), title: String(data.title || '').trim() || texts[0].split('\n')[0].slice(0, 80), body: texts.join('\n\n'), updated: Date.now(), people: People.forNew() };
+    DB.notes.push(n);
+    changed('notes');
     closeAssetForm(true);
-    if (files.length) await AT.add(t, files);
-    else { render(); toast(`Added to "${fullTitle(t)}"`); }
-    openTaskDrawer(t.id);
+    state.activeNote = n.id;
+    setView('notes');
+    toast(`Added the note "${n.title}"`);
     return;
   }
-  const [top, ...rest] = String(data.place || '').split('|');
-  const path = rest.join('|');
-  if (!top || !path) return formError('Pick a folder.');
+  // Add to…: the one picked in the list
+  const target = ShareTo.find(data.target);
+  if (!target) return formError('Pick where it goes.');
   closeAssetForm(true);
-  const made = await Vault.addFiles(top, path, files);
-  if (made.length) toast(`Added ${plural(made.length, 'file')} to ${Vault.topName(top)} › ${path.split('/').join(' › ')}`);
+  const said = await ShareTo.add(data.target, files, texts);
   render();
+  if (said) toast(said);
+  const r = target.rec;
+  if (target.kind === 'tasks') openTaskDrawer(r.id);
+  else if (target.kind === 'notes') { state.activeNote = r.id; setView('notes'); }
+  else if (r && { assets: 'asset', utilities: 'utility', bills: 'bill', upkeep: 'upkeep', rentals: 'rental', vault: 'doc' }[target.kind]) openAssetForm({ assets: 'asset', utilities: 'utility', bills: 'bill', upkeep: 'upkeep', rentals: 'rental', vault: 'doc' }[target.kind], { id: r.id });
 }
 
 function submitAssetForm(type, data) {
@@ -12345,6 +12432,22 @@ document.addEventListener('change', (e) => {
 // Before the tab closes, push any typed-but-not-yet-saved note into the browser store.
 window.addEventListener('beforeunload', () => { if (!state.readOnly) DB.persist('notes'); });
 // Coming back to the tab: see if another device saved meanwhile.
+// The share picker: the search box and the chips narrow the list, without redrawing it (what's picked stays picked).
+function shareFilter() {
+  const box = $('#modal [data-share-pick]');
+  if (!box) return;
+  const words = (box.querySelector('[data-share-q]')?.value || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const kind = box.querySelector('[data-share-kind]:checked')?.value || 'all';
+  let any = false;
+  for (const li of box.querySelectorAll('.share-list li')) {
+    const show = (kind === 'all' || li.dataset.kind === kind) && words.every((w) => li.dataset.find.includes(w));
+    li.hidden = !show;
+    any = any || show;
+  }
+  box.querySelector('.share-none').hidden = any;
+}
+document.addEventListener('input', (e) => { if (e.target.matches?.('[data-share-q]')) shareFilter(); });
+document.addEventListener('change', (e) => { if (e.target.matches?.('[data-share-kind]')) shareFilter(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && DF.status === 'ok') DF.check(); });
 // A delete waiting for Undo happens now if the page is left or put in the background (a phone may never come back).
 document.addEventListener('visibilitychange', () => { if (document.hidden) { PendingDelete.flush(); Native.flush(); } });
