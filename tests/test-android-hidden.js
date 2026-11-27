@@ -93,6 +93,7 @@ const bridge = (w, log) => {
   check(/window\.ButlerHidden/.test(html) && /window\.Hidden = Hidden/.test(html), 'and the page uses those same names');
   check(/HiddenRefresh"[^>]*BIND_JOB_SERVICE/.test(fs.readFileSync(path.join(dir, 'native', 'manifest-widgets.xml'), 'utf8')), 'the hidden refresh is in the app\'s manifest');
   check(/@\+id\/widget_refresh/.test(fs.readFileSync(path.join(dir, 'res', 'layout', 'widget_list.xml'), 'utf8')) && /R\.id\.widget_refresh/.test(fs.readFileSync(path.join(dir, 'native', 'Widgets.java'), 'utf8')), 'the widgets have a refresh button');
-  check(/ButlerAndroid\/6"/.test(fs.readFileSync(path.join(dir, 'capacitor.config.json'), 'utf8')), 'the app says it\'s version 6');
+  const ver = (fs.readFileSync(path.join(dir, 'capacitor.config.json'), 'utf8').match(/ButlerAndroid\/(\d+)"/) || [])[1];
+  check(Number(ver) >= 6 && fs.readFileSync(path.join(dir, 'native', 'HiddenRefresh.java'), 'utf8').includes(`ButlerAndroid/${ver} ButlerHidden`), 'the app says it\'s version 6 or newer, and the hidden refresh says the same');
   done();
 })();

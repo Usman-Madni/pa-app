@@ -29,7 +29,10 @@ public final class Widgets {
 
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE); }
 
-    static void save(Context c, String data) { prefs(c).edit().putString("data", data).remove("busy").apply(); }
+    static void save(Context c, String data) {
+        prefs(c).edit().putString("data", data).remove("busy").commit();
+        Digest.plan(c); // the morning and evening summary's times and words come with the rows
+    }
 
     // The refresh button pressed: "Bringing this up to date…" until the hidden refresh is done (HiddenRefresh), for
     // two minutes at most (offline, it waits for a connection).
@@ -45,11 +48,12 @@ public final class Widgets {
         HiddenRefresh.now(c);
     }
 
-    // The last widget of one kind removed: with none of either kind left, the 15-minute refresh stops.
+    // The last widget of one kind removed: with none of either kind left, the 15-minute refresh stops (unless the
+    // morning and evening summary still needs it).
     static void lastGone(Context c) {
         AppWidgetManager m = AppWidgetManager.getInstance(c);
         if (m.getAppWidgetIds(new ComponentName(c, MyDayWidget.class)).length == 0
-            && m.getAppWidgetIds(new ComponentName(c, ListWidget.class)).length == 0) HiddenRefresh.stop(c);
+            && m.getAppWidgetIds(new ComponentName(c, ListWidget.class)).length == 0 && !Digest.on(c)) HiddenRefresh.stop(c);
     }
 
     static JSONObject data(Context c) {

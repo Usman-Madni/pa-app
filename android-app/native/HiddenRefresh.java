@@ -27,7 +27,7 @@ import org.json.JSONObject;
 
 public class HiddenRefresh extends JobService {
     static final String PAGE = "https://usman-madni.github.io/pa-app/PA%20App.html?readonly&widgets";
-    static final String AGENT = " ButlerAndroid/6 ButlerHidden";
+    static final String AGENT = " ButlerAndroid/7 ButlerHidden";
     // Far above the numbers WorkManager (the background check) gives its own jobs, which count up from 0.
     static final int NOW = 1112866817;
     static final int EVERY = 1112866818;

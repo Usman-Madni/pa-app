@@ -9888,6 +9888,7 @@ function renderSettings() {
             ${perm === 'default' ? '<button class="btn primary" data-action="enable-notifications">Enable notifications</button>' : ''}
             <button class="btn" data-action="test-notification">Send test reminder</button>
           </div>`}
+          ${digestCard()}
           <h2>This device</h2>
           <p class="sub">Shown in the data file as who saved last. Kept on this device only.</p>
           <div class="row"><input class="input grow" data-input="device-name" value="${esc(deviceName())}" maxlength="40" aria-label="This device's name"></div>
@@ -10100,7 +10101,7 @@ const Native = {
   },
   widgetData() {
     return JSON.stringify({
-      day: toISO(new Date()), myDay: this.widgetRows(), lists: this.listRows(),
+      day: toISO(new Date()), myDay: this.widgetRows(), lists: this.listRows(), digest: Digest.forApp(),
       buckets: [...DB.buckets].sort((a, b) => a.order - b.order).map((b) => ({ id: b.id, name: b.name })),
     });
   },
@@ -11180,6 +11181,78 @@ function notify(title, body, quiet = false, task = '') {
   if (!quiet && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, tag: title }); } catch { /* some browsers need a service worker; the toast already showed */ }
   }
+}
+
+// ===================== Morning and evening =====================
+// A summary of the day (agreed 27 Nov): in the morning what My Day has (late, today's tasks and events), in the evening
+// what's still open today. Its wording comes from todayPlan, the My Day page's own code, so it can't drift from it.
+// Per device (dev_digest*): on by default at 8:00 and 20:00. The laptop shows it while Butler is open (otherwise it's
+// waiting in Notifications next time); the Android app (shell 7+) shows it at those times even when Butler is closed,
+// from what Butler worked out last (Native.widgetData's `digest`; Digest.java only draws it, never dates tasks).
+const Digest = {
+  settings() { return { on: device.get('digestOn', true), am: device.get('digestAm', '08:00'), pm: device.get('digestPm', '20:00') }; },
+  set(key, value) {
+    if (key === 'on') device.set('digestOn', !!value);
+    else if (/^\d\d:\d\d$/.test(value)) device.set(key === 'am' ? 'digestAm' : 'digestPm', value);
+    Native.widgets(); // the app's times follow
+  },
+  // {title, body} for 'am' or 'pm'; null when the evening has nothing left.
+  text(which, now = new Date()) {
+    const p = todayPlan(now);
+    const name = (x) => (x.kind === 'event' ? x.e.title : fullTitle(x.t));
+    const list = (items) => items.slice(0, 6).join(', ') + (items.length > 6 ? ` and ${items.length - 6} more` : '');
+    if (which === 'am') {
+      const items = [...p.late.map((t) => `${fullTitle(t)} (late)`), ...p.timed.map((x) => `${fmtTime(x.time)} ${name(x)}`), ...p.anyTime.map(name)];
+      if (!items.length) return { title: 'Nothing due today', body: 'My Day is clear.' };
+      const bits = [p.taskCount && plural(p.taskCount, 'task'), p.eventCount && plural(p.eventCount, 'event'), p.late.length && `${p.late.length} late`].filter(Boolean);
+      return { title: `Today: ${bits.join(' · ')}`, body: list(items) };
+    }
+    const open = [...p.late.map((t) => `${fullTitle(t)} (late)`), ...[...p.timed, ...p.anyTime].filter((x) => x.kind === 'task').map(name)];
+    return open.length ? { title: `Still to do today: ${open.length}`, body: list(open) } : null;
+  },
+  // A time today ("08:00") as an instant.
+  at(hm, now = new Date()) { const [h, m] = hm.split(':').map(Number); const d = new Date(now); d.setHours(h, m, 0, 0); return d.getTime(); },
+  // For the Android app: whether it's on, the next few times as instants (Android never works out dates), and what
+  // each says today.
+  forApp(now = new Date()) {
+    const s = this.settings();
+    const times = [];
+    for (let i = 0; i < 3; i++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      for (const which of ['am', 'pm']) { const at = this.at(s[which], day); if (at > now.getTime()) times.push({ which, at }); }
+    }
+    return { on: s.on, day: toISO(now), times: times.sort((a, b) => a.at - b.at).slice(0, 4), am: this.text('am', now), pm: this.text('pm', now) };
+  },
+  // The laptop, while Butler is open (each check): the morning's or evening's, once a day each. Within an hour of its
+  // time it pops up too; later it only waits in Notifications. A morning not shown by the evening is skipped.
+  check(now = new Date()) {
+    const s = this.settings();
+    if (!s.on || state.phone || HIDDEN || state.readOnly) return;
+    const today = toISO(now);
+    const shown = device.get('digestShown', {});
+    for (const which of ['am', 'pm']) {
+      const at = this.at(s[which], now);
+      if (now.getTime() < at || shown[which] === today) continue;
+      shown[which] = today;
+      device.set('digestShown', shown);
+      if (which === 'am' && now.getTime() >= this.at(s.pm, now)) continue;
+      const d = this.text(which, now);
+      if (!d) continue;
+      if (now.getTime() - at < 60 * 60000) notify(d.title, d.body);
+      Notices.add(`📅 ${which === 'am' ? 'This morning' : 'This evening'}: ${d.title}. ${d.body}`);
+    }
+  },
+};
+function digestCard() {
+  const s = Digest.settings();
+  if (state.phone && !(Native.on && Native.shell >= 7)) return `<h2>Morning and evening</h2><p class="sub">${Native.on ? 'Install the newest Butler app (version 7) for a summary of the day here.' : 'On a phone, the Butler app shows a summary of the day each morning and evening.'}</p>`;
+  return `<h2>Morning and evening</h2>
+    <p class="sub">A summary of My Day: in the morning what's on today, in the evening what's still to do. ${Native.on ? 'Shown on this phone at these times, even when Butler is closed.' : 'Shown here while Butler is open; otherwise it\'s waiting in Notifications next time.'} This device only.</p>
+    <label class="check-row"><input type="checkbox" data-input="digest-on" ${s.on ? 'checked' : ''}> Show them</label>
+    <div class="row">
+      <label class="field">Morning<input class="input" type="time" data-input="digest-am" value="${esc(s.am)}"></label>
+      <label class="field">Evening<input class="input" type="time" data-input="digest-pm" value="${esc(s.pm)}"></label>
+    </div>`;
 }
 
 // Reminders whose time has come pop up. Ones over 10 minutes late were missed while PA App was closed or the laptop
@@ -12405,6 +12478,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.dataset?.input === 'ring') { Native.setRing(e.target.value); return; } // this phone only, so even when read-only
+  if (/^digest-(on|am|pm)$/.test(e.target.dataset?.input || '')) { const k = e.target.dataset.input.slice(7); Digest.set(k, k === 'on' ? e.target.checked : e.target.value); return; } // this device only
   if (e.target.matches?.('[data-area-bucket]') && !state.readOnly) { if (e.target.value) { ButlerTasks.setBucket(e.target.dataset.areaBucket, e.target.value); toast(`${TASK_AREAS.find((x) => x.id === e.target.dataset.areaBucket).name} tasks go in ${DB.buckets.find((b) => b.id === e.target.value).name}`); } render(); return; }
   if (e.target.dataset?.personColor && !state.readOnly) { People.setColor(e.target.dataset.personColor, e.target.value); render(); return; }
   if (e.target.dataset?.labelColor && !state.readOnly) {
@@ -12486,7 +12560,7 @@ else {
   // To Do waits until the data file has loaded, so it never works from an out-of-date copy.
   Promise.resolve(DF.init()).finally(() => TD.sync());
   AT.init();
-  if (!HIDDEN) { checkReminders(); setInterval(checkReminders, 20000); } // (no screen: nothing to remind on)
+  if (!HIDDEN) { checkReminders(); setInterval(checkReminders, 20000); setTimeout(() => Digest.check(), 3000); setInterval(() => Digest.check(), 60000); } // (no screen: nothing to remind on)
   setInterval(() => { zakatTasks(); vaultTasks(); upkeepTasks(); rentalTasks(); autoRates(); }, 15 * 60000); // a zakat day coming into range, or a phone that could only look at first
   setInterval(() => { if (DF.status === 'ok' && !document.hidden && !DF.saving) DF.check(); }, DF.POLL_MS);
   setInterval(() => { if (state.view === 'today' && !document.querySelector(':focus')) render(); }, 60000);

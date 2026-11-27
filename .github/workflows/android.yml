@@ -75,8 +75,8 @@ jobs:
       # for apps whose job is reminders; SCHEDULE_EXACT_ALARM covers Android 12.
       - name: Exact reminders
         run: |
-          sed -i 's#<application#<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n\n    <application#' android/app/src/main/AndroidManifest.xml
-          grep -E "EXACT_ALARM" android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n\n    <application#' android/app/src/main/AndroidManifest.xml
+          grep -E "EXACT_ALARM|BOOT_COMPLETED" android/app/src/main/AndroidManifest.xml
 
       # Microsoft's sign-in comes back to app.butler.home://auth (registered in Azure as a mobile app), and a widget
       # opens app.butler.home://open?…: Android hands those addresses to Butler. Added to the app's main screen.

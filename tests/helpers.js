@@ -92,7 +92,7 @@ function fakeFolder(name = 'backups') {
 }
 
 // Load the app. opts.fsa=false simulates a phone (no File System Access API).
-// opts.storage pre-fills localStorage. opts.query adds e.g. '?readonly'.
+// opts.storage pre-fills localStorage. opts.query adds e.g. '?readonly'. opts.digest: the morning and evening summary on.
 function loadApp(opts = {}) {
   const { JSDOM, VirtualConsole } = loadJsdom();
   const html = fs.readFileSync(APP_FILE, 'utf8');
@@ -107,6 +107,9 @@ function loadApp(opts = {}) {
     virtualConsole: vc,
     beforeParse(win) {
       if (opts.ua) Object.defineProperty(win.navigator, 'userAgent', { get: () => opts.ua });
+      // The morning and evening summary is off in tests (it would add a notice a few seconds in, whatever the hour)
+      // unless a test asks for it (opts.digest).
+      if (!opts.digest) win.localStorage.setItem('dev_digestOn', 'false');
       for (const [k, v] of Object.entries(opts.storage || {})) win.localStorage.setItem(k, v);
       if (opts.fsa !== false) {
         win.showOpenFilePicker = async () => [opts.pickFile || fakeFile()];
